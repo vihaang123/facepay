@@ -1,12 +1,16 @@
 import { Link, Route, Routes } from 'react-router-dom'
 import { GuestRoute, ProtectedRoute } from './components/RouteGuards'
 import DashboardLayout from './layouts/DashboardLayout'
+import Checkout from './pages/Checkout'
+import CreatePayment from './pages/CreatePayment'
 import { CustomerDashboard, MerchantDashboard } from './pages/Dashboards'
 import FaceAuthentication from './pages/FaceAuthentication'
 import FaceRegistration from './pages/FaceRegistration'
 import Home from './pages/Home'
 import Login from './pages/Login'
+import MerchantPaymentSession from './pages/MerchantPaymentSession'
 import Profile from './pages/Profile'
+import ReceiptPage from './pages/ReceiptPage'
 import Register from './pages/Register'
 
 function NotFound() {
@@ -38,6 +42,8 @@ export default function AppRoutes() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/face" element={<FaceRegistration />} />
           <Route path="/authenticate" element={<FaceAuthentication />} />
+          <Route path="/checkout/:sessionId" element={<Checkout />} />
+          <Route path="/receipts/:transactionId" element={<ReceiptPage />} />
         </Route>
       </Route>
 
@@ -45,6 +51,9 @@ export default function AppRoutes() {
         <Route element={<DashboardLayout />}>
           <Route path="/merchant/dashboard" element={<MerchantDashboard />} />
           <Route path="/merchant/profile" element={<Profile />} />
+          <Route path="/merchant/payments/new" element={<CreatePayment />} />
+          <Route path="/merchant/payments/:sessionId" element={<MerchantPaymentSession />} />
+          <Route path="/merchant/receipts/:transactionId" element={<ReceiptPage />} />
         </Route>
       </Route>
 

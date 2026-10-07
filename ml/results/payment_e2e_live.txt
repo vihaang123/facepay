@@ -1,0 +1,26 @@
+5 subjects x 8 photos enrolled and trained: pca_lda_knn (20261007-170636-ae212e-8b1b)
+
+== 1. genuine customer pays (up to 4 tries, each try a different photo of the same person)
+   paid: 5/5; tries needed per paying subject: [2, 2, 1, 1, 1]; rejections before success/failure: {'DISTANCE_TOO_HIGH/None': 2}
+   confidence reported for accepted attempts: [1.0, 1.0, 1.0, 1.0, 1.0]
+
+== 2. attempts that must be refused (real detector + real model)
+   another enrolled person's face on my account: REJECTED IDENTITY_MISMATCH  x2
+   unenrolled stranger's face on my account: REJECTED DISTANCE_TOO_HIGH  x2
+   no head movement (static photo): REJECTED LIVENESS_FAILED NO_MOVEMENT x1
+   turned the wrong way: REJECTED LIVENESS_FAILED WRONG_DIRECTION x1
+   two faces in view: REJECTED MULTIPLE_FACES_DETECTED  x1
+
+== 3. authorization security
+   PASS  amount 950 -> 1 refused (409)
+   PASS  another customer using my ticket refused (403)
+   PASS  ticket for session A on session B refused (403)
+   PASS  rightful owner pays once (200, FACE_PAY, 950.00)
+   PASS  ticket reused refused (409)
+   PASS  other merchant cannot read my session (404)
+   PASS  other customer cannot read my receipt (404)
+
+== 4. dashboards
+   merchant: revenue 5700.00, transactions 6, successful 6, failed 0, open sessions 8
+   customer 0: 2 transaction(s): [('FP-FDAMBKMMRX', '950.00'), ('FP-2GPCKJ1R36', '950.00')]
+   merchant sees 6 transactions; all FACE_PAY/SUCCESS: True

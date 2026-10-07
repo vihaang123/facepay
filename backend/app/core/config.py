@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     train_rate_limit_per_minute: int = 5
     # Face authentication attempts per user per minute (each attempt is expensive and security-relevant).
     face_auth_rate_limit_per_minute: int = 10
+    # Checkout, confirmation and payment-session reads per customer per minute.
+    payment_rate_limit_per_minute: int = 30
 
     @field_validator("jwt_secret")
     @classmethod

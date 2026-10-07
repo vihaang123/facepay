@@ -49,3 +49,21 @@ sent to `/faces/recognize`. (The server was started with MIN_SAMPLES_PER_USER lo
 4 pose-grouped folds); held-out genuine photos: 10/10 identified as the right user but only 5/10 accepted (the other
 5 were over the distance threshold); other enrolled users' photos accepted as me: 0/10; an unenrolled stranger: 0/10.
 N is tiny: this shows the pieces work together, not an accuracy figure.
+
+## Live payment flow (`e2e_payment_live.py`, Phase 5; output in `payment_e2e_live.txt`)
+
+Real HTTP API, real PostgreSQL, real OpenCV detector, real PCA/LDA model, ORL photos (5 subjects x 8 enrolment
+photos; the server was started with MIN_SAMPLES_PER_USER lowered to 8). **Head turns are simulated by sliding the
+same photo sideways in the frame**, so this says nothing about real head turns on a real webcam.
+
+* Genuine customers paying their own session (up to 4 tries each, different photo per try): 5/5 paid; tries needed
+  [2, 2, 1, 1, 1]; the two earlier rejections were `DISTANCE_TOO_HIGH`. Reported confidence was 1.0 for every accepted
+  attempt: that is the KNN vote fraction in a 5-person model, not a calibrated probability.
+* Refused: another enrolled person's face on my account (2/2, `IDENTITY_MISMATCH`), an unenrolled stranger's face
+  (2/2, `DISTANCE_TOO_HIGH`), a static photo (`LIVENESS_FAILED`/`NO_MOVEMENT`), the wrong turn direction
+  (`WRONG_DIRECTION`), two faces in view (`MULTIPLE_FACES_DETECTED`).
+* Authorization checks over HTTP: amount 950 -> 1 refused, another customer's use of my ticket refused, a ticket for
+  session A on session B refused, reuse refused, other merchant / other customer read access 404.
+
+N is tiny (2 impostor tries per kind). This shows the pieces work together; it is not an error-rate estimate, and the
+Phase 3 open-set numbers above remain the honest picture of impostor acceptance.

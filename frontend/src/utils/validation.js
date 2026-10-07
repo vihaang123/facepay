@@ -29,3 +29,16 @@ export function runValidators(values, validators) {
   }
   return errors
 }
+
+const AMOUNT_RE = /^\d{1,7}(\.\d{1,2})?$/
+
+export function validatePayment({ amount, orderReference }) {
+  const errors = {}
+  if (!AMOUNT_RE.test(amount.trim()) || Number(amount) <= 0 || Number(amount) > 1_000_000) {
+    errors.amount = 'Enter an amount between 0.01 and 1,000,000 with at most 2 decimals.'
+  }
+  if (!orderReference.trim()) errors.orderReference = 'Enter an order or reference number.'
+  else if (orderReference.trim().length > 80) errors.orderReference = 'Use at most 80 characters.'
+  return errors
+}
+

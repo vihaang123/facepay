@@ -20,3 +20,8 @@ export const PROFILE_PATH = {
 
 export const FACE_PATH = '/face'
 export const AUTHENTICATE_PATH = '/authenticate'
+
+export const CHECKOUT_PATH = (sessionId) => `/checkout/${sessionId}`
+export const RECEIPT_PATH = { customer: (id) => `/receipts/${id}`, merchant: (id) => `/merchant/receipts/${id}` }
+export const NEW_PAYMENT_PATH = '/merchant/payments/new'
+export const MERCHANT_SESSION_PATH = (sessionId) => `/merchant/payments/${sessionId}`

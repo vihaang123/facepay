@@ -5,3 +5,6 @@ export const TIMING = {
   turnGapMs: 500, // => about 3 seconds to complete the turn
   requestTimeoutMs: 25000,
 }
+
+// Merchant payment-session page: how often it asks the server for the status while the session is open.
+export const POLL = { intervalMs: 3000 }

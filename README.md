@@ -12,7 +12,7 @@ An academic/research prototype. Payments are **simulated**: there is no UPI inte
 | 2 | Auth + user/merchant system | Done |
 | 3 | Facial dataset + PCA/LDA pipeline | Done |
 | 4 | Face authentication + liveness | Done |
-| 5 | Payment simulation + merchant system | Not started |
+| 5 | Payment simulation + merchant flow | Done |
 | 6 | Dashboards, analytics, polish | Not started |
 | 7 | Testing, evaluation, deployment, docs | Not started |
 
@@ -21,6 +21,10 @@ ML results are measured, never invented: see [`ml/results/README.md`](ml/results
 ## Face authentication
 
 Challenge-response liveness, an explicit authentication policy and logged decisions on top of the Phase 3 model: [`docs/face-authentication.md`](docs/face-authentication.md) (includes the unresolved open-set limitation).
+
+## Simulated payments
+
+Merchant payment sessions, FacePay checkout, single-use backend authorizations, atomic confirmation, receipts and dashboards: [`docs/payments.md`](docs/payments.md).
 
 ## Stack
 

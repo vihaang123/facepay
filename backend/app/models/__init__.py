@@ -5,6 +5,7 @@ from app.models.entities import (  # noqa: F401
     FaceSample,
     Merchant,
     ModelVersion,
+    PaymentAuthorization,
     PaymentSession,
     Transaction,
     User,

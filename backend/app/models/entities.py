@@ -138,13 +138,18 @@ class FaceAuthChallenge(Base):
 
 
 class PaymentSession(Base):
-    """A bill created by a merchant. Phase 5 attaches transactions to it."""
+    """A bill created by a merchant (simulated payments only).
+
+    Lifecycle: CREATED -> AUTHENTICATED -> PAID, or CREATED/AUTHENTICATED -> FAILED | EXPIRED | CANCELLED.
+    (The brief's PENDING is stored as CREATED and SUCCESS as PAID; PROCESSING is the instant inside the single
+    database transaction that consumes the authorization and writes the transaction, so it is not stored.)"""
 
     __tablename__ = "payment_sessions"
     __table_args__ = (
         CheckConstraint("amount > 0", name="ck_payment_sessions_amount_positive"),
         CheckConstraint(
-            "status IN ('CREATED', 'PAID', 'EXPIRED', 'CANCELLED')", name="ck_payment_sessions_status"
+            "status IN ('CREATED', 'AUTHENTICATED', 'PAID', 'FAILED', 'EXPIRED', 'CANCELLED')",
+            name="ck_payment_sessions_status",
         ),
         Index("ix_payment_sessions_merchant_created", "merchant_id", "created_at"),
     )
@@ -159,6 +164,8 @@ class PaymentSession(Base):
     status: Mapped[str] = mapped_column(String(20), default="CREATED", server_default="CREATED")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Rejected face-authentication attempts that counted against this session (see payment_service).
+    failed_auth_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     merchant: Mapped[Merchant] = relationship(back_populates="payment_sessions")
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="payment_session")
@@ -171,6 +178,13 @@ class Transaction(Base):
         CheckConstraint("status IN ('PENDING', 'SUCCESS', 'FAILED')", name="ck_transactions_status"),
         Index("ix_transactions_merchant_ts", "merchant_id", "timestamp"),
         Index("ix_transactions_payer_ts", "payer_id", "timestamp"),
+        # A payment session can be paid once, even if application logic were bypassed.
+        Index(
+            "uq_transactions_one_success_per_session",
+            "payment_session_id",
+            unique=True,
+            postgresql_where=text("status = 'SUCCESS' AND payment_session_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -188,6 +202,36 @@ class Transaction(Base):
     merchant: Mapped[Merchant] = relationship(back_populates="transactions")
     payer: Mapped[User] = relationship(back_populates="transactions")
     payment_session: Mapped[PaymentSession | None] = relationship(back_populates="transactions")
+
+
+class PaymentAuthorization(Base):
+    """Single-use, short-lived proof that THIS customer passed face authentication for THIS payment session.
+
+    Issued only by the backend after the Phase 4 decision is AUTHENTICATED. The bearer token is returned once;
+    only its SHA-256 is stored. Holds no biometric data, just a reference to the authentication log row."""
+
+    __tablename__ = "payment_authorizations"
+    __table_args__ = (
+        CheckConstraint("status IN ('ACTIVE', 'CONSUMED', 'EXPIRED', 'REVOKED')", name="ck_payment_authorizations_status"),
+        Index("ix_payment_authorizations_session", "payment_session_id"),
+        Index(
+            "uq_payment_authorizations_one_active",
+            "payment_session_id",
+            "user_id",
+            unique=True,
+            postgresql_where=text("status = 'ACTIVE'"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    payment_session_id: Mapped[int] = mapped_column(ForeignKey("payment_sessions.id", ondelete="CASCADE"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    authentication_log_id: Mapped[int | None] = mapped_column(ForeignKey("authentication_logs.id", ondelete="SET NULL"))
+    status: Mapped[str] = mapped_column(String(20), default="ACTIVE", server_default="ACTIVE")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class AuthenticationLog(Base):
