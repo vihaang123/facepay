@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60
     cors_origins: str = "http://localhost:5173"
+    # Per-IP limit on login/registration attempts (in-memory, single instance).
+    rate_limit_enabled: bool = True
+    auth_rate_limit_per_minute: int = 10
 
     @field_validator("jwt_secret")
     @classmethod

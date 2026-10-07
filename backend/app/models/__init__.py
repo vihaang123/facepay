@@ -3,6 +3,7 @@ from app.models.entities import (  # noqa: F401
     FaceProfile,
     Merchant,
     ModelVersion,
+    PaymentSession,
     Transaction,
     User,
 )

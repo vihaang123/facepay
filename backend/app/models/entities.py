@@ -33,7 +33,15 @@ class User(Base):
     status: Mapped[str] = mapped_column(String(20), default="active", server_default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    face_profiles: Mapped[list["FaceProfile"]] = relationship(back_populates="user")
+    # Deleting a user removes their face profiles (DB ON DELETE CASCADE does the work)
+    # but keeps authentication logs, detached (ON DELETE SET NULL).
+    face_profiles: Mapped[list["FaceProfile"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", passive_deletes=True
+    )
+    authentication_logs: Mapped[list["AuthenticationLog"]] = relationship(
+        back_populates="user", passive_deletes=True
+    )
+    transactions: Mapped[list["Transaction"]] = relationship(back_populates="payer")
 
 
 class Merchant(Base):
@@ -47,6 +55,7 @@ class Merchant(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="merchant")
+    payment_sessions: Mapped[list["PaymentSession"]] = relationship(back_populates="merchant")
 
 
 class ModelVersion(Base):
@@ -85,6 +94,33 @@ class FaceProfile(Base):
     user: Mapped[User] = relationship(back_populates="face_profiles")
 
 
+class PaymentSession(Base):
+    """A bill created by a merchant. Phase 5 attaches transactions to it."""
+
+    __tablename__ = "payment_sessions"
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_payment_sessions_amount_positive"),
+        CheckConstraint(
+            "status IN ('CREATED', 'PAID', 'EXPIRED', 'CANCELLED')", name="ck_payment_sessions_status"
+        ),
+        Index("ix_payment_sessions_merchant_created", "merchant_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    merchant_id: Mapped[int] = mapped_column(ForeignKey("merchants.id"))
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    currency: Mapped[str] = mapped_column(String(3), default="INR", server_default="INR")
+    order_reference: Mapped[str | None] = mapped_column(String(80))
+    description: Mapped[str | None] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(20), default="CREATED", server_default="CREATED")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    merchant: Mapped[Merchant] = relationship(back_populates="payment_sessions")
+    transactions: Mapped[list["Transaction"]] = relationship(back_populates="payment_session")
+
+
 class Transaction(Base):
     __tablename__ = "transactions"
     __table_args__ = (
@@ -98,12 +134,17 @@ class Transaction(Base):
     transaction_id: Mapped[str] = mapped_column(String(40), unique=True, index=True)
     payer_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     merchant_id: Mapped[int] = mapped_column(ForeignKey("merchants.id"))
+    payment_session_id: Mapped[int | None] = mapped_column(
+        ForeignKey("payment_sessions.id", name="fk_transactions_payment_session"), index=True
+    )
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     payment_method: Mapped[str] = mapped_column(String(20), default="FACE_PAY", server_default="FACE_PAY")
     status: Mapped[str] = mapped_column(String(20), default="PENDING", server_default="PENDING")
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     merchant: Mapped[Merchant] = relationship(back_populates="transactions")
+    payer: Mapped[User] = relationship(back_populates="transactions")
+    payment_session: Mapped[PaymentSession | None] = relationship(back_populates="transactions")
 
 
 class AuthenticationLog(Base):
@@ -119,3 +160,5 @@ class AuthenticationLog(Base):
     confidence: Mapped[float | None]
     liveness_result: Mapped[str | None] = mapped_column(String(20))
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped[User | None] = relationship(back_populates="authentication_logs")

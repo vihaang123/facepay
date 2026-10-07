@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import Home from './Home'
 
@@ -10,14 +11,22 @@ describe('Home status page', () => {
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: 'ok', database: 'ok' }) }),
     )
-    render(<Home />)
+    render(
+      <MemoryRouter>
+        <Home />
+      </MemoryRouter>,
+    )
     expect(await screen.findByText('Backend API')).toBeInTheDocument()
     expect((await screen.findAllByText('Connected')).length).toBe(2)
   })
 
   it('shows an error when the API cannot be reached', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('network')))
-    render(<Home />)
+    render(
+      <MemoryRouter>
+        <Home />
+      </MemoryRouter>,
+    )
     expect(await screen.findByText(/Cannot reach the server/)).toBeInTheDocument()
   })
 })

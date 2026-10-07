@@ -1,12 +1,13 @@
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
-import Home from './pages/Home'
+import { BrowserRouter } from 'react-router-dom'
+import AppRoutes from './AppRoutes'
+import { AuthProvider } from './hooks/AuthProvider'
 
 export default function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Home />} />
-      </Routes>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
     </BrowserRouter>
   )
 }

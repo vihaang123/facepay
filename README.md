@@ -9,8 +9,8 @@ An academic/research prototype. Payments are **simulated**: there is no UPI inte
 | Phase | Scope | State |
 |-------|-------|-------|
 | 1 | Foundation + architecture | Done |
-| 2 | Auth + user/merchant system | Next |
-| 3 | Facial dataset + PCA/LDA pipeline | Not started |
+| 2 | Auth + user/merchant system | Done |
+| 3 | Facial dataset + PCA/LDA pipeline | Next |
 | 4 | Face authentication + liveness | Not started |
 | 5 | Payment simulation + merchant system | Not started |
 | 6 | Dashboards, analytics, polish | Not started |
@@ -24,6 +24,10 @@ No ML results exist yet. Any metrics in the final report will come from real exp
 - Backend: Python, FastAPI, SQLAlchemy 2, Alembic
 - ML: OpenCV, NumPy, Pandas, scikit-learn (PCA, LDA, classifier)
 - Database: PostgreSQL (not Supabase)
+
+## Authentication
+
+Customers and merchants register and log in separately (Argon2id password hashing, JWT access tokens, role-protected routes, per-IP rate limiting). Details, endpoints and known limitations: [`docs/auth.md`](docs/auth.md).
 
 ## Layout
 

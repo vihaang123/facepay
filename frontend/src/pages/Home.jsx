@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useHealth } from '../hooks/useHealth'
 
 function StatusRow({ label, ok, detail }) {
@@ -45,6 +46,13 @@ export default function Home() {
           </>
         )}
       </section>
+
+      <nav aria-label="Get started" className="flex flex-wrap gap-x-6 gap-y-2 text-sm font-semibold text-brand-600">
+        <Link to="/login">Customer sign in</Link>
+        <Link to="/register">Create customer account</Link>
+        <Link to="/merchant/login">Merchant sign in</Link>
+        <Link to="/merchant/register">Create merchant account</Link>
+      </nav>
     </main>
   )
 }
