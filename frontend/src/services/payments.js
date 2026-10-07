@@ -15,7 +15,15 @@ export const confirmPayment = (token, sessionId, { authorizationToken, expectedA
   apiFetch(`/payments/sessions/${enc(sessionId)}/confirm`, {
     method: 'POST', token, json: { authorization_token: authorizationToken, expected_amount: expectedAmount },
   })
-export const getMyTransactions = (token, limit = 20) => apiFetch(`/payments/transactions?limit=${limit}`, { token })
+// Transaction lists: { limit, offset, status, q, sort }. Only the parameters that are set are sent.
+const query = (params) => {
+  const sp = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && v !== '') sp.set(k, v)
+  const text = sp.toString()
+  return text ? `?${text}` : ''
+}
+export const getMyTransactions = (token, params = { limit: 20 }) => apiFetch(`/payments/transactions${query(params)}`, { token })
+export const getMySummary = (token) => apiFetch('/payments/summary', { token })
 export const getMyReceipt = (token, transactionId) => apiFetch(`/payments/transactions/${enc(transactionId)}`, { token })
 
 // ---- merchant
@@ -28,6 +36,6 @@ export const getPaymentSession = (token, sessionId) => apiFetch(`/merchant/payme
 export const listPaymentSessions = (token, limit = 10) => apiFetch(`/merchant/payment-sessions?limit=${limit}`, { token })
 export const cancelPaymentSession = (token, sessionId) =>
   apiFetch(`/merchant/payment-sessions/${enc(sessionId)}/cancel`, { method: 'POST', token })
-export const getMerchantTransactions = (token, limit = 10) => apiFetch(`/merchant/transactions?limit=${limit}`, { token })
+export const getMerchantTransactions = (token, params = { limit: 10 }) => apiFetch(`/merchant/transactions${query(params)}`, { token })
 export const getMerchantReceipt = (token, transactionId) => apiFetch(`/merchant/transactions/${enc(transactionId)}`, { token })
 export const getMerchantSummary = (token) => apiFetch('/merchant/summary', { token })

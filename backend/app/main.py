@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api import auth, face_auth, faces, health, merchant_payments, payments, profile
 from app.core.config import get_settings
@@ -10,8 +11,28 @@ settings = get_settings()
 app = FastAPI(
     title="FacePay API",
     description="PCA-LDA facial authentication for simulated payments. Academic prototype.",
-    version="0.5.0",
+    version="0.6.0",
+    # The interactive docs list every endpoint; keep them for development only.
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
 )
+
+
+@app.middleware("http")
+async def protective_defaults(request: Request, call_next):
+    """Cap request size and mark every response as non-cacheable JSON for this origin.
+    Responses can contain personal and payment data, so browsers and proxies must not keep them."""
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > settings.max_request_bytes:
+        response = JSONResponse(status_code=413, content={"detail": "Request body is too large."})
+    else:
+        response = await call_next(request)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-Frame-Options"] = "DENY"
+    return response
 
 app.add_middleware(
     CORSMiddleware,

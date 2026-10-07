@@ -12,9 +12,9 @@ const COPY = {
     subtitle: 'Sign in to manage your FacePay profile.',
     footer: (
       <>
-        New here? <Link to="/register" className="font-semibold text-brand-600">Create an account</Link>
+        New here? <Link to="/register" className="font-semibold text-brand-700">Create an account</Link>
         {' · '}
-        <Link to="/merchant/login" className="font-semibold text-brand-600">Merchant sign in</Link>
+        <Link to="/merchant/login" className="font-semibold text-brand-700">Merchant sign in</Link>
       </>
     ),
   },
@@ -23,16 +23,16 @@ const COPY = {
     subtitle: 'Sign in to your merchant account.',
     footer: (
       <>
-        New merchant? <Link to="/merchant/register" className="font-semibold text-brand-600">Create a merchant account</Link>
+        New merchant? <Link to="/merchant/register" className="font-semibold text-brand-700">Create a merchant account</Link>
         {' · '}
-        <Link to="/login" className="font-semibold text-brand-600">Customer sign in</Link>
+        <Link to="/login" className="font-semibold text-brand-700">Customer sign in</Link>
       </>
     ),
   },
 }
 
 export default function Login({ role }) {
-  const { login } = useAuth()
+  const { login, sessionExpired } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [values, setValues] = useState({ email: '', password: '' })
@@ -63,6 +63,7 @@ export default function Login({ role }) {
   return (
     <AuthLayout title={copy.title} subtitle={copy.subtitle} footer={copy.footer}>
       <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
+        {sessionExpired && !formError && <Alert tone="info">Your session has ended. Please sign in again.</Alert>}
         {formError && <Alert tone="error">{formError}</Alert>}
         <FormField
           label="Email"

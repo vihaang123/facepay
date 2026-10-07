@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from fastapi import HTTPException
-from sqlalchemy import exists, func, select, update
+from sqlalchemy import exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -347,16 +347,34 @@ def confirm_payment(db: Session, user: User, session_id: str, token: str, expect
 # ------------------------------------------------------------------ history and receipts
 
 
-def customer_transactions(db: Session, user: User, *, limit: int, offset: int) -> list[dict]:
-    rows = db.execute(
+def _order_by(sort: str):
+    """Stable orderings for transaction lists (ties broken by newest id)."""
+    t = Transaction
+    return {
+        "newest": (t.id.desc(),),
+        "oldest": (t.id.asc(),),
+        "amount_desc": (t.amount.desc(), t.id.desc()),
+        "amount_asc": (t.amount.asc(), t.id.desc()),
+    }[sort]
+
+
+def _like(column, text_: str):
+    escaped = text_.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")  # user text is data, not a pattern
+    return column.ilike(f"%{escaped}%", escape="\\")
+
+
+def customer_transactions(db: Session, user: User, *, limit: int, offset: int, status: str | None = None, q: str | None = None, sort: str = "newest") -> list[dict]:
+    query = (
         select(Transaction, Merchant.business_name, PaymentSession.order_reference, PaymentSession.currency)
         .join(Merchant, Merchant.id == Transaction.merchant_id)
         .outerjoin(PaymentSession, PaymentSession.id == Transaction.payment_session_id)
         .where(Transaction.payer_id == user.id)
-        .order_by(Transaction.id.desc())
-        .limit(limit)
-        .offset(offset)
     )
+    if status:
+        query = query.where(Transaction.status == status)
+    if q:
+        query = query.where(or_(_like(Transaction.transaction_id, q), _like(Merchant.business_name, q), _like(PaymentSession.order_reference, q)))
+    rows = db.execute(query.order_by(*_order_by(sort)).limit(limit).offset(offset))
     return [
         {
             "transaction_id": t.transaction_id, "status": t.status, "amount": t.amount, "currency": cur or "INR",
@@ -366,6 +384,20 @@ def customer_transactions(db: Session, user: User, *, limit: int, offset: int) -
     ]
 
 
+def customer_summary(db: Session, user: User) -> dict:
+    t = Transaction
+    since = _now() - timedelta(days=30)
+    spent, count, recent, last = db.execute(
+        select(
+            func.coalesce(func.sum(t.amount), 0),
+            func.count(),
+            func.coalesce(func.sum(t.amount).filter(t.timestamp >= since), 0),
+            func.max(t.timestamp),
+        ).where(t.payer_id == user.id, t.status == "SUCCESS")
+    ).one()
+    return {"currency": "INR", "total_spent": spent, "payments": count, "spent_last_30_days": recent, "last_payment_at": last}
+
+
 def customer_receipt(db: Session, user: User, transaction_id: str) -> dict:
     txn = db.scalar(select(Transaction).where(Transaction.transaction_id == transaction_id, Transaction.payer_id == user.id))
     if txn is None:
@@ -373,16 +405,18 @@ def customer_receipt(db: Session, user: User, transaction_id: str) -> dict:
     return _receipt(db, txn)
 
 
-def merchant_transactions(db: Session, merchant: Merchant, *, limit: int, offset: int) -> list[dict]:
-    rows = db.execute(
+def merchant_transactions(db: Session, merchant: Merchant, *, limit: int, offset: int, status: str | None = None, q: str | None = None, sort: str = "newest") -> list[dict]:
+    query = (
         select(Transaction, User.name, PaymentSession.order_reference, PaymentSession.currency, PaymentSession.session_id)
         .join(User, User.id == Transaction.payer_id)
         .outerjoin(PaymentSession, PaymentSession.id == Transaction.payment_session_id)
         .where(Transaction.merchant_id == merchant.id)
-        .order_by(Transaction.id.desc())
-        .limit(limit)
-        .offset(offset)
     )
+    if status:
+        query = query.where(Transaction.status == status)
+    if q:
+        query = query.where(or_(_like(Transaction.transaction_id, q), _like(User.name, q), _like(PaymentSession.order_reference, q)))
+    rows = db.execute(query.order_by(*_order_by(sort)).limit(limit).offset(offset))
     return [
         {
             "transaction_id": t.transaction_id, "status": t.status, "amount": t.amount, "currency": cur or "INR",

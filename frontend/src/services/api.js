@@ -16,6 +16,23 @@ export function setUnauthorizedHandler(fn) {
   unauthorizedHandler = fn
 }
 
+// What people read when the server gave us nothing better. Raw HTTP wording never reaches the screen.
+const STATUS_MESSAGES = {
+  400: 'That request could not be processed. Please check it and try again.',
+  401: 'Please sign in to continue.',
+  403: 'You do not have access to this.',
+  404: 'We could not find that.',
+  409: 'That is no longer possible because something changed. Please refresh and try again.',
+  422: 'Some details are not valid. Please check them and try again.',
+  429: 'Too many requests. Please wait a moment and try again.',
+  500: 'Something went wrong on our side. Please try again.',
+  502: 'FacePay is temporarily unavailable. Please try again shortly.',
+  503: 'FacePay is temporarily unavailable. Please try again shortly.',
+  504: 'FacePay took too long to respond. Please try again.',
+}
+export const friendlyStatus = (status) =>
+  STATUS_MESSAGES[status] ?? (status >= 500 ? STATUS_MESSAGES[500] : 'Something went wrong. Please try again.')
+
 async function parseError(response) {
   let detail = null
   try {
@@ -23,10 +40,12 @@ async function parseError(response) {
   } catch {
     // non-JSON error body
   }
-  if (typeof detail === 'string') {
+  // A 5xx body is never shown (it could be a framework message); 4xx messages come from our own API.
+  const server = response.status < 500
+  if (server && typeof detail === 'string') {
     return new ApiError(detail, response.status)
   }
-  if (detail && typeof detail === 'object' && !Array.isArray(detail) && detail.message) {
+  if (server && detail && typeof detail === 'object' && !Array.isArray(detail) && detail.message) {
     return new ApiError(String(detail.message), response.status, {}, detail.code ?? null)
   }
   if (Array.isArray(detail)) {
@@ -37,12 +56,19 @@ async function parseError(response) {
       const msg = String(item.msg || 'Invalid value').replace(/^Value error, /, '')
       if (field && !(field in fieldErrors)) fieldErrors[field] = msg
     }
-    return new ApiError('Please fix the highlighted fields.', response.status, fieldErrors)
+    return new ApiError(
+      Object.keys(fieldErrors).length ? 'Please fix the highlighted fields.' : friendlyStatus(response.status),
+      response.status,
+      fieldErrors,
+    )
   }
-  return new ApiError(`Request failed (${response.status})`, response.status)
+  return new ApiError(friendlyStatus(response.status), response.status)
 }
 
-export async function apiFetch(path, { token, json, headers, ...options } = {}) {
+// Nothing waits forever: a request that gets no answer ends with a clear message.
+const DEFAULT_TIMEOUT_MS = 30000
+
+export async function apiFetch(path, { token, json, headers, signal, timeoutMs = DEFAULT_TIMEOUT_MS, ...options } = {}) {
   const init = {
     ...options,
     headers: {
@@ -53,12 +79,22 @@ export async function apiFetch(path, { token, json, headers, ...options } = {}) 
   }
   if (json !== undefined) init.body = JSON.stringify(json)
 
+  const controller = new AbortController()
+  const onCallerAbort = () => controller.abort()
+  if (signal?.aborted) controller.abort()
+  else signal?.addEventListener('abort', onCallerAbort)
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  init.signal = controller.signal
+
   let response
   try {
     response = await fetch(`${BASE_URL}${path}`, init)
   } catch (err) {
-    if (err?.name === 'AbortError') throw new ApiError('The request timed out.', 0, {}, 'TIMEOUT')
-    throw new ApiError('Cannot reach the server. Check your connection.', 0)
+    if (err?.name === 'AbortError') throw new ApiError('The server took too long to respond. Please try again.', 0, {}, 'TIMEOUT')
+    throw new ApiError('Cannot reach the server. Check your connection and try again.', 0)
+  } finally {
+    clearTimeout(timer)
+    signal?.removeEventListener('abort', onCallerAbort)
   }
   if (!response.ok) {
     const error = await parseError(response)

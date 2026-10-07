@@ -1,61 +1,92 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Alert, Button, Spinner } from '../components/ui'
+import CameraView from '../components/CameraView'
+import { StatusBadge } from '../components/payUi'
+import { Alert, Button, Card, ConfirmPanel, ErrorState, PageHeader, Spinner } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
-import { CAMERA_MESSAGES, useCamera } from '../hooks/useCamera'
+import { useCamera } from '../hooks/useCamera'
 import { deleteSamples, getEnrollment, getModel, recognize, trainModel, uploadSample } from '../services/faces'
 import { captureFrame } from '../utils/capture'
-
-const pct = (v) => `${(v * 100).toFixed(1)}%`
+import { faceStatus } from '../utils/faceStatus'
+import { pct } from '../utils/format'
 
 const REASONS = {
   MATCH: 'Recognised as you.',
   WRONG_IDENTITY: 'The model thinks this is someone else.',
   TOO_FAR_FROM_PROFILE: 'It looks like you, but not close enough to your stored profile.',
 }
+const NAMES = { pca_knn: 'PCA + KNN', pca_lda_knn: 'PCA + LDA + KNN', pca_lda_svm: 'PCA + LDA + SVM' }
 
-function ModelPanel({ model }) {
-  const names = { pca_knn: 'PCA + KNN', pca_lda_knn: 'PCA + LDA + KNN', pca_lda_svm: 'PCA + LDA + SVM' }
+/** A progress bar that is also a proper meter for screen readers. */
+function Progress({ value, max, label }) {
+  const pctDone = Math.min(100, Math.round((value / Math.max(1, max)) * 100))
   return (
-    <section aria-label="Model" className="rounded-2xl border border-slate-200 bg-white p-5">
-      <h2 className="font-semibold">Trained model</h2>
-      <dl className="mt-3 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-        <div><dt className="inline text-slate-500">Version: </dt><dd className="inline font-mono text-xs">{model.version}</dd></div>
-        <div><dt className="inline text-slate-500">Deployed: </dt><dd className="inline">{names[model.classifier]}</dd></div>
-        <div><dt className="inline text-slate-500">Users / samples: </dt><dd className="inline">{model.n_users} / {model.n_samples}</dd></div>
-        <div><dt className="inline text-slate-500">PCA components: </dt><dd className="inline">{model.pca.n_components}</dd></div>
-        <div><dt className="inline text-slate-500">LDA components: </dt><dd className="inline">{model.lda?.n_components ?? '—'}</dd></div>
-        <div><dt className="inline text-slate-500">Validation: </dt><dd className="inline">{model.validation}</dd></div>
-      </dl>
-      <table className="mt-4 w-full text-left text-sm">
-        <caption className="mb-1 text-left text-xs text-slate-500">
-          Out-of-fold results on the enrolled users’ own samples (small data: treat as indicative, not a security guarantee).
-        </caption>
-        <thead>
-          <tr className="border-b border-slate-200 text-slate-500">
-            <th className="py-1 pr-3 font-medium">Pipeline</th>
-            <th className="py-1 pr-3 font-medium">Accuracy</th>
-            <th className="py-1 font-medium">Macro F1</th>
-          </tr>
-        </thead>
-        <tbody>
-          {Object.entries(model.comparison).map(([key, m]) => (
-            <tr key={key} className="border-b border-slate-100">
-              <td className="py-1 pr-3">{names[key] || key}</td>
-              <td className="py-1 pr-3">{pct(m.accuracy)}</td>
-              <td className="py-1">{pct(m.macro_f1)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {model.stale && <p className="mt-3 text-xs text-amber-700">Your samples changed since this model was trained. Retrain to include them.</p>}
-      {!model.includes_you && <p className="mt-3 text-xs text-amber-700">You are not part of this model yet. Train to add yourself.</p>}
-    </section>
+    <div>
+      <div className="flex items-baseline justify-between text-sm">
+        <span className="font-medium">{label}</span>
+        <span className="text-slate-700">{value} of {max}</span>
+      </div>
+      <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={max} aria-valuenow={Math.min(value, max)} className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-slate-200">
+        <div className="h-full rounded-full bg-brand-700 transition-all" style={{ width: `${pctDone}%` }} />
+      </div>
+    </div>
   )
 }
 
+function ModelPanel({ model }) {
+  return (
+    <Card title="Trained model" aria-label="Model">
+      <p className="text-sm text-slate-700">
+        {model.includes_you && !model.stale
+          ? 'The model includes your face and is up to date.'
+          : model.includes_you
+            ? 'The model includes an older version of your samples.'
+            : 'You are not part of this model yet.'}
+        {' '}It was trained on {model.n_users} {model.n_users === 1 ? 'person' : 'people'} and {model.n_samples} samples.
+      </p>
+      {model.stale && <div className="mt-3"><Alert tone="warning">Your samples changed since this model was trained. Retrain to include them.</Alert></div>}
+      {!model.includes_you && <div className="mt-3"><Alert tone="warning">Train the model to add yourself.</Alert></div>}
+      <details className="mt-3 text-sm">
+        <summary className="cursor-pointer font-medium text-slate-800">Technical details</summary>
+        <dl className="mt-3 grid gap-x-6 gap-y-1 sm:grid-cols-2">
+          <div><dt className="inline text-slate-600">Version: </dt><dd className="inline font-mono text-xs">{model.version}</dd></div>
+          <div><dt className="inline text-slate-600">Deployed: </dt><dd className="inline">{NAMES[model.classifier]}</dd></div>
+          <div><dt className="inline text-slate-600">PCA components: </dt><dd className="inline">{model.pca.n_components}</dd></div>
+          <div><dt className="inline text-slate-600">LDA components: </dt><dd className="inline">{model.lda?.n_components ?? '—'}</dd></div>
+          <div><dt className="inline text-slate-600">Validation: </dt><dd className="inline">{model.validation}</dd></div>
+        </dl>
+        <table className="mt-4 w-full text-left text-sm">
+          <caption className="mb-1 text-left text-xs text-slate-600">
+            Out-of-fold results on the enrolled users’ own samples (small data: treat as indicative, not a security guarantee).
+          </caption>
+          <thead>
+            <tr className="border-b border-slate-200 text-slate-600">
+              <th scope="col" className="py-1 pr-3 font-medium">Pipeline</th>
+              <th scope="col" className="py-1 pr-3 font-medium">Accuracy</th>
+              <th scope="col" className="py-1 font-medium">Macro F1</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(model.comparison).map(([key, m]) => (
+              <tr key={key} className="border-b border-slate-100">
+                <td className="py-1 pr-3">{NAMES[key] || key}</td>
+                <td className="py-1 pr-3">{pct(m.accuracy)}</td>
+                <td className="py-1">{pct(m.macro_f1)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
+    </Card>
+  )
+}
+
+const qualityNote = (q) =>
+  q ? `Image quality looked good (face ${q.face_size}px wide${q.aligned ? ', well aligned' : ''}).` : ''
+
 export default function FaceRegistration() {
   const { token } = useAuth()
-  const { videoRef, status: cameraStatus, start: startCamera, stop: stopCamera } = useCamera()
+  const camera = useCamera()
+  const { videoRef, status: cameraStatus } = camera
   const [enrollment, setEnrollment] = useState(null)
   const [model, setModel] = useState(null)
   const [loadError, setLoadError] = useState(null)
@@ -63,6 +94,7 @@ export default function FaceRegistration() {
   const [notice, setNotice] = useState(null) // { tone, text }
   const [result, setResult] = useState(null)
   const [pose, setPose] = useState('neutral')
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const refresh = useCallback(async () => {
     try {
@@ -96,7 +128,7 @@ export default function FaceRegistration() {
     run('capture', async () => {
       const res = await uploadSample(token, { imageBase64: captureFrame(videoRef.current), pose })
       setEnrollment(res.enrollment)
-      setNotice({ tone: 'success', text: 'Sample saved.' })
+      setNotice({ tone: 'success', text: `Sample saved. ${qualityNote(res.quality)}`.trim() })
     })
 
   const train = () =>
@@ -105,7 +137,7 @@ export default function FaceRegistration() {
       setModel(m)
       setResult(null)
       await refresh()
-      setNotice({ tone: 'success', text: 'Model trained.' })
+      setNotice({ tone: 'success', text: 'Model trained. You are ready to pay with FacePay.' })
     })
 
   const test = () =>
@@ -114,7 +146,7 @@ export default function FaceRegistration() {
     })
 
   const remove = () => {
-    if (!window.confirm('Delete all your face samples and profile? Any model trained with them is retired.')) return
+    setConfirmDelete(false)
     run('delete', async () => {
       await deleteSamples(token)
       setResult(null)
@@ -124,119 +156,104 @@ export default function FaceRegistration() {
   }
 
   const cameraOn = cameraStatus === 'active'
+  const status = enrollment ? faceStatus(enrollment, model) : null
+  const currentPose = enrollment?.poses.find((p) => p.pose === pose)
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Face setup</h1>
-        <p className="mt-1 text-sm text-slate-600">
-          Capture varied samples, train the PCA → LDA → classifier model, then test recognition. Images are processed on the
-          server into a small grayscale crop and stored encrypted; they are never shown back or sent anywhere else. This is an
-          academic prototype.
-        </p>
-      </div>
+      <PageHeader
+        title="Face setup"
+        subtitle="Capture varied samples, train the model, then test it. Images are reduced to a small grayscale crop on the server and stored encrypted; they are never shown back. This is an academic prototype."
+        actions={status && <StatusBadge status={status.badge} label={status.label} />}
+      />
 
-      {loadError && <Alert tone="error">{loadError}</Alert>}
+      {loadError && <ErrorState message={loadError} onRetry={refresh} />}
       {notice && <Alert tone={notice.tone}>{notice.text}</Alert>}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="font-semibold">Camera</h2>
-        <div className="mt-3 flex flex-col gap-3">
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            aria-label="Camera preview"
-            className={`aspect-[4/3] w-full max-w-md -scale-x-100 rounded-lg bg-slate-900 ${cameraOn ? '' : 'hidden'}`}
-          />
-          {CAMERA_MESSAGES[cameraStatus] && <Alert tone="error">{CAMERA_MESSAGES[cameraStatus]}</Alert>}
-          <div className="flex gap-2">
-            {cameraOn ? (
-              <Button variant="secondary" onClick={stopCamera}>Turn camera off</Button>
-            ) : (
-              <Button onClick={startCamera} loading={cameraStatus === 'requesting'} disabled={cameraStatus === 'unsupported'}>
-                Turn camera on
-              </Button>
-            )}
-          </div>
-        </div>
-      </section>
+      <Card title="1. Camera">
+        <CameraView camera={camera} busy={busy !== null} overlay={cameraOn && currentPose ? currentPose.instruction : null} />
+      </Card>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="font-semibold">1. Capture samples</h2>
+      <Card title="2. Capture samples">
         {!enrollment ? (
-          <div className="mt-3"><Spinner label="Loading enrollment" /></div>
+          loadError ? null : <Spinner label="Loading enrollment" />
         ) : (
           <>
-            <p className="mt-1 text-sm text-slate-600">
-              {enrollment.total_samples} samples across {enrollment.distinct_poses} poses. You need at least{' '}
-              {enrollment.min_samples_to_train} samples across {enrollment.min_poses_to_train} different poses (up to{' '}
-              {enrollment.max_samples}).
+            <Progress value={enrollment.total_samples} max={enrollment.min_samples_to_train} label="Samples collected" />
+            <p className="mt-2 text-sm text-slate-700">
+              You need at least {enrollment.min_samples_to_train} samples across {enrollment.min_poses_to_train} different poses
+              (you have {enrollment.total_samples} across {enrollment.distinct_poses}; up to {enrollment.max_samples} are kept).
             </p>
-            <fieldset className="mt-3 flex flex-col gap-2">
-              <legend className="sr-only">Pose</legend>
+            <fieldset className="mt-4 flex flex-col gap-2">
+              <legend className="mb-1 text-sm font-medium">Choose the pose you are about to capture</legend>
               {enrollment.poses.map((p) => (
-                <label key={p.pose} className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm">
-                  <input type="radio" name="pose" value={p.pose} checked={pose === p.pose} onChange={() => setPose(p.pose)} />
+                <label key={p.pose} className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-sm ${pose === p.pose ? 'border-brand-700 bg-brand-50' : 'border-slate-200'}`}>
+                  <input type="radio" name="pose" value={p.pose} checked={pose === p.pose} onChange={() => setPose(p.pose)} className="accent-brand-700" />
                   <span className="flex-1">{p.instruction}</span>
-                  <span className="text-xs text-slate-500" data-testid={`count-${p.pose}`}>{p.count}/{p.target}</span>
+                  <span className="text-xs text-slate-700" data-testid={`count-${p.pose}`}>{p.count}/{p.target}</span>
                 </label>
               ))}
             </fieldset>
-            <div className="mt-3">
+            <div className="mt-4 flex flex-wrap items-center gap-3">
               <Button onClick={capture} loading={busy === 'capture'} disabled={!cameraOn || busy !== null}>
                 Capture sample
               </Button>
-              {!cameraOn && <span className="ml-3 text-xs text-slate-500">Turn the camera on first.</span>}
+              {!cameraOn && <span className="text-xs text-slate-600">Turn the camera on first.</span>}
             </div>
           </>
         )}
-      </section>
+      </Card>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="font-semibold">2. Train</h2>
-        <p className="mt-1 text-sm text-slate-600">
-          Trains one model on every enrolled user with enough samples. LDA needs at least two users.
+      <Card title="3. Train the model">
+        <p className="text-sm text-slate-700">
+          Trains one model on every enrolled user with enough samples. Recognition needs at least two enrolled users.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <Button onClick={train} loading={busy === 'train'} disabled={!enrollment?.eligible || busy !== null}>
             Train model
           </Button>
-          <Button variant="secondary" onClick={remove} disabled={!enrollment?.total_samples || busy !== null}>
+          <Button variant="secondary" onClick={() => setConfirmDelete(true)} disabled={!enrollment?.total_samples || busy !== null || confirmDelete}>
             Delete my face data
           </Button>
         </div>
-        {enrollment && !enrollment.eligible && <p className="mt-2 text-xs text-slate-500">Capture more samples to enable training.</p>}
-      </section>
+        {enrollment && !enrollment.eligible && <p className="mt-2 text-xs text-slate-600">Capture more samples to enable training.</p>}
+        {confirmDelete && (
+          <div className="mt-4">
+            <ConfirmPanel
+              title="Delete all your face data?"
+              confirmLabel="Delete face data"
+              busy={busy === 'delete'}
+              onConfirm={remove}
+              onCancel={() => setConfirmDelete(false)}
+            >
+              This removes every sample and your stored profile. Any model trained with them is retired, and you will not be able to pay with FacePay until you set up your face again. This cannot be undone.
+            </ConfirmPanel>
+          </div>
+        )}
+      </Card>
 
       {model && <ModelPanel model={model} />}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="font-semibold">3. Test recognition</h2>
-        <p className="mt-1 text-sm text-slate-600">Sends one new frame through detection → PCA → LDA → classifier.</p>
-        <div className="mt-3">
+      <Card title="4. Test recognition">
+        <p className="text-sm text-slate-700">Checks one new camera frame against the trained model.</p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
           <Button onClick={test} loading={busy === 'recognize'} disabled={!cameraOn || !model?.includes_you || busy !== null}>
             Recognise me
           </Button>
-          {!model?.includes_you && <span className="ml-3 text-xs text-slate-500">Train a model that includes you first.</span>}
+          {!model?.includes_you && <span className="text-xs text-slate-600">Train a model that includes you first.</span>}
         </div>
         {result && (
           <div className="mt-4" aria-live="polite">
             <Alert tone={result.matched ? 'success' : 'error'}>{REASONS[result.reason]}</Alert>
-            <dl className="mt-3 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-              <div><dt className="inline text-slate-500">Confidence score: </dt><dd className="inline">{pct(result.confidence)}</dd></div>
-              <div>
-                <dt className="inline text-slate-500">Distance to your profile: </dt>
-                <dd className="inline">{result.distance_to_you} (limit {result.distance_threshold})</dd>
-              </div>
-            </dl>
-            <p className="mt-2 text-xs text-slate-500">
-              The confidence score is the classifier’s vote share, not a calibrated probability.
-            </p>
+            <p className="mt-3 text-sm"><span className="text-slate-600">Match confidence: </span>{pct(result.confidence)}</p>
+            <details className="mt-1 text-xs text-slate-700">
+              <summary className="cursor-pointer font-medium">Technical details</summary>
+              <p className="mt-2">Distance to your profile: {result.distance_to_you} (limit {result.distance_threshold}).</p>
+              <p className="mt-1">The confidence score is the classifier’s vote share, not a calibrated probability.</p>
+            </details>
           </div>
         )}
-      </section>
+      </Card>
     </div>
   )
 }

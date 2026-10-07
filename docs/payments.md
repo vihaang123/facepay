@@ -52,11 +52,17 @@ Camera problems (no face, blur, too small), a missing model and an expired chall
 ## API
 
 Customer (`Bearer` customer token): `GET /payments/sessions/{id}`, `POST …/authenticate/start`,
-`POST …/authenticate`, `POST …/confirm`, `GET /payments/transactions`, `GET /payments/transactions/{transaction_id}`.
+`POST …/authenticate`, `POST …/confirm`, `GET /payments/transactions`, `GET /payments/transactions/{transaction_id}`,
+`GET /payments/summary` (own successful payments only: total spent, count, last 30 days, last payment).
 
 Merchant (`Bearer` merchant token): `POST|GET /merchant/payment-sessions`, `GET /merchant/payment-sessions/{id}`,
 `POST …/{id}/cancel`, `GET /merchant/transactions`, `GET /merchant/transactions/{transaction_id}`,
 `GET /merchant/summary`.
+
+Both transaction lists (`/payments/transactions`, `/merchant/transactions`) take `limit` (1–101), `offset`,
+`status` (`SUCCESS|FAILED|PENDING`), `q` (≤ 60 characters; matches transaction ID, the other party's name and the order
+reference; `%` and `_` are matched literally) and `sort` (`newest|oldest|amount_desc|amount_asc`). Anything else is a 422.
+There is no count endpoint; the UI asks for one row more than a page to know whether a next page exists.
 
 Errors are `{"detail": {"code", "message"}}`: `SESSION_NOT_FOUND` (404; also for another merchant's session),
 `SESSION_ALREADY_PAID|EXPIRED|CANCELLED|FAILED|NOT_CANCELLABLE`, `AMOUNT_MISMATCH` (409),

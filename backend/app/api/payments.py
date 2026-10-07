@@ -15,6 +15,7 @@ from app.schemas.face_auth import ChallengeOut
 from app.schemas.payments import (
     CheckoutOut,
     ConfirmRequest,
+    CustomerSummary,
     CustomerTransactionOut,
     PaymentAuthResult,
     PaymentVerifyRequest,
@@ -24,6 +25,9 @@ from app.services import payment_service as svc
 
 _s = get_settings()
 payment_limiter = RateLimiter(_s.payment_rate_limit_per_minute, enabled=_s.rate_limit_enabled)
+
+TX_STATUS = "^(SUCCESS|FAILED|PENDING)$"
+TX_SORT = "^(newest|oldest|amount_desc|amount_asc)$"
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
@@ -77,12 +81,20 @@ def confirm(session_id: str, data: ConfirmRequest, user: User = Depends(get_curr
 
 @router.get("/transactions", response_model=list[CustomerTransactionOut])
 def my_transactions(
-    limit: int = Query(20, ge=1, le=100),
-    offset: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=101),  # 101 lets a client ask for a page plus one row to know if there is a next page
+    offset: int = Query(0, ge=0, le=100_000),
+    status: str | None = Query(None, pattern=TX_STATUS),
+    q: str | None = Query(None, max_length=60),
+    sort: str = Query("newest", pattern=TX_SORT),
     user: User = Depends(get_current_customer),
     db: Session = Depends(get_db),
 ):
-    return svc.customer_transactions(db, user, limit=limit, offset=offset)
+    return svc.customer_transactions(db, user, limit=limit, offset=offset, status=status, q=(q or "").strip() or None, sort=sort)
+
+
+@router.get("/summary", response_model=CustomerSummary)
+def my_summary(user: User = Depends(get_current_customer), db: Session = Depends(get_db)):
+    return svc.customer_summary(db, user)
 
 
 @router.get("/transactions/{transaction_id}", response_model=ReceiptOut)

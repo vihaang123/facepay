@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AuthDetails } from './AuthStages'
-import { Alert, Button, Spinner } from './ui'
-import { CAMERA_MESSAGES, useCamera } from '../hooks/useCamera'
+import CameraView from './CameraView'
+import { Alert, Button, Card, Spinner } from './ui'
+import { useCamera } from '../hooks/useCamera'
 import { TIMING } from '../utils/authTiming'
 import { errorMessage, failureMessage } from '../utils/authMessages'
 import { captureFrame } from '../utils/capture'
@@ -20,7 +21,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
  *   Actions (component, optional)               -> replaces the default "Done" / "Try again" button; gets { result, authenticated, onRetry }
  */
 export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onError, Actions }) {
-  const { videoRef, status: cameraStatus, start: startCamera, stop: stopCamera } = useCamera()
+  const camera = useCamera()
+  const { videoRef, status: cameraStatus } = camera
   const [phase, setPhase] = useState('idle') // idle | challenge | baseline | turn | verifying | done | error
   const [instruction, setInstruction] = useState('')
   const [captured, setCaptured] = useState(0)
@@ -97,71 +99,54 @@ export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onEr
   const cameraOn = cameraStatus === 'active'
   const busy = ['challenge', 'baseline', 'turn', 'verifying'].includes(phase)
   const authenticated = result?.result === 'AUTHENTICATED'
+  const overlay = phase === 'baseline' ? 'Look at the camera and hold still' : phase === 'turn' ? instruction : phase === 'verifying' ? 'Verifying…' : null
 
   return (
     <>
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="font-semibold">Camera</h2>
-        <div className="mt-3 flex flex-col gap-3">
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            aria-label="Camera preview"
-            className={`aspect-[4/3] w-full max-w-md -scale-x-100 rounded-lg bg-slate-900 ${cameraOn ? '' : 'hidden'}`}
-          />
-          {CAMERA_MESSAGES[cameraStatus] && <Alert tone="error">{CAMERA_MESSAGES[cameraStatus]}</Alert>}
-          <div className="flex gap-2">
-            {cameraOn ? (
-              <Button variant="secondary" onClick={stopCamera} disabled={busy}>Turn camera off</Button>
-            ) : (
-              <Button onClick={startCamera} loading={cameraStatus === 'requesting'} disabled={cameraStatus === 'unsupported'}>
-                Turn camera on
-              </Button>
-            )}
-          </div>
-        </div>
-      </section>
+      <Card title="Camera">
+        <CameraView camera={camera} busy={busy} overlay={overlay} />
+      </Card>
 
-      <section aria-label="Authentication" className="rounded-2xl border border-slate-200 bg-white p-5" aria-live="polite">
+      <Card aria-label="Authentication" aria-live="polite">
+        <Progress phase={phase} cameraOn={cameraOn} result={result} />
+
         {phase === 'idle' && (
-          <div className="flex flex-col gap-3">
-            <p className="text-sm text-slate-600">Ready when you are. You will be asked to look at the camera and turn your head.</p>
-            <div>
+          <div className="mt-4 flex flex-col items-start gap-3">
+            <p className="text-sm text-slate-700">Ready when you are. You will look at the camera, then follow one short instruction such as turning your head.</p>
+            <div className="flex flex-wrap items-center gap-3">
               <Button onClick={begin} disabled={!cameraOn}>Start authentication</Button>
-              {!cameraOn && <span className="ml-3 text-xs text-slate-500">Turn the camera on first.</span>}
+              {!cameraOn && <span className="text-xs text-slate-600">Turn the camera on first.</span>}
             </div>
           </div>
         )}
 
-        {phase === 'challenge' && <p className="flex items-center gap-2 text-sm"><Spinner label="Preparing" /> Preparing your challenge…</p>}
+        {phase === 'challenge' && <p className="mt-4 flex items-center gap-2 text-sm"><Spinner label="Preparing" /> Preparing your challenge…</p>}
 
         {phase === 'baseline' && (
-          <div>
+          <div className="mt-4">
             <p className="text-lg font-semibold">Look at the camera</p>
-            <p className="mt-1 text-sm text-slate-600">Hold still and face the camera.</p>
+            <p className="mt-1 text-sm text-slate-700">Hold still and face the camera.</p>
           </div>
         )}
 
         {phase === 'turn' && (
-          <div>
-            <p className="text-sm font-medium text-slate-500">Liveness check</p>
+          <div className="mt-4">
+            <p className="text-sm font-medium text-slate-600">Liveness check</p>
             <p className="mt-1 text-xl font-semibold">{instruction}</p>
-            <p className="mt-2 text-xs text-slate-500">Frames captured: {captured}</p>
+            <p className="mt-2 text-xs text-slate-600">Frames captured: {captured}</p>
           </div>
         )}
 
-        {phase === 'verifying' && <p className="flex items-center gap-2 text-sm"><Spinner label="Verifying" /> Verifying identity…</p>}
+        {phase === 'verifying' && <p className="mt-4 flex items-center gap-2 text-sm"><Spinner label="Verifying" /> Verifying identity…</p>}
 
         {phase === 'done' && result && (
-          <div className="flex flex-col gap-4">
+          <div className="mt-4 flex flex-col gap-4">
             <Alert tone={authenticated ? 'success' : 'error'}>
               {authenticated ? 'Authentication successful' : failureMessage(result)}
             </Alert>
             <AuthDetails result={result} />
             {result.reason === 'NOT_ENROLLED' && (
-              <Link className="text-sm font-semibold text-brand-600" to={FACE_PATH}>Set up your face</Link>
+              <Link className="text-sm font-semibold text-brand-700 underline" to={FACE_PATH}>Set up your face</Link>
             )}
             {Actions ? (
               <Actions result={result} authenticated={authenticated} onRetry={reset} />
@@ -172,13 +157,45 @@ export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onEr
         )}
 
         {phase === 'error' && (
-          <div className="flex flex-col gap-3">
+          <div className="mt-4 flex flex-col gap-3">
             <Alert tone="error">{error}</Alert>
             <div><Button onClick={reset}>Try again</Button></div>
           </div>
         )}
-      </section>
-
+      </Card>
     </>
+  )
+}
+
+const STEPS = ['Camera', 'Face detected', 'Liveness', 'Identity', 'Result']
+
+/** Where the person is in the flow. Derived from real phase and the server's stage results. */
+function Progress({ phase, cameraOn, result }) {
+  const stage = (name) => result?.stages?.find((s) => s.stage === name)?.status
+  const state = [
+    cameraOn ? 'done' : phase === 'idle' ? 'current' : 'done',
+    phase === 'challenge' || phase === 'baseline' ? 'current' : phase === 'idle' ? 'todo' : 'done',
+    phase === 'turn' ? 'current' : ['idle', 'challenge', 'baseline'].includes(phase) ? 'todo' : stage('LIVENESS') === 'FAILED' ? 'failed' : 'done',
+    phase === 'verifying' ? 'current' : ['done'].includes(phase) ? (stage('IDENTITY') === 'PASSED' ? 'done' : stage('IDENTITY') === 'FAILED' ? 'failed' : 'todo') : 'todo',
+    phase === 'done' ? (result?.result === 'AUTHENTICATED' ? 'done' : 'failed') : 'todo',
+  ]
+  return (
+    <ol aria-label="Progress" className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+      {STEPS.map((label, i) => (
+        <li
+          key={label}
+          aria-current={state[i] === 'current' ? 'step' : undefined}
+          className={
+            state[i] === 'failed' ? 'font-semibold text-rose-800'
+            : state[i] === 'done' ? 'font-semibold text-emerald-800'
+            : state[i] === 'current' ? 'font-semibold text-ink underline decoration-2 underline-offset-4'
+            : 'text-slate-600'
+          }
+        >
+          <span aria-hidden="true">{state[i] === 'done' ? '✓ ' : state[i] === 'failed' ? '✕ ' : `${i + 1}. `}</span>
+          {label}
+        </li>
+      ))}
+    </ol>
   )
 }

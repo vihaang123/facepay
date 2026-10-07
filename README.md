@@ -13,7 +13,7 @@ An academic/research prototype. Payments are **simulated**: there is no UPI inte
 | 3 | Facial dataset + PCA/LDA pipeline | Done |
 | 4 | Face authentication + liveness | Done |
 | 5 | Payment simulation + merchant flow | Done |
-| 6 | Dashboards, analytics, polish | Not started |
+| 6 | Product polish, dashboards, production-readiness review | Done |
 | 7 | Testing, evaluation, deployment, docs | Not started |
 
 ML results are measured, never invented: see [`ml/results/README.md`](ml/results/README.md) (public ORL benchmark, not webcam data) and [`docs/ml-architecture.md`](docs/ml-architecture.md).
@@ -25,6 +25,13 @@ Challenge-response liveness, an explicit authentication policy and logged decisi
 ## Simulated payments
 
 Merchant payment sessions, FacePay checkout, single-use backend authorizations, atomic confirmation, receipts and dashboards: [`docs/payments.md`](docs/payments.md).
+
+## Product polish and security review
+
+A consistent UI for both roles (responsive, keyboard-usable, friendly loading/empty/error states), dashboards and
+filterable transaction history: [`docs/browser-testing/README.md`](docs/browser-testing/README.md) records the real-browser
+run (simulated camera, **not** a physical webcam). Security review, changes and the limitations that remain:
+[`docs/security-review.md`](docs/security-review.md).
 
 ## Stack
 

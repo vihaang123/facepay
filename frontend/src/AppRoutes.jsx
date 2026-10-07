@@ -12,13 +12,15 @@ import MerchantPaymentSession from './pages/MerchantPaymentSession'
 import Profile from './pages/Profile'
 import ReceiptPage from './pages/ReceiptPage'
 import Register from './pages/Register'
+import Transactions from './pages/Transactions'
 
 function NotFound() {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-3 px-6 text-center">
       <h1 className="text-2xl font-bold">Page not found</h1>
-      <Link to="/" className="font-semibold text-brand-600">
-        Back to home
+      <p className="text-sm text-slate-600">That page does not exist or has moved.</p>
+      <Link to="/" className="font-semibold text-brand-700 underline">
+        Back to FacePay
       </Link>
     </main>
   )
@@ -40,6 +42,7 @@ export default function AppRoutes() {
         <Route element={<DashboardLayout />}>
           <Route path="/dashboard" element={<CustomerDashboard />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/transactions" element={<Transactions />} />
           <Route path="/face" element={<FaceRegistration />} />
           <Route path="/authenticate" element={<FaceAuthentication />} />
           <Route path="/checkout/:sessionId" element={<Checkout />} />
@@ -51,6 +54,7 @@ export default function AppRoutes() {
         <Route element={<DashboardLayout />}>
           <Route path="/merchant/dashboard" element={<MerchantDashboard />} />
           <Route path="/merchant/profile" element={<Profile />} />
+          <Route path="/merchant/transactions" element={<Transactions />} />
           <Route path="/merchant/payments/new" element={<CreatePayment />} />
           <Route path="/merchant/payments/:sessionId" element={<MerchantPaymentSession />} />
           <Route path="/merchant/receipts/:transactionId" element={<ReceiptPage />} />

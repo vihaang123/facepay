@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     train_rate_limit_per_minute: int = 5
     # Face authentication attempts per user per minute (each attempt is expensive and security-relevant).
     face_auth_rate_limit_per_minute: int = 10
+    # Largest request body accepted (face frames are base64 JPEGs; a 10-frame authentication is a few MB).
+    max_request_bytes: int = 12_000_000
     # Checkout, confirmation and payment-session reads per customer per minute.
     payment_rate_limit_per_minute: int = 30
 
@@ -35,6 +37,20 @@ class Settings(BaseSettings):
         if len(v) < 16:
             raise ValueError("JWT_SECRET must be at least 16 characters")
         return v
+
+    @model_validator(mode="after")
+    def _production_requires_real_secrets(self) -> "Settings":
+        """Fail at startup, not at the first request, if a production deployment kept development placeholders."""
+        if self.app_env.lower() == "production":
+            if not self.biometric_key:
+                raise ValueError("BIOMETRIC_KEY must be set when APP_ENV=production")
+            if "change-me" in self.jwt_secret.lower():
+                raise ValueError("JWT_SECRET still has the example placeholder value")
+        return self
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env.lower() == "production"
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -131,3 +131,11 @@ class MerchantSummary(BaseModel):
     expired_sessions: int
     cancelled_sessions: int
     revenue_by_day: list[DayRevenue]
+
+
+class CustomerSummary(BaseModel):
+    currency: str
+    total_spent: Decimal  # SUCCESS transactions only (simulated)
+    payments: int
+    spent_last_30_days: Decimal
+    last_payment_at: datetime | None

@@ -84,7 +84,7 @@ describe('FacePay authentication screen', () => {
   it('is linked from the customer navigation only', async () => {
     mockApi(routes({ body: success }))
     renderApp('/dashboard')
-    expect(await screen.findByRole('link', { name: 'Authenticate' })).toHaveAttribute('href', '/authenticate')
+    expect(await screen.findByRole('link', { name: 'Test FacePay' })).toHaveAttribute('href', '/authenticate')
   })
 
   it('merchants cannot open the page', async () => {
@@ -122,7 +122,7 @@ describe('FacePay authentication screen', () => {
     TIMING.turnGapMs = 60
     await openAndStart({ body: success })
     expect(await screen.findByText('Look at the camera')).toBeInTheDocument()
-    expect(await screen.findByText('Slowly turn your head to your right')).toBeInTheDocument()
+    expect((await screen.findAllByText('Slowly turn your head to your right')).length).toBeGreaterThan(0)
     expect(screen.getByText('Liveness check')).toBeInTheDocument()
     expect(await screen.findByText('Authentication successful')).toBeInTheDocument()
   })
@@ -244,7 +244,7 @@ describe('FacePay authentication screen', () => {
     await user.click(screen.getByRole('button', { name: 'Turn camera on' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start authentication' })).toBeEnabled())
     await user.click(screen.getByRole('button', { name: 'Start authentication' }))
-    await screen.findByText('Slowly turn your head to your right')
+    await screen.findAllByText('Slowly turn your head to your right')
     unmount()
     await new Promise((r) => setTimeout(r, 700))
     expect(api.callsTo('POST /face-auth/verify')).toHaveLength(0)

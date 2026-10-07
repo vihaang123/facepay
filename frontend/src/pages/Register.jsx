@@ -13,7 +13,7 @@ const CONFIG = {
     initial: { name: '', email: '', phone: '', password: '', confirm: '' },
     footer: (
       <>
-        Already registered? <Link to="/login" className="font-semibold text-brand-600">Sign in</Link>
+        Already registered? <Link to="/login" className="font-semibold text-brand-700">Sign in</Link>
       </>
     ),
     payload: (v) => ({ name: v.name.trim(), email: v.email.trim(), phone: v.phone.trim() || null, password: v.password }),
@@ -24,7 +24,7 @@ const CONFIG = {
     initial: { name: '', business_name: '', email: '', password: '', confirm: '' },
     footer: (
       <>
-        Already registered? <Link to="/merchant/login" className="font-semibold text-brand-600">Sign in</Link>
+        Already registered? <Link to="/merchant/login" className="font-semibold text-brand-700">Sign in</Link>
       </>
     ),
     payload: (v) => ({

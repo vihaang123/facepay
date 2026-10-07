@@ -8,7 +8,6 @@ StratifiedKFold. All numbers returned come from out-of-fold predictions.
 import time
 
 import numpy as np
-from sklearn.base import clone
 from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_fscore_support
 from sklearn.model_selection import GroupKFold, StratifiedKFold
 

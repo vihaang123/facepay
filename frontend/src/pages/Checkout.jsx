@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { AuthDetails } from '../components/AuthStages'
 import FaceAuthFlow from '../components/FaceAuthFlow'
 import { Receipt, Row, StatusBadge } from '../components/payUi'
-import { Alert, Button, Spinner } from '../components/ui'
+import { Alert, Button, ButtonLink, Card, ErrorState, Spinner } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
 import { ApiError } from '../services/api'
 import { authenticateForPayment, confirmPayment, getCheckout, startPaymentAuth } from '../services/payments'
@@ -31,7 +31,6 @@ function describeLoadError(err) {
     message:
       err.status === 404 ? 'This payment session does not exist.'
       : err.status === 403 ? 'Only customers can pay. Sign in with a customer account.'
-      : err.status >= 500 ? 'Something went wrong on our side. Please try again.'
       : err.message,
   }
 }
@@ -50,30 +49,31 @@ const clock = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 function Authorized({ session, auth, outcome, busy, error, onConfirm, onRestart }) {
   const left = useSecondsLeft(auth.expiresAt)
   const expired = left === 0
+  const amount = formatMoney(session.amount, session.currency)
   return (
-    <section aria-label="Confirm payment" className="flex flex-col gap-4 rounded-2xl border border-emerald-200 bg-white p-5">
-      <h2 className="text-lg font-semibold text-emerald-700">FacePay Authentication ✓</h2>
-      <AuthDetails result={outcome} />
-      <div>
-        <p className="text-sm text-slate-500">Amount</p>
-        <p className="text-3xl font-bold tracking-tight">{formatMoney(session.amount, session.currency)}</p>
+    <Card aria-label="Confirm payment" className="border-emerald-200">
+      <h2 className="text-lg font-semibold text-emerald-800">FacePay Authentication ✓</h2>
+      <div className="mt-3 flex flex-col gap-3"><AuthDetails result={outcome} /></div>
+      <div className="mt-5 rounded-xl bg-slate-50 px-4 py-5 text-center">
+        <p className="text-sm text-slate-700">You are paying {session.merchant_name}</p>
+        <p className="mt-1 text-4xl font-bold tracking-tight sm:text-5xl" data-testid="confirm-amount">{amount}</p>
       </div>
-      {error && <Alert tone="error">{error}</Alert>}
+      {error && <div className="mt-4"><Alert tone="error">{error}</Alert></div>}
       {expired ? (
-        <>
+        <div className="mt-4 flex flex-col items-start gap-3">
           <Alert tone="error">Your face authorization expired. Authenticate again to continue.</Alert>
-          <div><Button onClick={onRestart}>Authenticate again</Button></div>
-        </>
+          <Button onClick={onRestart}>Authenticate again</Button>
+        </div>
       ) : (
         <>
-          <p className="text-xs text-slate-500">Authorization valid for {clock(left)}. It can be used once.</p>
-          <div className="flex gap-3">
-            <Button onClick={onConfirm} loading={busy}>Confirm {formatMoney(session.amount, session.currency)}</Button>
+          <p className="mt-4 text-xs text-slate-700">Authorization valid for {clock(left)}. It can be used once.</p>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <Button onClick={onConfirm} loading={busy} className="sm:flex-1">Confirm {amount}</Button>
             <Button variant="secondary" onClick={onRestart} disabled={busy}>Cancel</Button>
           </div>
         </>
       )}
-    </section>
+    </Card>
   )
 }
 
@@ -141,11 +141,7 @@ export default function Checkout() {
         load()
       } else {
         setStep('authorized') // network / server trouble: the ticket is still valid, let them retry
-        setConfirmError(
-          err.status === 0 ? 'Cannot reach the server. Your payment was not confirmed; check your connection and try again.'
-            : err.status === 429 ? 'Too many requests. Wait a moment and try again.'
-            : err.status >= 500 ? 'Something went wrong on our side. Your payment was not confirmed; please try again.' : err.message,
-        )
+        setConfirmError(`${err.message} Your payment was not confirmed.`)
       }
     }
   }
@@ -154,11 +150,8 @@ export default function Checkout() {
     return (
       <div className="mx-auto flex max-w-md flex-col gap-4">
         <h1 className="text-2xl font-bold tracking-tight">FacePay Checkout</h1>
-        <Alert tone="error">{loadError.message}</Alert>
-        <div className="flex gap-3">
-          {!loadError.notFound && <Button onClick={load}>Try again</Button>}
-          <Link className="self-center text-sm font-semibold text-brand-600" to={DASHBOARD_PATH[role]}>Back to dashboard</Link>
-        </div>
+        <ErrorState message={loadError.message} onRetry={loadError.notFound ? undefined : load} />
+        <ButtonLink to={DASHBOARD_PATH[role]} variant="secondary" className="self-start">Back to dashboard</ButtonLink>
       </div>
     )
   }
@@ -170,8 +163,9 @@ export default function Checkout() {
     return (
       <div className="flex flex-col gap-4">
         <Receipt receipt={receipt}>
-          <Link className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white" to={RECEIPT_PATH.customer(receipt.transaction_id)}>View transaction</Link>
-          <Link className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700" to={DASHBOARD_PATH.customer}>Back to dashboard</Link>
+          <ButtonLink to={RECEIPT_PATH.customer(receipt.transaction_id)}>View transaction</ButtonLink>
+          <Button variant="secondary" onClick={() => window.print()}>Print receipt</Button>
+          <ButtonLink to={DASHBOARD_PATH.customer} variant="secondary">Back to dashboard</ButtonLink>
         </Receipt>
       </div>
     )
@@ -182,31 +176,34 @@ export default function Checkout() {
     <div className="mx-auto flex w-full max-w-md flex-col gap-5">
       <h1 className="text-2xl font-bold tracking-tight">FacePay Checkout</h1>
 
-      <section aria-label="Payment summary" className="rounded-2xl border border-slate-200 bg-white p-5">
-        <dl>
+      <Card aria-label="Payment summary" flush>
+        <div className="bg-slate-50 px-5 py-6 text-center">
+          <p className="text-sm text-slate-700">Amount to pay</p>
+          <p className="mt-1 text-5xl font-bold tracking-tight" data-testid="checkout-amount">{formatMoney(session.amount, session.currency)}</p>
+        </div>
+        <dl className="px-5 py-2">
           <Row label="Merchant">{session.merchant_name}</Row>
           <Row label="Order">{session.order_reference ?? '—'}</Row>
           {session.description && <Row label="Details">{session.description}</Row>}
-          <Row label="Amount"><span className="text-lg font-bold">{formatMoney(session.amount, session.currency)}</span></Row>
           <Row label="Payment method">FacePay (simulated)</Row>
           <Row label="Status"><StatusBadge status={session.status} /></Row>
           {session.expires_at && payable && <Row label="Session expires">{formatDateTime(session.expires_at)}</Row>}
         </dl>
-      </section>
+      </Card>
 
       {notice && <Alert tone="error">{notice}</Alert>}
 
       {!payable && (
         <>
           <Alert tone={session.status === 'PAID' ? 'info' : 'error'}>{TERMINAL_MESSAGES[session.status] ?? 'This payment cannot be paid.'}</Alert>
-          <Link className="text-sm font-semibold text-brand-600" to={DASHBOARD_PATH.customer}>Back to dashboard</Link>
+          <ButtonLink to={DASHBOARD_PATH.customer} variant="secondary" className="self-start">Back to dashboard</ButtonLink>
         </>
       )}
 
       {payable && step === 'summary' && (
         <div className="flex flex-col gap-2">
-          <Button onClick={() => { setNotice(null); setStep('authenticating') }}>Pay with FacePay</Button>
-          <p className="text-xs text-slate-500">
+          <Button onClick={() => { setNotice(null); setStep('authenticating') }} className="py-3 text-base">Pay with FacePay</Button>
+          <p className="text-xs text-slate-700">
             You will look at the camera and turn your head, then confirm the amount. {session.attempts_remaining} of {session.max_auth_attempts} face
             attempts left for this payment.
           </p>

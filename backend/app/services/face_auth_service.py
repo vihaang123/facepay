@@ -95,7 +95,6 @@ def _stages(ev: policy.Evidence, decision: policy.Decision, liveness_result: str
 
 def authenticate(db: Session, user: User, token: str, frames_b64: list[str], detector: FaceDetector) -> dict:
     ctx = dict(challenge=None, liveness_result=liveness.NOT_EVALUATED, frames=(), distance_threshold=None, model_version=None)
-    ev = policy.Evidence()
 
     def finish(evidence: policy.Evidence) -> dict:
         decision = policy.decide(evidence)

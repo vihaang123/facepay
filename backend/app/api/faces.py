@@ -72,7 +72,7 @@ def upload_sample(
         raise _http(exc) from None
 
 
-@router.delete("/samples", status_code=204)
+@router.delete("/samples", status_code=204, dependencies=[Depends(_limit(face_limiter))])
 def delete_samples(user: User = Depends(get_current_customer), db: Session = Depends(get_db)):
     svc.delete_user_face_data(db, user)
 

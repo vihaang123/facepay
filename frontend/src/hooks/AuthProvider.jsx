@@ -5,7 +5,7 @@ import { normalizeRole } from '../utils/roles'
 import { clearSession, loadSession, saveSession } from '../utils/session'
 import { AuthContext } from './authContext'
 
-const ANONYMOUS = { status: 'anonymous', token: null, role: null, profile: null }
+const ANONYMOUS = { status: 'anonymous', token: null, role: null, profile: null, sessionExpired: false }
 
 export function AuthProvider({ children }) {
   // A stored session starts as "loading" until the server confirms the token is still valid.
@@ -21,11 +21,14 @@ export function AuthProvider({ children }) {
     setState(ANONYMOUS)
   }, [])
 
-  // Any authenticated request that comes back 401 ends the session.
+  // Any authenticated request that comes back 401 ends the session; the login page then says why.
   useEffect(() => {
-    setUnauthorizedHandler(logout)
+    setUnauthorizedHandler(() => {
+      clearSession()
+      setState({ ...ANONYMOUS, sessionExpired: true })
+    })
     return () => setUnauthorizedHandler(null)
-  }, [logout])
+  }, [])
 
   // Validate a restored session by loading the profile.
   useEffect(() => {

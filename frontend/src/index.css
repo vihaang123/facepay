@@ -2,12 +2,37 @@
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --color-brand-50: #eefdf6;
+  --color-brand-50: #ecfdf5;
+  --color-brand-100: #d1fae5;
   --color-brand-500: #10b981;
+  /* 600 is for fills behind white text only; use 700 for text and links (4.5:1+ on white). */
   --color-brand-600: #059669;
+  --color-brand-700: #047857;
+  --color-brand-800: #065f46;
   --color-ink: #0b1220;
 }
 
 body {
   @apply bg-slate-50 text-ink antialiased;
+}
+
+/* One visible focus style for every interactive element. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-brand-700);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* A receipt prints on its own, without navigation or buttons. */
+@media print {
+  body { background: #fff; }
+  .no-print { display: none !important; }
+  .print-card { border: 0 !important; box-shadow: none !important; }
 }

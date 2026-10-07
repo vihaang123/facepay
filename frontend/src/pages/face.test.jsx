@@ -103,13 +103,13 @@ describe('face setup page', () => {
   it('is reachable from the customer navigation', async () => {
     mockApi(baseRoutes())
     renderApp('/dashboard')
-    expect(await screen.findByRole('link', { name: 'Face' })).toHaveAttribute('href', '/face')
+    expect(await screen.findByRole('link', { name: 'Face setup' })).toHaveAttribute('href', '/face')
   })
 
   it('shows pose instructions and progress from the server', async () => {
     await openPage(baseRoutes({ 'GET /faces/enrollment': { body: enrollment({ total_samples: 2, distinct_poses: 1, poses: enrollment().poses.map((p) => (p.pose === 'neutral' ? { ...p, count: 2 } : p)) }) } }))
     expect(screen.getByTestId('count-neutral')).toHaveTextContent('2/4')
-    expect(screen.getByText(/2 samples across 1 poses/)).toBeInTheDocument()
+    expect(screen.getByText(/you have 2 across 1/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Train model' })).toBeDisabled()
   })
 
@@ -143,7 +143,7 @@ describe('face setup page', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Capture sample' })).toBeEnabled())
     await user.click(screen.getByLabelText(/Instruction for turn_left/))
     await user.click(screen.getByRole('button', { name: 'Capture sample' }))
-    expect(await screen.findByText('Sample saved.')).toBeInTheDocument()
+    expect(await screen.findByText(/^Sample saved\./)).toBeInTheDocument()
     const call = api.callsTo('POST /faces/samples')[0]
     expect(call.body).toEqual({ image_base64: 'QUJDRA==', pose: 'turn_left' })
     expect(call.headers.Authorization).toBe('Bearer token-for-customer')
@@ -219,9 +219,9 @@ describe('face setup page', () => {
     expect(screen.getByRole('button', { name: 'Recognise me' })).toBeDisabled()
   })
 
-  it('deletes face data only after confirmation', async () => {
+  it('deletes face data only after an in-page confirmation', async () => {
     const user = userEvent.setup()
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+    const confirm = vi.spyOn(window, 'confirm')
     const api = await openPage(
       baseRoutes({
         'GET /faces/enrollment': { body: enrollment({ total_samples: 5, distinct_poses: 2 }) },
@@ -229,10 +229,15 @@ describe('face setup page', () => {
       }),
     )
     await user.click(screen.getByRole('button', { name: 'Delete my face data' }))
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('cannot be undone')
+    await user.click(screen.getByRole('button', { name: 'Keep it' }))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(api.callsTo('DELETE /faces/samples')).toHaveLength(0)
     await user.click(screen.getByRole('button', { name: 'Delete my face data' }))
+    await user.click(screen.getByRole('button', { name: 'Delete face data' }))
     expect(await screen.findByText('Your face data was deleted.')).toBeInTheDocument()
-    expect(confirm).toHaveBeenCalledTimes(2)
+    expect(api.callsTo('DELETE /faces/samples')).toHaveLength(1)
+    expect(confirm).not.toHaveBeenCalled() // no browser dialog
   })
 
   it('stops the camera when leaving the page', async () => {

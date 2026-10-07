@@ -175,7 +175,7 @@ describe('login', () => {
     await user.type(screen.getByLabelText('Email'), 'asha@example.com')
     await user.type(screen.getByLabelText('Password'), 'Correct-horse-42')
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('boom')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong on our side')
     expect(session()).toBeNull()
   })
 })

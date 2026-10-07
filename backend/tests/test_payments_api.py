@@ -26,7 +26,7 @@ from tests.payment_helpers import (
     set_threshold,
     start,
 )
-from tests.synthetic_scenes import BackgroundBoxDetector, empty_scene, scene
+from tests.synthetic_scenes import BackgroundBoxDetector, empty_scene
 
 
 @pytest.fixture(autouse=True)
@@ -623,7 +623,7 @@ def test_history_paging_and_order(client, trained, shop):
     assert refs == ["P-2", "P-1", "P-0"]
     assert [t["order_reference"] for t in client.get("/payments/transactions?limit=1&offset=1", headers=a["headers"]).json()] == ["P-1"]
     assert client.get("/payments/transactions?limit=0", headers=a["headers"]).status_code == 422
-    assert client.get("/payments/transactions?limit=101", headers=a["headers"]).status_code == 422
+    assert client.get("/payments/transactions?limit=102", headers=a["headers"]).status_code == 422
 
 
 def test_unknown_transaction_is_404(client, trained, shop):

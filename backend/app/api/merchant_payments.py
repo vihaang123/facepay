@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_merchant
 from app.database.session import get_db
 from app.models import Merchant
+from app.api.payments import TX_SORT, TX_STATUS
 from app.schemas.payments import MerchantSessionOut, MerchantSummary, MerchantTransactionOut, ReceiptOut, SessionCreate
 from app.services import payment_service as svc
 
@@ -46,12 +47,15 @@ def cancel_session(session_id: str, merchant: Merchant = Depends(get_current_mer
 
 @router.get("/transactions", response_model=list[MerchantTransactionOut])
 def transactions(
-    limit: int = Query(20, ge=1, le=100),
-    offset: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=101),
+    offset: int = Query(0, ge=0, le=100_000),
+    status: str | None = Query(None, pattern=TX_STATUS),
+    q: str | None = Query(None, max_length=60),
+    sort: str = Query("newest", pattern=TX_SORT),
     merchant: Merchant = Depends(get_current_merchant),
     db: Session = Depends(get_db),
 ):
-    return svc.merchant_transactions(db, merchant, limit=limit, offset=offset)
+    return svc.merchant_transactions(db, merchant, limit=limit, offset=offset, status=status, q=(q or "").strip() or None, sort=sort)
 
 
 @router.get("/transactions/{transaction_id}", response_model=ReceiptOut)

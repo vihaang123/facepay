@@ -14,6 +14,9 @@ from fastapi import HTTPException, Request, status
 from app.core.config import get_settings
 
 
+_MAX_KEYS = 5000
+
+
 class RateLimiter:
     def __init__(self, max_requests: int, window_seconds: int = 60, enabled: bool = True):
         self.max_requests = max_requests
@@ -32,6 +35,9 @@ class RateLimiter:
         now = time.monotonic()
         cutoff = now - self.window_seconds
         with self._lock:
+            if len(self._hits) > _MAX_KEYS:  # keys of clients that never came back would otherwise accumulate
+                for k in [k for k, h in self._hits.items() if not h or h[-1] <= cutoff]:
+                    del self._hits[k]
             hits = self._hits[key]
             while hits and hits[0] <= cutoff:
                 hits.popleft()

@@ -28,7 +28,7 @@ export default function RevenueChart({ days }) {
     <section aria-label="Revenue by day" className="rounded-2xl border border-slate-200 bg-white p-5">
       <div className="flex items-center justify-between gap-3">
         <h2 className="font-semibold">Simulated revenue, last {days.length} days</h2>
-        <button type="button" className="text-xs font-semibold text-brand-600" onClick={() => setAsTable((v) => !v)}>
+        <button type="button" className="text-xs font-semibold text-brand-700" onClick={() => setAsTable((v) => !v)}>
           {asTable ? 'View chart' : 'View as table'}
         </button>
       </div>
