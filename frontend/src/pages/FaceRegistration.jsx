@@ -1,15 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Alert, Button, Spinner } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
-import { useCamera } from '../hooks/useCamera'
+import { CAMERA_MESSAGES, useCamera } from '../hooks/useCamera'
 import { deleteSamples, getEnrollment, getModel, recognize, trainModel, uploadSample } from '../services/faces'
 import { captureFrame } from '../utils/capture'
-
-const CAMERA_MESSAGES = {
-  denied: 'Camera access was blocked. Allow the camera for this site in your browser settings, then try again.',
-  unsupported: 'This browser cannot access a camera (it needs HTTPS or localhost).',
-  error: 'The camera could not be started. Check that no other app is using it.',
-}
 
 const pct = (v) => `${(v * 100).toFixed(1)}%`
 

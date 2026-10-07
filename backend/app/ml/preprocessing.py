@@ -232,7 +232,11 @@ def crop_to_stored(face: np.ndarray) -> tuple[np.ndarray, float, float]:
 
 
 def process_gray(
-    gray: np.ndarray, detector: FaceDetector, *, check_quality: bool = True
+    gray: np.ndarray,
+    detector: FaceDetector,
+    *,
+    check_quality: bool = True,
+    second_face_ratio: float = cfg.SECOND_FACE_RATIO,
 ) -> ProcessedFace:
     """Detect, align, crop and quality-check a grayscale frame."""
     h, w = gray.shape
@@ -243,7 +247,7 @@ def process_gray(
     boxes = sorted(detector.detect(gray), key=lambda b: b.area, reverse=True)
     if not boxes:
         raise FaceImageError(NO_FACE, "No face found. Face the camera in good light and try again.")
-    if len(boxes) > 1 and boxes[1].area >= cfg.SECOND_FACE_RATIO * boxes[0].area:
+    if len(boxes) > 1 and boxes[1].area >= second_face_ratio * boxes[0].area:
         raise FaceImageError(MULTIPLE_FACES, "More than one face is visible. Make sure only you are in frame.")
     box = boxes[0]
     if box.w < cfg.MIN_FACE_PIXELS and not isinstance(detector, FullFrameDetector):
@@ -270,9 +274,11 @@ def process_gray(
     return ProcessedFace(stored, report)
 
 
-def extract_face(data: bytes, detector: FaceDetector) -> ProcessedFace:
+def extract_face(
+    data: bytes, detector: FaceDetector, *, second_face_ratio: float = cfg.SECOND_FACE_RATIO
+) -> ProcessedFace:
     """Uploaded image bytes -> processed face crop. Raises FaceImageError for fixable problems."""
-    return process_gray(decode_image(data), detector)
+    return process_gray(decode_image(data), detector, second_face_ratio=second_face_ratio)
 
 
 # ---------------------------------------------------------------- crop -> vector

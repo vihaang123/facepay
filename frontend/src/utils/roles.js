@@ -19,3 +19,4 @@ export const PROFILE_PATH = {
 }
 
 export const FACE_PATH = '/face'
+export const AUTHENTICATE_PATH = '/authenticate'

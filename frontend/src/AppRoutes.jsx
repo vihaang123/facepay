@@ -2,6 +2,7 @@ import { Link, Route, Routes } from 'react-router-dom'
 import { GuestRoute, ProtectedRoute } from './components/RouteGuards'
 import DashboardLayout from './layouts/DashboardLayout'
 import { CustomerDashboard, MerchantDashboard } from './pages/Dashboards'
+import FaceAuthentication from './pages/FaceAuthentication'
 import FaceRegistration from './pages/FaceRegistration'
 import Home from './pages/Home'
 import Login from './pages/Login'
@@ -36,6 +37,7 @@ export default function AppRoutes() {
           <Route path="/dashboard" element={<CustomerDashboard />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/face" element={<FaceRegistration />} />
+          <Route path="/authenticate" element={<FaceAuthentication />} />
         </Route>
       </Route>
 

@@ -11,12 +11,16 @@ An academic/research prototype. Payments are **simulated**: there is no UPI inte
 | 1 | Foundation + architecture | Done |
 | 2 | Auth + user/merchant system | Done |
 | 3 | Facial dataset + PCA/LDA pipeline | Done |
-| 4 | Face authentication + liveness | Next |
+| 4 | Face authentication + liveness | Done |
 | 5 | Payment simulation + merchant system | Not started |
 | 6 | Dashboards, analytics, polish | Not started |
 | 7 | Testing, evaluation, deployment, docs | Not started |
 
 ML results are measured, never invented: see [`ml/results/README.md`](ml/results/README.md) (public ORL benchmark, not webcam data) and [`docs/ml-architecture.md`](docs/ml-architecture.md).
+
+## Face authentication
+
+Challenge-response liveness, an explicit authentication policy and logged decisions on top of the Phase 3 model: [`docs/face-authentication.md`](docs/face-authentication.md) (includes the unresolved open-set limitation).
 
 ## Stack
 

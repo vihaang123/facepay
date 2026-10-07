@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     # Per-IP limits (per minute) for the face endpoints; recognition and training are costly.
     face_rate_limit_per_minute: int = 60
     train_rate_limit_per_minute: int = 5
+    # Face authentication attempts per user per minute (each attempt is expensive and security-relevant).
+    face_auth_rate_limit_per_minute: int = 10
 
     @field_validator("jwt_secret")
     @classmethod

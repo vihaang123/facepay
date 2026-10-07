@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { FACE_PATH, PROFILE_PATH } from '../utils/roles'
+import { AUTHENTICATE_PATH, FACE_PATH, PROFILE_PATH } from '../utils/roles'
 
 function Card({ title, children, status }) {
   return (
@@ -29,6 +29,12 @@ export function CustomerDashboard() {
           Capture face samples, train the PCA-LDA model and test recognition.{' '}
           <Link className="font-semibold text-brand-600" to={FACE_PATH}>
             Open face setup
+          </Link>
+        </Card>
+        <Card title="FacePay authentication">
+          Liveness check, then PCA-LDA identity verification.{' '}
+          <Link className="font-semibold text-brand-600" to={AUTHENTICATE_PATH}>
+            Authenticate with your face
           </Link>
         </Card>
         <Card title="Account">

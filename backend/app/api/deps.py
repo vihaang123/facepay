@@ -33,10 +33,12 @@ def _subject_id(claims: dict) -> int:
         raise _UNAUTHORIZED from None
 
 
-def get_current_customer(
+def get_customer_any_status(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: Session = Depends(get_db),
 ) -> User:
+    """The signed-in customer even if the account was disabled after the token was issued.
+    Only for endpoints that must record and report ACCOUNT_DISABLED themselves (face authentication)."""
     claims = _claims(credentials)
     if claims["role"] not in ("customer", "admin"):
         # A merchant token must never open customer routes.
@@ -44,6 +46,10 @@ def get_current_customer(
     user = db.get(User, _subject_id(claims))
     if user is None:
         raise _UNAUTHORIZED
+    return user
+
+
+def get_current_customer(user: User = Depends(get_customer_any_status)) -> User:
     if user.status != "active":
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Account is disabled")
     return user

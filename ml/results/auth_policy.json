@@ -1,0 +1,300 @@
+{
+  "setup": "Open-set decision rules for authentication, compared on ORL BEFORE choosing one.\n\nPre-declared candidates (all thresholds come from out-of-fold genuine scores of the enrolment\ndata only, never from the impostors; no tuning on the test impostors):\n  P0  identity + distance to claimed centroid          (the Phase 3 rule)\n  P1  identity + margin ratio  d(claimed) / d(nearest other centroid)\n  P2  identity on 2 frames + mean distance of the 2 frames\nPre-declared adoption rule: a candidate replaces P0 only if its FAR (impostor claims the\npredicted identity) at FRR = 0.20 is lower by >= 5 absolute points at BOTH C=5 and C=30\nand the gap exceeds 2 standard errors; otherwise P0 stays.\nSetting: C enrolled subjects x 6 images, 4 genuine probes each, impostors = all images of the\nother subjects. 2-frame attempts pair two different photos of the same person: ORL photos\ndiffer more than consecutive webcam frames, so P2's benefit here is probably optimistic.\n",
+  "results": {
+    "C5": {
+      "table": {
+        "P0": {
+          "30": {
+            "frr": 0.525,
+            "far_pred": 0.033,
+            "far_rand": 0.0069
+          },
+          "40": {
+            "frr": 0.4725,
+            "far_pred": 0.0694,
+            "far_rand": 0.0139
+          },
+          "50": {
+            "frr": 0.3575,
+            "far_pred": 0.1417,
+            "far_rand": 0.0299
+          },
+          "60": {
+            "frr": 0.2475,
+            "far_pred": 0.2743,
+            "far_rand": 0.0563
+          },
+          "70": {
+            "frr": 0.16,
+            "far_pred": 0.5349,
+            "far_rand": 0.1124
+          },
+          "80": {
+            "frr": 0.12,
+            "far_pred": 0.7733,
+            "far_rand": 0.1574
+          },
+          "90": {
+            "frr": 0.0925,
+            "far_pred": 0.9317,
+            "far_rand": 0.1889
+          },
+          "95": {
+            "frr": 0.0925,
+            "far_pred": 0.9729,
+            "far_rand": 0.198
+          }
+        },
+        "P1": {
+          "30": {
+            "frr": 0.61,
+            "far_pred": 0.0144,
+            "far_rand": 0.0027
+          },
+          "40": {
+            "frr": 0.5225,
+            "far_pred": 0.0399,
+            "far_rand": 0.0086
+          },
+          "50": {
+            "frr": 0.4225,
+            "far_pred": 0.0687,
+            "far_rand": 0.0124
+          },
+          "60": {
+            "frr": 0.3125,
+            "far_pred": 0.1383,
+            "far_rand": 0.0261
+          },
+          "70": {
+            "frr": 0.2125,
+            "far_pred": 0.313,
+            "far_rand": 0.0646
+          },
+          "80": {
+            "frr": 0.135,
+            "far_pred": 0.5859,
+            "far_rand": 0.1217
+          },
+          "90": {
+            "frr": 0.0975,
+            "far_pred": 0.8766,
+            "far_rand": 0.1816
+          },
+          "95": {
+            "frr": 0.0925,
+            "far_pred": 0.9799,
+            "far_rand": 0.2024
+          }
+        },
+        "P2": {
+          "30": {
+            "frr": 0.46,
+            "far_pred": 0.0466,
+            "far_rand": 0.002
+          },
+          "40": {
+            "frr": 0.35,
+            "far_pred": 0.1383,
+            "far_rand": 0.0051
+          },
+          "50": {
+            "frr": 0.275,
+            "far_pred": 0.2317,
+            "far_rand": 0.0091
+          },
+          "60": {
+            "frr": 0.235,
+            "far_pred": 0.3849,
+            "far_rand": 0.0157
+          },
+          "70": {
+            "frr": 0.195,
+            "far_pred": 0.5597,
+            "far_rand": 0.0209
+          },
+          "80": {
+            "frr": 0.175,
+            "far_pred": 0.7163,
+            "far_rand": 0.0274
+          },
+          "90": {
+            "frr": 0.17,
+            "far_pred": 0.8534,
+            "far_rand": 0.0326
+          },
+          "95": {
+            "frr": 0.17,
+            "far_pred": 0.9231,
+            "far_rand": 0.0366
+          }
+        }
+      },
+      "at_frr_0.20": {
+        "P0": {
+          "far_pred_at_frr20": 0.4307,
+          "se": 0.0587,
+          "far_rand_at_frr20": 0.0861
+        },
+        "P1": {
+          "far_pred_at_frr20": 0.4076,
+          "se": 0.0728,
+          "far_rand_at_frr20": 0.0815
+        },
+        "P2": {
+          "far_pred_at_frr20": 0.4702,
+          "se": 0.0837,
+          "far_rand_at_frr20": 0.0201
+        }
+      }
+    },
+    "C30": {
+      "table": {
+        "P0": {
+          "30": {
+            "frr": 0.5483,
+            "far_pred": 0.009,
+            "far_rand": 0.0
+          },
+          "40": {
+            "frr": 0.445,
+            "far_pred": 0.0225,
+            "far_rand": 0.0005
+          },
+          "50": {
+            "frr": 0.3421,
+            "far_pred": 0.067,
+            "far_rand": 0.002
+          },
+          "60": {
+            "frr": 0.2608,
+            "far_pred": 0.189,
+            "far_rand": 0.0085
+          },
+          "70": {
+            "frr": 0.1971,
+            "far_pred": 0.45,
+            "far_rand": 0.023
+          },
+          "80": {
+            "frr": 0.1529,
+            "far_pred": 0.7595,
+            "far_rand": 0.04
+          },
+          "90": {
+            "frr": 0.1408,
+            "far_pred": 0.9665,
+            "far_rand": 0.047
+          },
+          "95": {
+            "frr": 0.14,
+            "far_pred": 0.999,
+            "far_rand": 0.048
+          }
+        },
+        "P1": {
+          "30": {
+            "frr": 0.6525,
+            "far_pred": 0.0025,
+            "far_rand": 0.0
+          },
+          "40": {
+            "frr": 0.5517,
+            "far_pred": 0.0045,
+            "far_rand": 0.0
+          },
+          "50": {
+            "frr": 0.4454,
+            "far_pred": 0.017,
+            "far_rand": 0.001
+          },
+          "60": {
+            "frr": 0.3392,
+            "far_pred": 0.0565,
+            "far_rand": 0.002
+          },
+          "70": {
+            "frr": 0.2375,
+            "far_pred": 0.2205,
+            "far_rand": 0.012
+          },
+          "80": {
+            "frr": 0.1558,
+            "far_pred": 0.809,
+            "far_rand": 0.0395
+          },
+          "90": {
+            "frr": 0.14,
+            "far_pred": 1.0,
+            "far_rand": 0.048
+          },
+          "95": {
+            "frr": 0.14,
+            "far_pred": 1.0,
+            "far_rand": 0.048
+          }
+        },
+        "P2": {
+          "30": {
+            "frr": 0.4808,
+            "far_pred": 0.009,
+            "far_rand": 0.0
+          },
+          "40": {
+            "frr": 0.3983,
+            "far_pred": 0.032,
+            "far_rand": 0.0
+          },
+          "50": {
+            "frr": 0.3408,
+            "far_pred": 0.085,
+            "far_rand": 0.0
+          },
+          "60": {
+            "frr": 0.2892,
+            "far_pred": 0.23,
+            "far_rand": 0.001
+          },
+          "70": {
+            "frr": 0.2633,
+            "far_pred": 0.432,
+            "far_rand": 0.001
+          },
+          "80": {
+            "frr": 0.2458,
+            "far_pred": 0.627,
+            "far_rand": 0.001
+          },
+          "90": {
+            "frr": 0.2408,
+            "far_pred": 0.877,
+            "far_rand": 0.001
+          },
+          "95": {
+            "frr": 0.2392,
+            "far_pred": 0.979,
+            "far_rand": 0.001
+          }
+        }
+      },
+      "at_frr_0.20": {
+        "P0": {
+          "far_pred_at_frr20": 0.4756,
+          "se": 0.0443,
+          "far_rand_at_frr20": 0.0252
+        },
+        "P1": {
+          "far_pred_at_frr20": 0.4879,
+          "se": 0.046,
+          "far_rand_at_frr20": 0.0256
+        },
+        "P2": {
+          "far_pred_at_frr20": 0.596,
+          "se": 0.0622,
+          "far_rand_at_frr20": 0.001
+        }
+      }
+    }
+  },
+  "draws": 20
+}

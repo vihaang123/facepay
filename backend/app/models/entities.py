@@ -122,6 +122,21 @@ class FaceSample(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class FaceAuthChallenge(Base):
+    """A single-use liveness challenge issued to one customer (expires after CHALLENGE_TTL_SECONDS)."""
+
+    __tablename__ = "face_auth_challenges"
+    __table_args__ = (Index("ix_face_auth_challenges_user", "user_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    token: Mapped[str] = mapped_column(String(64), unique=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    challenge: Mapped[str] = mapped_column(String(20))
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class PaymentSession(Base):
     """A bill created by a merchant. Phase 5 attaches transactions to it."""
 
@@ -186,7 +201,13 @@ class AuthenticationLog(Base):
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     result: Mapped[str] = mapped_column(String(20))
     confidence: Mapped[float | None]
-    liveness_result: Mapped[str | None] = mapped_column(String(20))
+    liveness_result: Mapped[str | None] = mapped_column(String(20))  # PASSED | FAILED | NOT_EVALUATED
+    # Phase 4. Metadata only: no images, crops or feature vectors are ever logged.
+    failure_reason: Mapped[str | None] = mapped_column(String(40))  # machine-readable, e.g. LIVENESS_FAILED
+    failure_detail: Mapped[str | None] = mapped_column(String(40))  # e.g. NO_MOVEMENT, TOO_BLURRY
+    distance: Mapped[float | None]
+    challenge: Mapped[str | None] = mapped_column(String(20))
+    model_version: Mapped[str | None] = mapped_column(String(40))
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped[User | None] = relationship(back_populates="authentication_logs")

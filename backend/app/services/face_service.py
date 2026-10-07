@@ -79,11 +79,20 @@ def _sample_stats(db: Session, user_id: int) -> dict[str, int]:
     return {pose: n for pose, n in rows}
 
 
+def load_profile_payload(profile: FaceProfile, user_id: int, version: str) -> dict:
+    """Decrypt a face profile: {"centroid": [...], "distance_threshold": float, ...}."""
+    return json.loads(crypto.decrypt(profile.feature_data, _profile_context(user_id, version)))
+
+
+def is_enrolled_in(profile: FaceProfile | None, model_row: ModelVersion) -> bool:
+    return profile is not None and profile.model_version_id == model_row.id and profile.feature_data is not None
+
+
 def _is_eligible(counts: dict[str, int]) -> bool:
     return sum(counts.values()) >= cfg.MIN_SAMPLES_PER_USER and len(counts) >= cfg.MIN_POSES_PER_USER
 
 
-def _active_profile(db: Session, user_id: int) -> FaceProfile | None:
+def active_profile(db: Session, user_id: int) -> FaceProfile | None:
     return db.scalar(select(FaceProfile).where(FaceProfile.user_id == user_id, FaceProfile.status == "active"))
 
 
@@ -120,7 +129,7 @@ def enrollment_status(db: Session, user: User) -> dict:
         "min_samples_to_train": cfg.MIN_SAMPLES_PER_USER,
         "min_poses_to_train": cfg.MIN_POSES_PER_USER,
         "eligible": _is_eligible(counts),
-        "has_profile": _active_profile(db, user.id) is not None,
+        "has_profile": active_profile(db, user.id) is not None,
     }
 
 
@@ -150,7 +159,7 @@ def add_sample(db: Session, user: User, pose: str, image: bytes, detector: FaceD
 
 def delete_user_face_data(db: Session, user: User) -> None:
     """Remove the user's samples and profile. A deployed model trained on them is retired."""
-    profile = _active_profile(db, user.id)
+    profile = active_profile(db, user.id)
     db.execute(delete(FaceSample).where(FaceSample.user_id == user.id))
     if profile is not None and profile.model_version_id is not None:
         _retire_model(db, profile.model_version_id)
@@ -282,7 +291,7 @@ def model_summary(db: Session, user: User) -> dict:
     metrics = row.evaluation_metrics or {}
     keys = ("accuracy", "macro_precision", "macro_recall", "macro_f1", "predict_ms_per_sample")
     comparison = {name: {k: v[k] for k in keys} for name, v in metrics.get("variants", {}).items()}
-    profile = _active_profile(db, user.id)
+    profile = active_profile(db, user.id)
     return {
         "model": {
             "version": row.version,
@@ -312,7 +321,7 @@ def recognize(db: Session, user: User, image: bytes, detector: FaceDetector) -> 
     if loaded is None:
         raise FaceServiceError("MODEL_NOT_TRAINED", "No model has been trained yet.", 409)
     row, model = loaded
-    profile = _active_profile(db, user.id)
+    profile = active_profile(db, user.id)
     if profile is None or profile.model_version_id != row.id:
         raise FaceServiceError("NOT_IN_MODEL", "You are not part of the current model. Train it after enrolling.", 409)
 
@@ -323,7 +332,7 @@ def recognize(db: Session, user: User, image: bytes, detector: FaceDetector) -> 
     proba = model.predict_proba(x)[0]
     confidence = float(proba[list(model.classes_).index(label)])
 
-    stored = json.loads(crypto.decrypt(profile.feature_data, _profile_context(user.id, row.version)))
+    stored = load_profile_payload(profile, user.id, row.version)
     distance = float(np.linalg.norm(z[0] - np.array(stored["centroid"])))
     threshold = float(stored["distance_threshold"])
 

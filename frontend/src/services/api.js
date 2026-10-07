@@ -56,7 +56,8 @@ export async function apiFetch(path, { token, json, headers, ...options } = {}) 
   let response
   try {
     response = await fetch(`${BASE_URL}${path}`, init)
-  } catch {
+  } catch (err) {
+    if (err?.name === 'AbortError') throw new ApiError('The request timed out.', 0, {}, 'TIMEOUT')
     throw new ApiError('Cannot reach the server. Check your connection.', 0)
   }
   if (!response.ok) {

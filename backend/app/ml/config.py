@@ -44,3 +44,26 @@ KNN_NEIGHBORS = 3
 # p70 gave FRR ~0.20, FAR ~0.02 (random claim) / ~0.45 (worst case). A trade-off knob, not a calibrated
 # security level: recalibrate on real webcam data in Phase 7.
 DISTANCE_THRESHOLD_PERCENTILE = 70.0
+
+# ---------------------------------------------------------------- Phase 4: authentication
+# Decision policy (see app/services/auth_policy.py). The distance threshold itself is the per-model
+# value stored in each face profile (Phase 3: percentile of out-of-fold genuine distances).
+AUTH_MIN_CONFIDENCE = 0.5  # the predicted class must hold at least half of the classifier's vote/score
+AUTH_SECOND_FACE_RATIO = 0.15  # stricter than enrolment: any face >= 15% of the largest one blocks payment auth
+
+# Challenge-response liveness (app/ml/liveness.py)
+CHALLENGE_TTL_SECONDS = 60
+AUTH_BASELINE_FRAMES = 2  # first frames: user looks straight at the camera; used for identity
+AUTH_MIN_FRAMES = 5
+AUTH_MAX_FRAMES = 10
+CHALLENGES = {
+    "turn_right": "Slowly turn your head to your right",
+    "turn_left": "Slowly turn your head to your left",
+}
+# Required lateral movement of the detected face box, as a fraction of the baseline box width.
+# Measured detector jitter on real faces (ORL pasted into 640x480 frames, noise + JPEG): p99 0.012,
+# max 0.018. 0.10 is >5x that maximum; a ~15 degree head turn moves the face roughly 0.15 box widths
+# (geometry estimate, NOT validated on real webcam turns).
+LATERAL_THRESHOLD = 0.10
+BASELINE_MAX_DRIFT = 0.05  # the two baseline frames must agree within this (user is not already moving)
+MIN_USABLE_FRAME_FRACTION = 0.8  # frames with exactly one face; losing the face for long fails the challenge
