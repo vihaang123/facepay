@@ -17,3 +17,5 @@ export const PROFILE_PATH = {
   customer: '/profile',
   merchant: '/merchant/profile',
 }
+
+export const FACE_PATH = '/face'

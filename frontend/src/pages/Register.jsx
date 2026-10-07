@@ -9,7 +9,7 @@ import { runValidators, validateEmail, validatePassword, validatePhone, validate
 const CONFIG = {
   customer: {
     title: 'Create your account',
-    subtitle: 'Register as a customer. Face registration comes later.',
+    subtitle: 'Register as a customer. You can set up face recognition after signing in.',
     initial: { name: '', email: '', phone: '', password: '', confirm: '' },
     footer: (
       <>

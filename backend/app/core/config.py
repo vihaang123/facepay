@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     # Per-IP limit on login/registration attempts (in-memory, single instance).
     rate_limit_enabled: bool = True
     auth_rate_limit_per_minute: int = 10
+    # AES-256 key (32 random bytes, base64) protecting stored face crops, models and profiles.
+    # Generate: python -c "from app.core.crypto import generate_key; print(generate_key())"
+    biometric_key: str = ""
+    # Per-IP limits (per minute) for the face endpoints; recognition and training are costly.
+    face_rate_limit_per_minute: int = 60
+    train_rate_limit_per_minute: int = 5
 
     @field_validator("jwt_secret")
     @classmethod

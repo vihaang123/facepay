@@ -6,10 +6,12 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     LargeBinary,
     Numeric,
     String,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -62,6 +64,8 @@ class ModelVersion(Base):
     __tablename__ = "model_versions"
     __table_args__ = (
         CheckConstraint("status IN ('training', 'active', 'retired', 'failed')", name="ck_model_versions_status"),
+        # At most one deployed model at any time.
+        Index("uq_model_versions_one_active", "status", unique=True, postgresql_where=text("status = 'active'")),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -73,6 +77,13 @@ class ModelVersion(Base):
     evaluation_metrics: Mapped[dict | None] = mapped_column(JSONB)
     trained_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     status: Mapped[str] = mapped_column(String(20), default="training", server_default="training")
+    # AES-GCM encrypted joblib of the fitted PCA -> LDA -> classifier pipeline.
+    artifact: Mapped[bytes | None] = mapped_column(LargeBinary)
+    n_samples: Mapped[int | None] = mapped_column(Integer)
+    n_classes: Mapped[int | None] = mapped_column(Integer)
+    # SHA-256 over the (user, sample) ids used for training: tells whether the data has changed since.
+    dataset_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    library_versions: Mapped[dict | None] = mapped_column(JSONB)
 
 
 class FaceProfile(Base):
@@ -80,6 +91,8 @@ class FaceProfile(Base):
     __table_args__ = (
         CheckConstraint("status IN ('active', 'revoked')", name="ck_face_profiles_status"),
         Index("ix_face_profiles_user_status", "user_id", "status"),
+        # One live profile per user.
+        Index("uq_face_profiles_one_active", "user_id", unique=True, postgresql_where=text("status = 'active'")),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -92,6 +105,21 @@ class FaceProfile(Base):
     status: Mapped[str] = mapped_column(String(20), default="active", server_default="active")
 
     user: Mapped[User] = relationship(back_populates="face_profiles")
+
+
+class FaceSample(Base):
+    """One enrolled face crop: 64x64 equalised grayscale, AES-GCM encrypted. Never the raw frame."""
+
+    __tablename__ = "face_samples"
+    __table_args__ = (Index("ix_face_samples_user_pose", "user_id", "pose"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    pose: Mapped[str] = mapped_column(String(20))
+    crop_encrypted: Mapped[bytes] = mapped_column(LargeBinary)
+    sharpness: Mapped[float] = mapped_column()
+    brightness: Mapped[float] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class PaymentSession(Base):

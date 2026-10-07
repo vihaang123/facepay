@@ -1,11 +1,12 @@
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '')
 
 export class ApiError extends Error {
-  constructor(message, status, fieldErrors = {}) {
+  constructor(message, status, fieldErrors = {}, code = null) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.fieldErrors = fieldErrors
+    this.code = code // machine-readable reason, e.g. "TOO_BLURRY" (face endpoints)
   }
 }
 
@@ -24,6 +25,9 @@ async function parseError(response) {
   }
   if (typeof detail === 'string') {
     return new ApiError(detail, response.status)
+  }
+  if (detail && typeof detail === 'object' && !Array.isArray(detail) && detail.message) {
+    return new ApiError(String(detail.message), response.status, {}, detail.code ?? null)
   }
   if (Array.isArray(detail)) {
     // FastAPI/Pydantic validation errors: [{ loc: ['body', 'password'], msg: '...' }]
@@ -61,6 +65,7 @@ export async function apiFetch(path, { token, json, headers, ...options } = {}) 
     if (response.status === 401 && token && unauthorizedHandler) unauthorizedHandler()
     throw error
   }
+  if (response.status === 204) return null
   return response.json()
 }
 

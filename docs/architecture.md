@@ -1,4 +1,4 @@
-# Architecture (Phase 1)
+# Architecture (Phase 1; Phase 3 ML details in ml-architecture.md)
 
 ```
 React/Vite (Vercel)  ->  FastAPI  ->  ML pipeline (Phase 3)  ->  PostgreSQL
@@ -30,3 +30,9 @@ Migration `0002` adds the chain Merchant -> PaymentSession -> Transaction:
 - Deleting a user removes their face profiles (including biometric features) and keeps authentication logs with `user_id` set to NULL.
 
 Auth service code (`app/services/auth_service.py`) and the `get_current_customer` / `get_current_merchant` dependencies (`app/api/deps.py`) are written so Phase 3 and 4 routes can reuse them directly.
+
+## Phase 3 schema changes (migration 0003)
+
+* New `face_samples` (encrypted 64x64 crops, per user, cascade on user delete).
+* `model_versions` gains `artifact` (encrypted joblib), `n_samples`, `n_classes`, `dataset_fingerprint`, `library_versions`.
+* Partial unique indexes: one `active` model; one `active` face profile per user.

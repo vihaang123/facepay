@@ -15,6 +15,8 @@ if not _test_url.rsplit("/", 1)[-1].split("?")[0].endswith("_test"):
 # Point the app at the test database BEFORE any app module is imported.
 os.environ["DATABASE_URL"] = _test_url
 os.environ.setdefault("JWT_SECRET", "test-secret-test-secret-1234567890")
+# Fixed throwaway key for tests only (32 bytes, base64).
+os.environ.setdefault("BIOMETRIC_KEY", "dGVzdC1rZXktZm9yLXRlc3RzLW9ubHktMzItYnl0ZXM=")
 # Off by default so tests don't trip over each other; the rate-limit tests turn it on.
 os.environ["RATE_LIMIT_ENABLED"] = "false"
 
@@ -47,6 +49,9 @@ def clean_tables(migrated_db):
     with engine.begin() as conn:
         conn.execute(text(f"TRUNCATE TABLE {names} RESTART IDENTITY CASCADE"))
     auth_limiter.reset()
+    from app.ml import registry
+
+    registry.invalidate()  # ids restart after TRUNCATE; a cached model must not outlive its row
     yield
 
 

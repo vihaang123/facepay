@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { Button } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
-import { DASHBOARD_PATH, LOGIN_PATH, PROFILE_PATH } from '../utils/roles'
+import { DASHBOARD_PATH, FACE_PATH, LOGIN_PATH, PROFILE_PATH } from '../utils/roles'
 
 export default function DashboardLayout() {
   const { role, profile, logout } = useAuth()
@@ -27,6 +27,11 @@ export default function DashboardLayout() {
               <NavLink to={DASHBOARD_PATH[role]} end className={linkClass}>
                 Dashboard
               </NavLink>
+              {role !== 'merchant' && (
+                <NavLink to={FACE_PATH} className={linkClass}>
+                  Face
+                </NavLink>
+              )}
               <NavLink to={PROFILE_PATH[role]} className={linkClass}>
                 Profile
               </NavLink>

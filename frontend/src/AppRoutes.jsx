@@ -2,6 +2,7 @@ import { Link, Route, Routes } from 'react-router-dom'
 import { GuestRoute, ProtectedRoute } from './components/RouteGuards'
 import DashboardLayout from './layouts/DashboardLayout'
 import { CustomerDashboard, MerchantDashboard } from './pages/Dashboards'
+import FaceRegistration from './pages/FaceRegistration'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import Profile from './pages/Profile'
@@ -34,6 +35,7 @@ export default function AppRoutes() {
         <Route element={<DashboardLayout />}>
           <Route path="/dashboard" element={<CustomerDashboard />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/face" element={<FaceRegistration />} />
         </Route>
       </Route>
 

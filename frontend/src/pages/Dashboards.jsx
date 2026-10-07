@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { PROFILE_PATH } from '../utils/roles'
+import { FACE_PATH, PROFILE_PATH } from '../utils/roles'
 
 function Card({ title, children, status }) {
   return (
@@ -25,8 +25,11 @@ export function CustomerDashboard() {
         <p className="mt-1 text-sm text-slate-600">Your customer account is ready.</p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Card title="Face registration" status="Not available yet">
-          Face registration and FacePay checkout will be added in a later phase.
+        <Card title="Face registration">
+          Capture face samples, train the PCA-LDA model and test recognition.{' '}
+          <Link className="font-semibold text-brand-600" to={FACE_PATH}>
+            Open face setup
+          </Link>
         </Card>
         <Card title="Account">
           Signed in as {profile.email}. <Link className="font-semibold text-brand-600" to={PROFILE_PATH.customer}>Edit profile</Link>

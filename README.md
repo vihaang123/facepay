@@ -10,13 +10,13 @@ An academic/research prototype. Payments are **simulated**: there is no UPI inte
 |-------|-------|-------|
 | 1 | Foundation + architecture | Done |
 | 2 | Auth + user/merchant system | Done |
-| 3 | Facial dataset + PCA/LDA pipeline | Next |
-| 4 | Face authentication + liveness | Not started |
+| 3 | Facial dataset + PCA/LDA pipeline | Done |
+| 4 | Face authentication + liveness | Next |
 | 5 | Payment simulation + merchant system | Not started |
 | 6 | Dashboards, analytics, polish | Not started |
 | 7 | Testing, evaluation, deployment, docs | Not started |
 
-No ML results exist yet. Any metrics in the final report will come from real experiments only.
+ML results are measured, never invented: see [`ml/results/README.md`](ml/results/README.md) (public ORL benchmark, not webcam data) and [`docs/ml-architecture.md`](docs/ml-architecture.md).
 
 ## Stack
 
@@ -34,7 +34,7 @@ Customers and merchants register and log in separately (Argon2id password hashin
 ```
 backend/   FastAPI app, models, Alembic migrations, tests
 frontend/  React + Vite app
-ml/        preprocessing, training, evaluation (Phase 3+)
+ml/        offline experiments + measured results (the pipeline itself is backend/app/ml)
 docs/      architecture and report
 ```
 
@@ -56,7 +56,8 @@ CREATE DATABASE facepay_test OWNER facepay;
 cd backend
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env        # then edit DATABASE_URL and JWT_SECRET
+cp .env.example .env        # then edit DATABASE_URL, JWT_SECRET and BIOMETRIC_KEY
+python -c "from app.core.crypto import generate_key; print(generate_key())"   # value for BIOMETRIC_KEY
 alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
