@@ -22,6 +22,7 @@ export const TRANSACTIONS_PATH = { customer: '/transactions', merchant: '/mercha
 
 export const FACE_PATH = '/face'
 export const AUTHENTICATE_PATH = '/authenticate'
+export const PAY_PATH = '/pay'
 
 export const CHECKOUT_PATH = (sessionId) => `/checkout/${sessionId}`
 export const RECEIPT_PATH = { customer: (id) => `/receipts/${id}`, merchant: (id) => `/merchant/receipts/${id}` }

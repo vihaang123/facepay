@@ -80,10 +80,10 @@ needs the configured minimum of samples across several poses. A merchant account
 ```bash
 cd backend && python -m pytest -q                        # 341 tests, real PostgreSQL
 cd backend && ruff check app tests alembic --select F,E9,B --ignore E501,B008 && alembic check
-cd frontend && npm test && npm run lint && npm run build  # 168 tests; oxlint; production build
+cd frontend && npm test && npm run lint && npm run build  # 178 tests; oxlint; production build
 ```
 
-Last full run (Phase 7): backend 341 passed, frontend 168 passed, lint and Ruff clean, Alembic reports no drift, production
+Last full run (Phase 7): backend 341 passed, frontend 178 passed, lint and Ruff clean, Alembic reports no drift, production
 build succeeds. A real-browser run (Playwright, headless Chromium, production build, real API and database) passed 44 of 44
 steps with axe-core reporting no violations on 10 pages. **Its camera is simulated** with ORL photos; no physical webcam
 was used, and automated accessibility checks do not establish WCAG conformance. See [`docs/browser-testing/`](docs/browser-testing/README.md).

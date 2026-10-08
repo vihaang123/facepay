@@ -1,5 +1,7 @@
-import { Link, Route, Routes } from 'react-router-dom'
+import { Route, Routes } from 'react-router-dom'
+import { ButtonLink, Logo } from './components/ui'
 import { GuestRoute, ProtectedRoute } from './components/RouteGuards'
+import { ToastProvider } from './components/Toast'
 import DashboardLayout from './layouts/DashboardLayout'
 import Checkout from './pages/Checkout'
 import CreatePayment from './pages/CreatePayment'
@@ -9,6 +11,7 @@ import FaceRegistration from './pages/FaceRegistration'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import MerchantPaymentSession from './pages/MerchantPaymentSession'
+import PayRequest from './pages/PayRequest'
 import Profile from './pages/Profile'
 import ReceiptPage from './pages/ReceiptPage'
 import Register from './pages/Register'
@@ -17,17 +20,17 @@ import Transactions from './pages/Transactions'
 function NotFound() {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-3 px-6 text-center">
-      <h1 className="text-2xl font-bold">Page not found</h1>
+      <Logo className="text-lg" />
+      <h1 className="mt-4 text-2xl font-extrabold">Page not found</h1>
       <p className="text-sm text-slate-600">That page does not exist or has moved.</p>
-      <Link to="/" className="font-semibold text-brand-700 underline">
-        Back to FacePay
-      </Link>
+      <ButtonLink to="/" variant="secondary" className="mt-2">Back to FacePay</ButtonLink>
     </main>
   )
 }
 
 export default function AppRoutes() {
   return (
+    <ToastProvider>
     <Routes>
       <Route path="/" element={<Home />} />
 
@@ -45,6 +48,7 @@ export default function AppRoutes() {
           <Route path="/transactions" element={<Transactions />} />
           <Route path="/face" element={<FaceRegistration />} />
           <Route path="/authenticate" element={<FaceAuthentication />} />
+          <Route path="/pay" element={<PayRequest />} />
           <Route path="/checkout/:sessionId" element={<Checkout />} />
           <Route path="/receipts/:transactionId" element={<ReceiptPage />} />
         </Route>
@@ -63,5 +67,6 @@ export default function AppRoutes() {
 
       <Route path="*" element={<NotFound />} />
     </Routes>
+    </ToastProvider>
   )
 }

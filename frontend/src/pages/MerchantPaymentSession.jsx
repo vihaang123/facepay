@@ -1,29 +1,32 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Row, StatusBadge } from '../components/payUi'
-import { Alert, Button, ButtonLink, Card, ConfirmPanel, Spinner } from '../components/ui'
+import Icon from '../components/Icon'
+import { Amount, Row, SimulatedTag, StatusBadge, Timeline } from '../components/payUi'
+import { Alert, Button, ButtonLink, Card, ConfirmPanel, Skeleton } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
+import { useToast } from '../hooks/useToast'
 import { cancelPaymentSession, getPaymentSession } from '../services/payments'
 import { POLL } from '../utils/authTiming'
-import { formatDateTime, formatMoney, isPayable } from '../utils/format'
+import { formatDateTime, isPayable } from '../utils/format'
+import { merchantTimeline } from '../utils/timeline'
 import { DASHBOARD_PATH, NEW_PAYMENT_PATH, RECEIPT_PATH } from '../utils/roles'
 
 const HEADLINE = {
-  CREATED: 'Waiting for customer',
-  AUTHENTICATED: 'Customer authenticated. Waiting for them to confirm',
+  CREATED: 'Awaiting customer',
+  AUTHENTICATED: 'Customer authenticated, awaiting confirmation',
   PAID: 'Payment completed',
-  FAILED: 'Payment failed: too many failed face attempts',
-  EXPIRED: 'Session expired',
-  CANCELLED: 'Session cancelled',
+  FAILED: 'Payment failed after too many face attempts',
+  EXPIRED: 'Request expired',
+  CANCELLED: 'Request cancelled',
 }
 
 export default function MerchantPaymentSession() {
   const { sessionId } = useParams()
   const { token } = useAuth()
+  const notify = useToast()
   const [session, setSession] = useState(null)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
-  const [copied, setCopied] = useState(false)
   const [confirmCancel, setConfirmCancel] = useState(false)
 
   const open = session ? isPayable(session.status) : true
@@ -45,6 +48,7 @@ export default function MerchantPaymentSession() {
     setBusy(true)
     try {
       setSession(await cancelPaymentSession(token, sessionId))
+      notify('Payment request cancelled')
     } catch (err) {
       setError(err.message)
     } finally {
@@ -56,46 +60,45 @@ export default function MerchantPaymentSession() {
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(link)
-      setCopied(true)
+      notify('Link copied')
     } catch {
-      setCopied(false)
+      notify('Could not copy. Select the link and copy it manually.')
     }
   }
 
   if (!session) {
     return (
       <div className="mx-auto flex max-w-md flex-col gap-3">
-        {error ? <Alert tone="error">{error}</Alert> : <Spinner label="Loading payment session" />}
-        <ButtonLink to={DASHBOARD_PATH.merchant} variant="secondary" className="self-start">Back to dashboard</ButtonLink>
+        {error ? <Alert tone="error">{error}</Alert> : <div role="status" aria-label="Loading payment session"><Skeleton className="h-80 w-full !rounded-[1.5rem]" /></div>}
+        <ButtonLink to={DASHBOARD_PATH.merchant} variant="secondary">Back to home</ButtonLink>
       </div>
     )
   }
 
-  const stage = { CREATED: 0, AUTHENTICATED: 1, PAID: 2 }[session.status]
+  const ok = session.status === 'PAID'
+  const stopped = ['FAILED', 'EXPIRED', 'CANCELLED'].includes(session.status)
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-5">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Payment session</h1>
-        <p aria-live="polite" className="mt-1 text-sm font-medium text-slate-800">{HEADLINE[session.status]}</p>
-      </div>
+      <h1 className="text-2xl font-extrabold tracking-tight">Payment request</h1>
       {error && <Alert tone="error">{error}</Alert>}
 
-      <Card aria-label="Session details" flush>
-        <div className="bg-slate-50 px-5 py-5 text-center">
-          <p className="text-sm text-slate-700">Amount</p>
-          <p className="mt-1 text-4xl font-bold tracking-tight">{formatMoney(session.amount, session.currency)}</p>
-        </div>
-        {stage !== undefined && (
-          <ol aria-label="Payment progress" className="flex justify-between gap-2 border-b border-slate-100 px-5 py-3 text-xs">
-            {['Created', 'Customer verified', 'Paid'].map((label, i) => (
-              <li key={label} aria-current={i === stage && stage < 2 ? 'step' : undefined} className={i <= stage ? 'font-semibold text-emerald-800' : 'text-slate-600'}>
-                <span aria-hidden="true">{i < stage || (i === stage && stage === 2) ? '✓ ' : `${i + 1}. `}</span>{label}
-              </li>
-            ))}
-          </ol>
-        )}
-        <dl className="px-5 py-2">
-          <Row label="Order">{session.order_reference}</Row>
+      <section aria-label="Session details" className="rounded-[1.5rem] border border-slate-200/80 bg-white p-6 text-center shadow-card">
+        <Amount value={session.amount} currency={session.currency} className="text-5xl" />
+        <p aria-live="polite" className={`mt-2 inline-flex items-center gap-2 text-base font-bold ${ok ? 'text-emerald-800' : stopped ? 'text-rose-800' : 'text-slate-900'}`}>
+          {!ok && !stopped && <span aria-hidden="true" className="h-2.5 w-2.5 animate-pulse rounded-full bg-brand-600" />}
+          {ok && <Icon name="check" className="h-5 w-5" strokeWidth="2.6" />}
+          {HEADLINE[session.status]}
+        </p>
+        <p className="mt-1 font-mono text-sm text-slate-700">{session.order_reference}</p>
+        <div><SimulatedTag className="mt-3" /></div>
+      </section>
+
+      <Card title="Progress">
+        <Timeline steps={merchantTimeline(session.status)} label="Payment progress" />
+      </Card>
+
+      <Card aria-label="Details" className="!py-2">
+        <dl>
           {session.description && <Row label="Details">{session.description}</Row>}
           <Row label="Status"><StatusBadge status={session.status} /></Row>
           <Row label="Created">{formatDateTime(session.created_at)}</Row>
@@ -106,16 +109,15 @@ export default function MerchantPaymentSession() {
 
       {open && (
         <Card aria-label="Checkout link">
-          <p className="text-sm text-slate-700">Send this link to the customer. They must sign in to a FacePay customer account.</p>
-          <code className="mt-2 block break-all rounded-lg bg-slate-100 px-3 py-2 text-xs">{link}</code>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <Button variant="secondary" onClick={copy}>Copy link</Button>
-            {copied && <span role="status" className="text-xs text-emerald-800">Copied</span>}
-            <Button variant="secondary" onClick={() => setConfirmCancel(true)} loading={busy} disabled={confirmCancel}>Cancel session</Button>
+          <p className="text-sm text-slate-700">Send this link to the customer. They sign in to a FacePay customer account and pay with their face.</p>
+          <code className="mt-2 block break-all rounded-xl bg-slate-100 px-3 py-2 text-xs">{link}</code>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button onClick={copy}><Icon name="link" className="h-4 w-4" />Copy link</Button>
+            <Button variant="secondary" onClick={() => setConfirmCancel(true)} loading={busy} disabled={confirmCancel}>Cancel request</Button>
           </div>
           {confirmCancel && (
             <div className="mt-4">
-              <ConfirmPanel title="Cancel this payment session?" confirmLabel="Cancel session" cancelLabel="Keep session" onConfirm={cancel} onCancel={() => setConfirmCancel(false)}>
+              <ConfirmPanel title="Cancel this payment request?" confirmLabel="Cancel request" cancelLabel="Keep request" onConfirm={cancel} onCancel={() => setConfirmCancel(false)}>
                 The checkout link stops working immediately and the customer will not be able to pay it.
               </ConfirmPanel>
             </div>
@@ -123,10 +125,10 @@ export default function MerchantPaymentSession() {
         </Card>
       )}
 
-      <div className="flex flex-wrap gap-3">
-        {session.transaction_id && <ButtonLink to={RECEIPT_PATH.merchant(session.transaction_id)}>View transaction</ButtonLink>}
-        <ButtonLink to={NEW_PAYMENT_PATH} variant="secondary">New payment</ButtonLink>
-        <ButtonLink to={DASHBOARD_PATH.merchant} variant="secondary">Back to dashboard</ButtonLink>
+      <div className="flex flex-col gap-2">
+        {session.transaction_id && <ButtonLink to={RECEIPT_PATH.merchant(session.transaction_id)} size="lg">View transaction</ButtonLink>}
+        <ButtonLink to={NEW_PAYMENT_PATH} variant="secondary" size="lg">New payment</ButtonLink>
+        <ButtonLink to={DASHBOARD_PATH.merchant} variant="ghost">Back to home</ButtonLink>
       </div>
     </div>
   )

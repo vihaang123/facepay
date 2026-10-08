@@ -82,7 +82,7 @@ const newCtx = async (extra = {}) => {
   }
   return ctx
 }
-const shot = (page, name) => page.screenshot({ path: `shots/${name}.png`, fullPage: true })
+const shot = async (page, name) => { await page.waitForTimeout(450); return page.screenshot({ path: `shots/${name}.png`, fullPage: true }) }
 const overflow = (page) => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
 async function axe(page, name) {
   await page.addScriptTag({ content: AXE })
@@ -96,7 +96,7 @@ async function axe(page, name) {
 
 async function authenticateOnPage(page, who = 'me', idx = 0, mode = 'toward') {
   await page.evaluate(([url, m]) => { window.__cam.setMode(m); return window.__cam.setFace(url, 100) }, [FACES[who][idx], mode])
-  await page.getByRole('button', { name: 'Start authentication' }).click()
+  await page.getByRole('button', { name: 'Start face check' }).click()
 }
 
 // =============================================================== merchant context + customer context
@@ -115,8 +115,9 @@ await step('landing page renders with tagline + prototype notice (3 viewports, n
     await cpage.goto(APP + '/')
     await cpage.getByRole('heading', { name: 'Pay with your face.' }).waitFor()
     const text = await cpage.locator('body').innerText()
-    if (!text.includes('Facial authentication for simulated digital payments.')) throw new Error('tagline missing')
-    if (!/Academic prototype/.test(text)) throw new Error('prototype notice missing')
+    if (!text.includes('FacePay uses facial authentication to authorize simulated digital payments.')) throw new Error('tagline missing')
+    if (!/Prototype \/ Academic Project/.test(text)) throw new Error('prototype notice missing')
+    for (const t of ['Try FacePay', 'How it works', 'Create your Face Profile', 'Authenticate with your face', 'Authorize your payment']) if (!text.includes(t)) throw new Error('landing text missing: ' + t)
     if (/bank-grade|military-grade|fraud-proof/i.test(text)) throw new Error('forbidden claim present')
     const o = await overflow(cpage); if (o > 0) throw new Error(`${vn}: horizontal overflow ${o}px`)
     await shot(cpage, `01-landing-${vn}`); notes.push(`${vn} ok`)
@@ -124,7 +125,7 @@ await step('landing page renders with tagline + prototype notice (3 viewports, n
   await cpage.setViewportSize(VIEWS.desktop)
   return notes.join(', ')
 })
-await step('landing: connected status shown', async () => { await cpage.getByText('PostgreSQL').waitFor(); })
+await step('landing: connected status shown', async () => { await cpage.getByText('PostgreSQL').first().waitFor(); })
 await step('axe: landing', async () => { const v = await axe(cpage, 'landing'); return `${v.length} violation types` })
 
 await step('keyboard: first Tab stop on the landing page is a real control, focus ring visible', async () => {
@@ -143,7 +144,7 @@ await step('customer registration through the UI lands on the dashboard', async 
   await cpage.getByLabel('Confirm password').fill(PW)
   await shot(cpage, '02-register-customer')
   await cpage.getByRole('button', { name: /create account|register|sign up/i }).click()
-  await cpage.getByRole('heading', { name: /Welcome, Vihaan Gandhi/ }).waitFor()
+  await cpage.getByRole('heading', { name: /^Good (morning|afternoon|evening), Vihaan$/ }).waitFor()
   await cpage.getByText('Not set up').waitFor()
   await shot(cpage, '03-dashboard-new-customer')
 })
@@ -200,8 +201,8 @@ await step('face setup: destructive action asks inside the page; Keep it does no
 })
 await step('axe: face setup', async () => { const v = await axe(cpage, 'face setup'); return `${v.length} violation types` })
 
-await step('dashboard: face status is "Ready"', async () => {
-  await cpage.goto(APP + '/dashboard'); await cpage.getByText('Ready', { exact: true }).waitFor()
+await step('dashboard: face status is "Face authentication ready"', async () => {
+  await cpage.goto(APP + '/dashboard'); await cpage.getByText('Face authentication ready').waitFor()
   await shot(cpage, '09-dashboard-ready')
 })
 
@@ -215,16 +216,16 @@ await step('merchant registration through the UI lands on the merchant dashboard
   await mpage.getByLabel('Confirm password').fill(PW)
   await mpage.getByRole('button', { name: /create account|register|sign up/i }).click()
   await mpage.getByRole('heading', { name: 'SuperGrocery' }).waitFor()
-  await mpage.getByText('No payment sessions yet').waitFor()
+  await mpage.getByText('No payment requests yet').waitFor()
   await shot(mpage, '10-merchant-dashboard-empty')
 })
 let checkoutPath
 async function merchantCreatesPayment(amount, ref) {
   await mpage.goto(APP + '/merchant/payments/new')
-  await mpage.getByLabel('Amount (INR)').fill(amount)
+  await mpage.getByLabel('Amount (₹)').fill(amount)
   await mpage.getByLabel('Order / reference').fill(ref)
-  await mpage.getByRole('button', { name: 'Create payment session' }).click()
-  await mpage.getByText('Waiting for customer', { exact: true }).first().waitFor()
+  await mpage.getByRole('button', { name: 'Create payment request' }).click()
+  await mpage.getByText('Awaiting customer').waitFor()
   const link = await mpage.locator('code').innerText()
   return new URL(link).pathname
 }
@@ -238,24 +239,24 @@ await step('axe: merchant payment session + create payment', async () => { const
 // ---------------- the customer pays
 await step('checkout: amount, merchant, order, method are prominent', async () => {
   await cpage.goto(APP + checkoutPath)
-  await cpage.getByRole('heading', { name: 'FacePay Checkout' }).waitFor()
+  await cpage.getByRole('heading', { name: 'Checkout' }).waitFor()
   const amount = await cpage.getByTestId('checkout-amount').innerText()
   if (!/₹950\.00/.test(amount)) throw new Error('amount: ' + amount)
-  for (const t of ['SuperGrocery', 'SG-10492', 'FacePay (simulated)']) await cpage.getByText(t).first().waitFor()
+  for (const t of ['SuperGrocery', 'SG-10492', 'Simulated payment']) await cpage.getByText(t).first().waitFor()
   const size = await cpage.getByTestId('checkout-amount').evaluate((e) => parseFloat(getComputedStyle(e).fontSize))
   await shot(cpage, '12-checkout')
   return `amount font-size ${size}px`
 })
 await step('axe: checkout', async () => { const v = await axe(cpage, 'checkout'); return `${v.length} violation types` })
 await step('FacePay authentication: camera → liveness → identity → authorized', async () => {
-  await cpage.getByRole('button', { name: 'Pay with FacePay' }).click()
+  await cpage.getByRole('button', { name: 'Pay with Face' }).click()
   await cpage.getByRole('button', { name: 'Turn camera on' }).click()
   await cpage.getByRole('button', { name: 'Turn camera off' }).waitFor()
   await shot(cpage, '13-auth-camera-on')
   await authenticateOnPage(cpage, 'me', 5)
-  await cpage.getByText('Liveness check', { exact: true }).waitFor({ timeout: 10000 })
+  await cpage.getByText('Quick security check').waitFor({ timeout: 10000 })
   await shot(cpage, '14-auth-liveness-challenge')
-  await cpage.getByRole('heading', { name: 'FacePay Authentication ✓' }).waitFor({ timeout: 30000 })
+  await cpage.getByRole('heading', { name: 'Confirm payment' }).waitFor({ timeout: 30000 })
   const amt = await cpage.getByTestId('confirm-amount').innerText()
   if (!/₹950\.00/.test(amt)) throw new Error('confirm amount ' + amt)
   const body = await cpage.locator('main').innerText()
@@ -270,35 +271,43 @@ await step('raw model internals are hidden behind "Technical details" by default
   if (visible) throw new Error('distance visible to normal user')
 })
 await step('axe: confirm payment', async () => { const v = await axe(cpage, 'confirm payment'); return `${v.length} violation types` })
-await step('payment confirmation → professional receipt', async () => {
+await step('payment confirmation → processing → success screen → receipt', async () => {
   await cpage.getByRole('button', { name: /^Confirm ₹950\.00/ }).click()
-  await cpage.getByText('PAYMENT SUCCESSFUL ✓').waitFor({ timeout: 20000 })
-  const rec = cpage.getByRole('article', { name: 'Payment receipt' })
-  for (const t of ['Vihaan Gandhi', 'SuperGrocery', 'SG-10492', 'FacePay', 'SUCCESS']) await rec.getByText(t).first().waitFor()
-  const txid = await rec.locator('.font-mono').innerText()
+  await cpage.getByRole('heading', { name: 'Payment Successful' }).waitFor({ timeout: 20000 })
+  const done = cpage.getByRole('region', { name: 'Payment successful' })
+  for (const t of ['SuperGrocery', 'Simulated payment', 'Transaction completed']) await done.getByText(t).first().waitFor()
+  const txid = await done.locator('.font-mono').innerText()
   if (!/^FP-[0-9A-Z]{10}$/.test(txid)) throw new Error('txid ' + txid)
-  await shot(cpage, '16-receipt')
+  await shot(cpage, '16-success')
+  const steps = await cpage.getByRole('list', { name: 'Payment timeline' }).locator('li').allInnerTexts()
+  if (steps.length !== 9 || steps.some((t) => !/\(done\)/.test(t))) throw new Error('timeline not complete: ' + JSON.stringify(steps))
+  await cpage.getByRole('link', { name: 'View receipt' }).click()
+  const rec = cpage.getByRole('article', { name: 'Payment receipt' })
+  await cpage.getByRole('heading', { name: 'Transaction details' }).waitFor()
+  for (const t of ['Vihaan Gandhi', 'SuperGrocery', 'SG-10492', 'FacePay', 'Face verified', 'Basic liveness check passed', 'Successful']) await rec.getByText(t).first().waitFor()
+  await cpage.getByRole('button', { name: 'Download / Print receipt' }).waitFor()
+  await shot(cpage, '17-receipt')
   return txid
 })
 await step('axe: receipt', async () => { const v = await axe(cpage, 'receipt'); return `${v.length} violation types` })
 await step('reloading the paid checkout shows "already completed", not a second payment', async () => {
   await cpage.goto(APP + checkoutPath)
   await cpage.getByText('This payment has already been completed.').waitFor()
-  if (await cpage.getByRole('button', { name: 'Pay with FacePay' }).count()) throw new Error('pay button offered again')
-  await shot(cpage, '17-checkout-already-paid')
+  if (await cpage.getByRole('button', { name: 'Pay with Face' }).count()) throw new Error('pay button offered again')
+  await shot(cpage, '18-checkout-already-paid')
 })
 
 // ---------------- history + dashboard
 await step('customer dashboard shows spending summary and recent payment', async () => {
   await cpage.goto(APP + '/dashboard')
-  await cpage.getByText('Total spent').waitFor()
-  await cpage.getByRole('table', { name: 'Recent payments' }).waitFor()
+  await cpage.getByText('Spent in the last 30 days').waitFor()
+  await cpage.getByRole('list', { name: 'Recent payments' }).waitFor()
   await shot(cpage, '18-dashboard-after-payment')
 })
 await step('axe: customer dashboard (with data)', async () => { const v = await axe(cpage, 'customer dashboard (with data)'); return `${v.length} violation types` })
 await step('customer transactions page: list, status filter, search, sort', async () => {
   await cpage.goto(APP + '/transactions')
-  const table = cpage.getByRole('table', { name: 'Transactions' })
+  const table = cpage.getByRole('list', { name: 'Transactions' })
   await table.waitFor()
   await cpage.getByLabel('Status').selectOption('FAILED')
   await cpage.getByText('No transactions match').waitFor()
@@ -315,8 +324,10 @@ await step('customer transactions page: list, status filter, search, sort', asyn
 await step('axe: customer transactions', async () => { const v = await axe(cpage, 'customer transactions'); return `${v.length} violation types` })
 
 await step('merchant sees the payment completed, revenue, chart and transaction', async () => {
-  await mpage.goto(APP + checkoutPath.replace('/checkout/', '/merchant/payments/'))
-  await mpage.getByText('Payment completed').waitFor()
+  // the merchant page was left open on this session: it must have followed the payment by polling, without a reload
+  await mpage.getByRole('link', { name: 'View transaction' }).waitFor({ timeout: 20000 })
+  const mtl = await mpage.getByRole('list', { name: 'Payment progress' }).locator('li').allInnerTexts()
+  if (mtl.some((t) => !/\(done\)/.test(t))) throw new Error('merchant timeline not complete: ' + JSON.stringify(mtl))
   await shot(mpage, '20-merchant-session-paid')
   await mpage.goto(APP + '/merchant/dashboard')
   await mpage.getByText('₹950.00').first().waitFor()
@@ -327,15 +338,16 @@ await step('merchant sees the payment completed, revenue, chart and transaction'
 await step('axe: merchant dashboard', async () => { const v = await axe(mpage, 'merchant dashboard'); return `${v.length} violation types` })
 await step('merchant transactions page lists the customer payment; filter/search work', async () => {
   await mpage.goto(APP + '/merchant/transactions')
-  const t = mpage.getByRole('table', { name: 'Transactions' }); await t.waitFor()
+  const t = mpage.getByRole('list', { name: 'Transactions' }); await t.waitFor()
   await t.getByText('Vihaan Gandhi').waitFor()
   await mpage.getByLabel('Search').fill('vihaan')
   await t.getByText('Vihaan Gandhi').waitFor()
   await shot(mpage, '22-merchant-transactions')
 })
 await step('merchant receipt page opens from the transactions table', async () => {
-  await mpage.getByRole('table', { name: 'Transactions' }).getByRole('link').first().click()
-  await mpage.getByText('PAYMENT SUCCESSFUL ✓').waitFor()
+  await mpage.getByRole('list', { name: 'Transactions' }).getByRole('link').first().click()
+  await mpage.getByRole('heading', { name: 'Transaction details' }).waitFor()
+  await mpage.getByRole('article', { name: 'Payment receipt' }).waitFor()
 })
 
 // ---------------- negative paths in the real browser
@@ -343,13 +355,13 @@ let session2
 await step('wrong person (stranger photo) is rejected and the payment stays unpaid', async () => {
   session2 = await merchantCreatesPayment('120.00', 'SG-10493')
   await cpage.goto(APP + session2)
-  await cpage.getByRole('button', { name: 'Pay with FacePay' }).click()
+  await cpage.getByRole('button', { name: 'Pay with Face' }).click()
   await cpage.getByRole('button', { name: 'Turn camera on' }).click()
   await cpage.getByRole('button', { name: 'Turn camera off' }).waitFor()
   await authenticateOnPage(cpage, 'stranger', 2)
   await cpage.getByRole('alert').first().waitFor({ timeout: 30000 })
   const msg = await cpage.getByRole('alert').first().innerText()
-  if (await cpage.getByRole('heading', { name: 'FacePay Authentication ✓' }).count()) throw new Error('stranger was accepted: ' + msg)
+  if (await cpage.getByRole('heading', { name: 'Confirm payment' }).count()) throw new Error('stranger was accepted: ' + msg)
   await shot(cpage, '23-auth-rejected')
   return msg.replace(/\n/g, ' ')
 })
@@ -360,7 +372,7 @@ await step('printed/photo attack: face does not move → liveness fails with a c
   await shot(cpage, '24-liveness-failed')
 })
 await step('the checkout shows remaining attempts after rejections', async () => {
-  const txt = await cpage.locator('main').innerText(); return txt.match(/\d of \d face attempts left|attempts/i)?.[0] ?? 'attempt counter not visible in this state'
+  const txt = await cpage.locator('main').innerText(); return txt.match(/\d of \d face checks left/i)?.[0] ?? 'attempt counter not visible in this state'
 })
 
 await step('camera permission denied: clear message, nothing breaks', async () => {
@@ -369,10 +381,10 @@ await step('camera permission denied: clear message, nothing breaks', async () =
   await dp.goto(APP + '/login')
   await dp.getByLabel('Email').fill(CUSTOMER.email); await dp.getByLabel('Password').fill(PW)
   await dp.getByRole('button', { name: 'Sign in' }).click()
-  await dp.getByRole('heading', { name: /Welcome/ }).waitFor()
+  await dp.getByRole('heading', { name: /^Good (morning|afternoon|evening)/ }).waitFor()
   await dp.goto(APP + '/face')
   await dp.getByRole('button', { name: 'Turn camera on' }).click()
-  await dp.getByText(/Camera access was blocked/).waitFor()
+  await dp.getByText(/Camera access is required for FacePay authentication/).waitFor()
   await dp.getByRole('button', { name: 'Try the camera again' }).waitFor()
   await shot(dp, '25-camera-denied')
   await dctx.close()
@@ -400,7 +412,7 @@ await step('backend failure states: network error, 500, 429 show friendly messag
 await step('401 on an authenticated call logs out and the login page explains', async () => {
   await cpage.route('**/payments/transactions*', (r) => r.fulfill({ status: 401, contentType: 'application/json', body: '{"detail":"expired"}' }))
   await cpage.goto(APP + '/transactions')
-  await cpage.getByText('Your session has ended. Please sign in again.').waitFor()
+  await cpage.getByText('Your session has expired.').waitFor()
   await shot(cpage, '27-session-ended')
   await cpage.unroute('**/payments/transactions*')
 })
@@ -408,7 +420,7 @@ await step('unknown route → friendly 404 page; unknown checkout → not found 
   await cpage.goto(APP + '/no/such/page'); await cpage.getByRole('heading', { name: 'Page not found' }).waitFor()
   await cpage.goto(APP + '/login')
   await cpage.getByLabel('Email').fill(CUSTOMER.email); await cpage.getByLabel('Password').fill(PW)
-  await cpage.getByRole('button', { name: 'Sign in' }).click(); await cpage.getByRole('heading', { name: /Welcome/ }).waitFor()
+  await cpage.getByRole('button', { name: 'Sign in' }).click(); await cpage.getByRole('heading', { name: /^Good (morning|afternoon|evening)/ }).waitFor()
   await cpage.goto(APP + '/checkout/ps_doesnotexist'); await cpage.getByText('This payment session does not exist.').waitFor()
 })
 await step('authorization: customer cannot open merchant pages and vice-versa (route guards)', async () => {
@@ -433,34 +445,40 @@ for (const vn of ['tablet', 'mobile']) {
     if (bad.length) throw new Error('overflow: ' + bad.join('; '))
   })
 }
-await step('mobile: hamburger menu opens, navigates and closes', async () => {
+await step('mobile: bottom navigation is visible, marks the current page and navigates', async () => {
   await cpage.setViewportSize(VIEWS.mobile); await cpage.goto(APP + '/dashboard')
-  await cpage.getByRole('button', { name: 'Open menu' }).click()
-  await shot(cpage, '31-mobile-menu-open')
-  await cpage.getByRole('navigation', { name: 'Mobile' }).getByRole('link', { name: 'Transactions' }).click()
-  await cpage.getByRole('heading', { name: 'Transactions' }).waitFor()
-  if (await cpage.getByRole('navigation', { name: 'Mobile' }).count()) throw new Error('menu still open')
+  const nav = cpage.getByRole('navigation', { name: 'Mobile' })
+  await nav.waitFor()
+  const box = await nav.boundingBox(); if (!box || box.y + box.height < 800) throw new Error('bottom nav not at the bottom ' + JSON.stringify(box))
+  await nav.getByRole('link', { name: 'Home' }).getAttribute('aria-current')
+  await shot(cpage, '31-mobile-dashboard')
+  await nav.getByRole('link', { name: 'Activity' }).click()
+  await cpage.getByRole('heading', { name: 'Activity' }).waitFor()
+  if ((await nav.getByRole('link', { name: 'Activity' }).getAttribute('aria-current')) !== 'page') throw new Error('current page not marked')
 })
 await step('mobile: complete a second payment end-to-end on a 390×844 screen', async () => {
   const path = await merchantCreatesPayment('250.50', 'SG-10494')
   await cpage.setViewportSize(VIEWS.mobile)
   await cpage.goto(APP + path)
   await shot(cpage, '32-mobile-checkout')
-  await cpage.getByRole('button', { name: 'Pay with FacePay' }).click()
+  await cpage.getByRole('button', { name: 'Pay with Face' }).click()
   await cpage.getByRole('button', { name: 'Turn camera on' }).click()
   await cpage.getByRole('button', { name: 'Turn camera off' }).waitFor()
   const v = await cpage.locator('video').boundingBox(); if (!v || v.width > 390 || v.width < 250) throw new Error('video box ' + JSON.stringify(v))
   await shot(cpage, '33-mobile-camera')
   await authenticateOnPage(cpage, 'me', 7)
-  await cpage.getByText('Liveness check', { exact: true }).waitFor({ timeout: 10000 })
+  await cpage.getByText('Quick security check').waitFor({ timeout: 10000 })
   await shot(cpage, '34-mobile-liveness')
-  await cpage.getByRole('heading', { name: 'FacePay Authentication ✓' }).waitFor({ timeout: 30000 })
+  await cpage.getByRole('heading', { name: 'Confirm payment' }).waitFor({ timeout: 30000 })
   const o = await overflow(cpage); if (o > 0) throw new Error('overflow ' + o)
-  const btn = await cpage.getByRole('button', { name: /^Confirm ₹250\.50/ }).boundingBox(); if (!btn || btn.height < 36) throw new Error('confirm button too small ' + JSON.stringify(btn))
+  const btn = await cpage.getByRole('button', { name: /^Confirm ₹250\.50/ }).boundingBox(); if (!btn || btn.height < 44) throw new Error('confirm button too small ' + JSON.stringify(btn))
   await shot(cpage, '35-mobile-confirm')
   await cpage.getByRole('button', { name: /^Confirm ₹250\.50/ }).click()
-  await cpage.getByText('PAYMENT SUCCESSFUL ✓').waitFor({ timeout: 20000 })
-  await shot(cpage, '36-mobile-receipt')
+  await cpage.getByRole('heading', { name: 'Payment Successful' }).waitFor({ timeout: 20000 })
+  await shot(cpage, '36-mobile-success')
+  await cpage.getByRole('link', { name: 'View receipt' }).click()
+  await cpage.getByRole('article', { name: 'Payment receipt' }).waitFor()
+  await shot(cpage, '37-mobile-receipt')
   return `camera preview ${Math.round(v.width)}×${Math.round(v.height)}px, confirm button ${Math.round(btn.width)}×${Math.round(btn.height)}px`
 })
 

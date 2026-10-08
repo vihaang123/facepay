@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { formatMoney } from '../utils/format'
 
-const BRAND = '#059669'
+const BRAND = '#0a6f68'
 const shortDay = (iso) => {
   const d = new Date(`${iso}T00:00:00`)
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
@@ -25,9 +25,9 @@ export default function RevenueChart({ days }) {
   const data = days.map((d) => ({ ...d, revenue: Number(d.revenue) }))
   const empty = data.every((d) => d.revenue === 0)
   return (
-    <section aria-label="Revenue by day" className="rounded-2xl border border-slate-200 bg-white p-5">
+    <section aria-label="Revenue by day" className="rounded-[1.25rem] border border-slate-200/80 bg-white p-5 shadow-card">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="font-semibold">Simulated revenue, last {days.length} days</h2>
+        <h2 className="font-bold">Simulated revenue, last {days.length} days</h2>
         <button type="button" className="text-xs font-semibold text-brand-700" onClick={() => setAsTable((v) => !v)}>
           {asTable ? 'View chart' : 'View as table'}
         </button>

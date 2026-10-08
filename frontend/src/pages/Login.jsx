@@ -9,7 +9,7 @@ import { runValidators, validateEmail, validateRequired } from '../utils/validat
 const COPY = {
   customer: {
     title: 'Customer sign in',
-    subtitle: 'Sign in to manage your FacePay profile.',
+    subtitle: 'Welcome back. Sign in to pay with your face.',
     footer: (
       <>
         New here? <Link to="/register" className="font-semibold text-brand-700">Create an account</Link>
@@ -63,7 +63,7 @@ export default function Login({ role }) {
   return (
     <AuthLayout title={copy.title} subtitle={copy.subtitle} footer={copy.footer}>
       <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
-        {sessionExpired && !formError && <Alert tone="info">Your session has ended. Please sign in again.</Alert>}
+        {sessionExpired && !formError && <Alert tone="info"><strong>Your session has expired.</strong> Log in again to continue.</Alert>}
         {formError && <Alert tone="error">{formError}</Alert>}
         <FormField
           label="Email"
@@ -83,7 +83,7 @@ export default function Login({ role }) {
           onChange={onChange}
           error={errors.password}
         />
-        <Button type="submit" loading={submitting}>
+        <Button type="submit" loading={submitting} size="lg">
           Sign in
         </Button>
       </form>

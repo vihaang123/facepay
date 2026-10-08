@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { customerProfile, merchantProfile, mockApi, renderApp, storeSession, tokenResponse } from '../test/helpers'
 
-const heading = (name) => screen.findByRole('heading', { name })
+const heading = (name) => screen.findByRole('heading', { name: name === 'Welcome, Asha Rao' ? /^Good (morning|afternoon|evening), Asha$/ : name })
 const session = () => window.localStorage.getItem('facepay.session')
 
 describe('route protection', () => {

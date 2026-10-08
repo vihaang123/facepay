@@ -120,7 +120,7 @@ export default function Register({ role }) {
           onChange={onChange}
           error={errors.confirm}
         />
-        <Button type="submit" loading={submitting}>
+        <Button type="submit" loading={submitting} size="lg">
           Create account
         </Button>
       </form>

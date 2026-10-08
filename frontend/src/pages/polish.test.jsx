@@ -26,8 +26,8 @@ describe('landing page', () => {
 
   it('explains the product and says plainly that it is a simulation', async () => {
     const text = await html()
-    expect(text).toContain('Facial authentication for simulated digital payments.')
-    expect(text).toMatch(/Academic prototype/)
+    expect(text).toContain('FacePay uses facial authentication to authorize simulated digital payments.')
+    expect(text).toContain('Prototype / Academic Project')
     expect(text).toMatch(/no real money moves/i)
   })
 
@@ -38,24 +38,19 @@ describe('landing page', () => {
     }
     // the only mentions of banks/UPI are denials
     expect(text).toMatch(/not connected to any bank/)
-    expect(screen.getByRole('link', { name: 'Get started' })).toHaveAttribute('href', '/register')
+    expect(screen.getAllByRole('link', { name: 'Try FacePay' })[0]).toHaveAttribute('href', '/register')
   })
 })
 
 describe('navigation', () => {
-  it('has a working mobile menu that toggles and closes on navigation', async () => {
-    const user = userEvent.setup()
+  it('has a bottom navigation on phones instead of a hamburger menu', async () => {
     mockApi({ 'GET /users/me': { body: customerProfile }, 'GET /payments/transactions': { body: [] }, 'GET /payments/summary': { body: { currency: 'INR', total_spent: '0', payments: 0, spent_last_30_days: '0', last_payment_at: null } } })
     storeSession('customer')
     renderApp('/dashboard')
-    const menu = await screen.findByRole('button', { name: 'Open menu' })
-    expect(menu).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByRole('navigation', { name: 'Mobile' })).not.toBeInTheDocument()
-    await user.click(menu)
-    expect(screen.getByRole('button', { name: 'Close menu' })).toHaveAttribute('aria-expanded', 'true')
-    const mobile = screen.getByRole('navigation', { name: 'Mobile' })
-    await user.click(within(mobile).getByRole('link', { name: 'Transactions' }))
-    await waitFor(() => expect(screen.queryByRole('navigation', { name: 'Mobile' })).not.toBeInTheDocument())
+    const mobile = await screen.findByRole('navigation', { name: 'Mobile' })
+    expect(within(mobile).getAllByRole('link').map((a) => a.textContent)).toEqual(['Home', 'Pay', 'Activity', 'Face profile', 'Profile'])
+    expect(within(mobile).getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.queryByRole('button', { name: 'Open menu' })).not.toBeInTheDocument()
   })
 
   it('offers a skip link and role-specific navigation', async () => {
@@ -64,7 +59,7 @@ describe('navigation', () => {
     renderApp('/merchant/dashboard')
     expect(await screen.findByRole('link', { name: 'Skip to content' })).toHaveAttribute('href', '#main')
     const nav = screen.getByRole('navigation', { name: 'Main' })
-    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Dashboard', 'New payment', 'Transactions', 'Profile'])
+    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Home', 'New payment', 'Transactions', 'Profile'])
   })
 })
 
@@ -79,9 +74,9 @@ describe('transactions page', () => {
     })
     storeSession('customer')
     renderApp('/transactions')
-    const table = await screen.findByRole('table', { name: 'Transactions' })
-    expect(within(table).getAllByRole('row')).toHaveLength(11) // header + 10 (the 11th only signals a next page)
-    expect(within(table).getByRole('columnheader', { name: 'Merchant' })).toBeInTheDocument()
+    const table = await screen.findByRole('list', { name: 'Transactions' })
+    expect(within(table).getAllByRole('listitem')).toHaveLength(10) // the 11th row only signals a next page
+    expect(within(table).getAllByText('SuperGrocery')).toHaveLength(10)
     expect(url(api, 'GET /payments/transactions').searchParams.get('limit')).toBe('11')
 
     await user.click(screen.getByRole('button', { name: 'Next' }))
@@ -102,10 +97,9 @@ describe('transactions page', () => {
     storeSession('merchant')
     const api = mockApi({ 'GET /merchants/me': { body: merchantProfile }, 'GET /merchant/transactions': { body: [tx(1)] } })
     renderApp('/merchant/transactions')
-    const table = await screen.findByRole('table', { name: 'Transactions' })
-    expect(within(table).getByRole('columnheader', { name: 'Customer' })).toBeInTheDocument()
+    const table = await screen.findByRole('list', { name: 'Transactions' })
     expect(within(table).getByText('Asha Rao')).toBeInTheDocument()
-    expect(within(table).getByRole('link', { name: 'FP-AAAAAAAAA1' })).toHaveAttribute('href', '/merchant/receipts/FP-AAAAAAAAA1')
+    expect(within(table).getByRole('link')).toHaveAttribute('href', '/merchant/receipts/FP-AAAAAAAAA1')
     expect(api.calls.some((c) => c.key === 'GET /payments/transactions')).toBe(false)
     expect(screen.queryByRole('navigation', { name: 'Pagination' })).not.toBeInTheDocument() // one page only
   })
@@ -115,7 +109,7 @@ describe('transactions page', () => {
     storeSession('customer')
     mockApi({ 'GET /users/me': { body: customerProfile }, 'GET /payments/transactions': { body: [] } })
     renderApp('/transactions')
-    expect(await screen.findByText('No transactions yet')).toBeInTheDocument()
+    expect(await screen.findByText('No payments yet')).toBeInTheDocument()
     await user.selectOptions(screen.getByLabelText('Status'), 'SUCCESS')
     expect(await screen.findByText('No transactions match')).toBeInTheDocument()
   })
@@ -130,7 +124,7 @@ describe('transactions page', () => {
     expect(screen.queryByText(/upstream/)).not.toBeInTheDocument()
     fail = false
     await user.click(screen.getByRole('button', { name: 'Try again' }))
-    expect(await screen.findByRole('table', { name: 'Transactions' })).toBeInTheDocument()
+    expect(await screen.findByRole('list', { name: 'Transactions' })).toBeInTheDocument()
   })
 })
 
@@ -157,10 +151,9 @@ describe('customer dashboard', () => {
       'GET /payments/transactions': { body: [tx(9, { amount: '950.00' })] },
     })
     renderApp('/dashboard')
-    expect(await screen.findByText('Ready')).toBeInTheDocument()
-    expect(await screen.findByText('₹1,070.50')).toBeInTheDocument()
-    expect(screen.getByText('Successful payments only')).toBeInTheDocument()
-    expect(await screen.findByRole('table', { name: 'Recent payments' })).toBeInTheDocument()
+    expect(await screen.findByText('Face authentication ready')).toBeInTheDocument()
+    expect((await screen.findByText('Spent in the last 30 days')).parentElement).toHaveTextContent('₹950.00')
+    expect(await screen.findByRole('list', { name: 'Recent payments' })).toBeInTheDocument()
   })
 
   it('each section fails on its own, with a retry, and the rest still renders', async () => {
@@ -173,7 +166,7 @@ describe('customer dashboard', () => {
       'GET /payments/transactions': { body: [] },
     })
     renderApp('/dashboard')
-    expect(await screen.findByText('Open a checkout link from a merchant to pay with FacePay.')).toBeInTheDocument()
+    expect(await screen.findByText('No payments yet')).toBeInTheDocument()
     expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong on our side')
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
   })
@@ -222,7 +215,7 @@ describe('error handling', () => {
     })
     renderApp('/transactions')
     expect(await screen.findByRole('heading', { name: 'Customer sign in' })).toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('Your session has ended')
+    expect(screen.getByText('Your session has expired.')).toBeInTheDocument()
     expect(window.localStorage.getItem('facepay.session')).toBeNull()
   })
 
@@ -249,8 +242,8 @@ describe('receipts', () => {
     const receipt = await screen.findByRole('article', { name: 'Payment receipt' })
     expect(within(receipt).getByText('₹950.00')).toBeInTheDocument()
     expect(within(receipt).getByText('FP-AAAAAAAAA1')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Print receipt' }))
+    await user.click(screen.getByRole('button', { name: 'Download / Print receipt' }))
     expect(print).toHaveBeenCalled()
-    expect(screen.getByRole('link', { name: 'All transactions' })).toHaveAttribute('href', '/transactions')
+    expect(screen.getByRole('link', { name: 'Done' })).toHaveAttribute('href', '/transactions')
   })
 })

@@ -5,7 +5,7 @@ compliance assessment, and nothing here means the system is secure enough for re
 "existing mitigation" below can be found in the code and, where stated, in the automated tests. "Residual risk" is what
 is left after that mitigation; several of those risks are serious for a real product.
 
-Evidence behind the claims: 341 backend tests (`backend/tests/`, real PostgreSQL), 168 frontend tests, a 44-step
+Evidence behind the claims: 341 backend tests (`backend/tests/`, real PostgreSQL), 178 frontend tests, a 44-step
 real-browser run, and the earlier review in [`../security-review.md`](../security-review.md). Face-recognition numbers
 referred to here are in [`evaluation-results.md`](evaluation-results.md).
 

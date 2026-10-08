@@ -40,22 +40,22 @@ export default function CreatePayment() {
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-5">
-      <PageHeader title="Create a payment" subtitle="Creates a checkout link for one customer. Simulated payment: no real money moves." />
+      <PageHeader title="New payment request" subtitle="Creates a checkout link for one customer. Simulated payment: no real money moves." />
       <Card>
         <form onSubmit={submit} noValidate className="flex flex-col gap-4">
           {submitError && <Alert tone="error">{submitError}</Alert>}
-          <FormField id="amount" label="Amount (INR)" inputMode="decimal" value={form.amount} onChange={set('amount')} error={errors.amount} placeholder="950.00" />
+          <FormField id="amount" label="Amount (₹)" inputMode="decimal" value={form.amount} onChange={set('amount')} error={errors.amount} placeholder="950.00" />
           <FormField id="orderReference" label="Order / reference" value={form.orderReference} onChange={set('orderReference')} error={errors.orderReference} placeholder="SG-10492" />
           <FormField id="description" label="Description (optional)" value={form.description} onChange={set('description')} maxLength={255} />
           <div className="flex flex-col gap-1">
-            <label htmlFor="expiresInMinutes" className="text-sm font-medium text-slate-700">Link valid for</label>
-            <select id="expiresInMinutes" value={form.expiresInMinutes} onChange={set('expiresInMinutes')} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+            <label htmlFor="expiresInMinutes" className="text-sm font-semibold text-slate-800">Link valid for</label>
+            <select id="expiresInMinutes" value={form.expiresInMinutes} onChange={set('expiresInMinutes')} className="min-h-12 rounded-xl border border-slate-300 bg-white px-3.5 text-base">
               {[5, 15, 30, 60].map((m) => <option key={m} value={m}>{m} minutes</option>)}
             </select>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button type="submit" loading={busy}>Create payment session</Button>
-            <ButtonLink to={DASHBOARD_PATH.merchant} variant="secondary">Cancel</ButtonLink>
+          <div className="flex flex-col gap-2">
+            <Button type="submit" loading={busy} size="lg">Create payment request</Button>
+            <ButtonLink to={DASHBOARD_PATH.merchant} variant="ghost">Cancel</ButtonLink>
           </div>
         </form>
       </Card>

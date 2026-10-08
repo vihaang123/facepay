@@ -1,19 +1,64 @@
+@import "@fontsource-variable/manrope";
 @import "tailwindcss";
 
+/*
+ * FacePay brand system
+ *   Trust + Security + Speed + AI
+ *   - ink     deep navy for text and the dark "scan" surface
+ *   - brand   ocean teal: actions, links, the logo mark
+ *   - success emerald is reserved for "paid / verified", so green always means something happened
+ *   - amber = waiting, rose = failed, slate = ended
+ *   Radius: 12px controls, 20px cards, full for pills and avatars. One soft shadow for cards, one for overlays.
+ *   Spacing: 4px base; screens use 16/20/24 gutters. Type: Manrope; amounts use tabular figures.
+ */
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --color-brand-50: #ecfdf5;
-  --color-brand-100: #d1fae5;
-  --color-brand-500: #10b981;
-  /* 600 is for fills behind white text only; use 700 for text and links (4.5:1+ on white). */
-  --color-brand-600: #059669;
-  --color-brand-700: #047857;
-  --color-brand-800: #065f46;
-  --color-ink: #0b1220;
+  --font-sans: "Manrope Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --color-brand-50: #ecf8f7;
+  --color-brand-100: #cfefec;
+  --color-brand-200: #a2dfd9;
+  --color-brand-500: #17a398;
+  /* 600 is for fills behind large white text only; 700 is the action color (6:1 on white); 800 for hover and text on tints. */
+  --color-brand-600: #0d8a80;
+  --color-brand-700: #0a6f68;
+  --color-brand-800: #07554f;
+  --color-ink: #0b1b33;
+  --color-scan: #07111f;
+  --color-scan-edge: #5eead4;
+  --color-canvas: #f5f7fa;
+
+  --radius-control: 0.75rem;
+  --radius-card: 1.25rem;
+  --shadow-card: 0 1px 2px rgb(11 27 51 / 0.05), 0 4px 16px -6px rgb(11 27 51 / 0.08);
+  --shadow-pop: 0 12px 32px -8px rgb(11 27 51 / 0.25);
+
+  --animate-scan: scan 2.4s ease-in-out infinite;
+  --animate-pop: pop 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+  --animate-rise: rise 0.28s ease-out both;
+  --animate-shimmer: shimmer 1.4s linear infinite;
+  --animate-toast: toast 0.25s ease-out both;
+  --animate-draw: draw 0.5s 0.15s ease-out both;
 }
 
+@keyframes scan { 0%, 100% { top: 6%; opacity: 0.25; } 50% { top: 94%; opacity: 1; } }
+@keyframes pop { 0% { transform: scale(0.6); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes rise { 0% { transform: translateY(6px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+@keyframes toast { 0% { transform: translateY(12px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+@keyframes draw { 0% { stroke-dashoffset: 30; } 100% { stroke-dashoffset: 0; } }
+
 body {
-  @apply bg-slate-50 text-ink antialiased;
+  @apply bg-canvas text-ink antialiased;
+  font-feature-settings: "cv11", "ss01";
+}
+
+/* Money is always set in tabular figures so columns and large amounts line up. */
+.amount { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+.skeleton {
+  background: linear-gradient(90deg, #e8edf3 25%, #f3f6f9 37%, #e8edf3 63%);
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
 }
 
 /* One visible focus style for every interactive element. */
@@ -21,6 +66,7 @@ body {
   outline: 2px solid var(--color-brand-700);
   outline-offset: 2px;
 }
+.on-dark :where(a, button, summary):focus-visible { outline-color: var(--color-scan-edge); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

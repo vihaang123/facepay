@@ -16,7 +16,7 @@ payment and receives a receipt. The face recogniser is deliberately classical: i
 Analysis (PCA), projected with Linear Discriminant Analysis (LDA) and classified with k-nearest-neighbours or a linear
 support-vector machine. No pretrained neural embedding is used. Around it sit a challenge-response liveness check, an explicit
 authentication policy, single-use server-side payment authorizations, encrypted storage of face data, role-separated
-customer and merchant accounts, dashboards, and an automated test suite (341 backend tests, 168 frontend tests, a 44-step
+customer and merchant accounts, dashboards, and an automated test suite (341 backend tests, 178 frontend tests, a 44-step
 browser run). On the public ORL face set (40 subjects), 5-fold cross-validated accuracy is 0.858 for PCA+KNN, 0.895 for
 PCA+LDA+KNN and 0.892 for PCA+LDA+SVM, so LDA gives a consistent improvement over PCA alone. The same experiments show the
 limits plainly: at the deployed threshold about 20% of genuine attempts are rejected and an impostor who is mistaken for the
@@ -177,10 +177,16 @@ The residual risks, several of them serious, are tabulated in [`security-assessm
 ## 19. Frontend / UX
 
 A responsive React single-page application for both roles: landing page with a prototype notice, registration and login,
-customer dashboard with spending summary and face-setup status, a guided face-setup page (camera, pose prompts, sample quality
-feedback, training, test recognition, in-page confirmation of destructive actions), checkout and authentication with progress
-steps, a result panel that hides raw model numbers behind "Technical details", receipts, searchable and sortable transaction
-history, and a merchant dashboard with revenue chart, status polling and cancellation. Loading, empty and error states are
+a mobile-first customer app with a bottom navigation (Home, Pay, Activity, Face profile, Profile), a home screen with face status and quick actions, a guided face-setup page (camera, pose prompts, sample quality
+feedback, training, test recognition, in-page confirmation of destructive actions), a payment journey of checkout, a dark camera screen
+whose wording follows the real phases of the authentication request (position, hold still, quick security check, analysing, result),
+a confirm screen, a processing state shown only while the confirm request is in flight, a success screen and a digital receipt;
+a nine-step payment timeline built from the server's stage results; a transaction feed with a details page; and a merchant console
+with "Today's overview", a prominent Create payment action, a live payment-request page with its own timeline (it follows the
+session by polling), and cancellation. One status vocabulary (icon plus word) is used everywhere. The UI shows no real-money
+features: no UPI, bank, card or wallet balance, and every payment screen says "Simulated payment". The liveness step is labelled
+"Basic liveness check", never anti-spoofing. The landing page also explains the pipeline in nine steps, as an explanation rather
+than a live process. Loading, empty and error states are
 written for people, and the UI never shows server error bodies. Screenshots are in
 [`screenshots/`](screenshots/) (camera previews are blurred because the simulated camera shows public research faces).
 
@@ -203,7 +209,7 @@ not changed to improve numbers. Full detail: [`evaluation-results.md`](evaluatio
 
 Open-set at the deployed threshold (70th percentile): genuine rejection rate 0.197; impostor acceptance 0.023 when the impostor
 claims a random enrolled user and 0.450 when the impostor claims the identity the model assigns to them. Liveness: a still image
-failed 70 of 70 times, a slid still image passed 70 of 70 times. Software: 341 backend tests, 168 frontend tests and a 44-step
+failed 70 of 70 times, a slid still image passed 70 of 70 times. Software: 341 backend tests, 178 frontend tests and a 44-step
 browser run all pass; automated accessibility checks found no axe violations on 10 pages. Local latency: a seven-frame face
 authentication takes about 0.73 seconds, most of it image decoding and face detection.
 

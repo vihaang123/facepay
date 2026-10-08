@@ -49,12 +49,12 @@ export default function Profile() {
   }
 
   return (
-    <div className="max-w-lg">
-      <h1 className="text-2xl font-bold tracking-tight">Profile</h1>
+    <div className="mx-auto max-w-lg">
+      <h1 className="text-2xl font-extrabold tracking-tight">Profile</h1>
       <p className="mt-1 text-sm text-slate-600">
         Joined {new Date(profile.created_at).toLocaleDateString()}
       </p>
-      <form onSubmit={onSubmit} noValidate className="mt-6 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-6">
+      <form onSubmit={onSubmit} noValidate className="mt-6 flex flex-col gap-4 rounded-[1.25rem] border border-slate-200/80 bg-white p-6 shadow-card">
         {formError && <Alert tone="error">{formError}</Alert>}
         {saved && <Alert tone="success">Profile updated.</Alert>}
         <FormField label="Email" id="email" value={profile.email} disabled hint="Email cannot be changed." readOnly />

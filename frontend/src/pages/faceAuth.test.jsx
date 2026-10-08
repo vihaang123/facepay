@@ -68,8 +68,8 @@ async function openAndStart(verify, extra) {
   renderApp('/authenticate')
   await screen.findByRole('heading', { name: 'FacePay Authentication' })
   await user.click(screen.getByRole('button', { name: 'Turn camera on' }))
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Start authentication' })).toBeEnabled())
-  await user.click(screen.getByRole('button', { name: 'Start authentication' }))
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Start face check' })).toBeEnabled())
+  await user.click(screen.getByRole('button', { name: 'Start face check' }))
   return { user, api }
 }
 
@@ -78,13 +78,13 @@ describe('FacePay authentication screen', () => {
     mockApi(routes({ body: success }))
     renderApp('/authenticate')
     await screen.findByRole('heading', { name: 'FacePay Authentication' })
-    expect(screen.getByRole('button', { name: 'Start authentication' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Start face check' })).toBeDisabled()
   })
 
   it('is linked from the customer navigation only', async () => {
     mockApi(routes({ body: success }))
     renderApp('/dashboard')
-    expect(await screen.findByRole('link', { name: 'Test FacePay' })).toHaveAttribute('href', '/authenticate')
+    expect(await screen.findByRole('link', { name: 'Try a test face check' })).toHaveAttribute('href', '/authenticate')
   })
 
   it('merchants cannot open the page', async () => {
@@ -93,12 +93,12 @@ describe('FacePay authentication screen', () => {
     mockApi({ 'GET /merchants/me': { body: merchantProfile } })
     renderApp('/authenticate')
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'FacePay Authentication' })).not.toBeInTheDocument())
-    expect(screen.queryByRole('button', { name: 'Start authentication' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Start face check' })).not.toBeInTheDocument()
   })
 
   it('walks through look → liveness challenge → verify and shows the server’s real output', async () => {
     const { api } = await openAndStart({ body: success })
-    expect(await screen.findByText('Authentication successful')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Identity verified' })).toBeInTheDocument()
 
     expect(api.callsTo('POST /face-auth/challenge')).toHaveLength(1)
     const call = api.callsTo('POST /face-auth/verify')[0]
@@ -121,10 +121,10 @@ describe('FacePay authentication screen', () => {
     TIMING.baselineGapMs = 150
     TIMING.turnGapMs = 60
     await openAndStart({ body: success })
-    expect(await screen.findByText('Look at the camera')).toBeInTheDocument()
+    expect(await screen.findByText('Hold still')).toBeInTheDocument()
     expect((await screen.findAllByText('Slowly turn your head to your right')).length).toBeGreaterThan(0)
-    expect(screen.getByText('Liveness check')).toBeInTheDocument()
-    expect(await screen.findByText('Authentication successful')).toBeInTheDocument()
+    expect(screen.getByText('Quick security check')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Identity verified' })).toBeInTheDocument()
   })
 
   it.each([
@@ -139,7 +139,7 @@ describe('FacePay authentication screen', () => {
   ])('explains rejection %#', async (body, text) => {
     await openAndStart({ body })
     expect(await screen.findByRole('alert')).toHaveTextContent(text)
-    expect(screen.queryByText('Authentication successful')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Identity verified' })).not.toBeInTheDocument()
     expect(screen.queryByText(/Confidence:/)).not.toBeInTheDocument() // no identity result => no number shown
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
   })
@@ -170,7 +170,7 @@ describe('FacePay authentication screen', () => {
   ])('handles backend error %#', async (verify, text) => {
     await openAndStart(verify)
     expect(await screen.findByRole('alert')).toHaveTextContent(text)
-    expect(screen.queryByText('Authentication successful')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Identity verified' })).not.toBeInTheDocument()
   })
 
   it('reports an unreachable server', async () => {
@@ -179,10 +179,10 @@ describe('FacePay authentication screen', () => {
     renderApp('/authenticate')
     await screen.findByRole('heading', { name: 'FacePay Authentication' })
     await user.click(screen.getByRole('button', { name: 'Turn camera on' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Start authentication' })).toBeEnabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start face check' })).toBeEnabled())
     const ok = globalThis.fetch
     vi.stubGlobal('fetch', vi.fn((url, init) => (String(url).endsWith('/face-auth/verify') ? Promise.reject(new TypeError('offline')) : ok(url, init))))
-    await user.click(screen.getByRole('button', { name: 'Start authentication' }))
+    await user.click(screen.getByRole('button', { name: 'Start face check' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(/Cannot reach the server/)
     expect(api.callsTo('POST /face-auth/challenge')).toHaveLength(1)
   })
@@ -194,13 +194,13 @@ describe('FacePay authentication screen', () => {
     renderApp('/authenticate')
     await screen.findByRole('heading', { name: 'FacePay Authentication' })
     await user.click(screen.getByRole('button', { name: 'Turn camera on' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Start authentication' })).toBeEnabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start face check' })).toBeEnabled())
     const ok = globalThis.fetch
     vi.stubGlobal('fetch', vi.fn((url, init) => {
       if (!String(url).endsWith('/face-auth/verify')) return ok(url, init)
       return new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))))
     }))
-    await user.click(screen.getByRole('button', { name: 'Start authentication' }))
+    await user.click(screen.getByRole('button', { name: 'Start face check' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(/took too long to respond/)
   })
 
@@ -211,14 +211,14 @@ describe('FacePay authentication screen', () => {
     renderApp('/authenticate')
     await screen.findByRole('heading', { name: 'FacePay Authentication' })
     await user.click(screen.getByRole('button', { name: 'Turn camera on' }))
-    expect(await screen.findByText(/Camera access was blocked/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Start authentication' })).toBeDisabled()
+    expect(await screen.findByText(/Camera access is required/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Start face check' })).toBeDisabled()
   })
 
   it('"Try again" starts over with a fresh challenge', async () => {
     const { user, api } = await openAndStart({ body: rejected('IDENTITY_MISMATCH') })
     await user.click(await screen.findByRole('button', { name: 'Try again' }))
-    await user.click(screen.getByRole('button', { name: 'Start authentication' }))
+    await user.click(screen.getByRole('button', { name: 'Start face check' }))
     await waitFor(() => expect(api.callsTo('POST /face-auth/challenge')).toHaveLength(2))
     await waitFor(() => expect(api.callsTo('POST /face-auth/verify')).toHaveLength(2))
   })
@@ -242,8 +242,8 @@ describe('FacePay authentication screen', () => {
     const { unmount } = renderApp('/authenticate')
     await screen.findByRole('heading', { name: 'FacePay Authentication' })
     await user.click(screen.getByRole('button', { name: 'Turn camera on' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Start authentication' })).toBeEnabled())
-    await user.click(screen.getByRole('button', { name: 'Start authentication' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start face check' })).toBeEnabled())
+    await user.click(screen.getByRole('button', { name: 'Start face check' }))
     await screen.findAllByText('Slowly turn your head to your right')
     unmount()
     await new Promise((r) => setTimeout(r, 700))
@@ -253,7 +253,7 @@ describe('FacePay authentication screen', () => {
 
   it('never renders a picture of the user', async () => {
     await openAndStart({ body: success })
-    await screen.findByText('Authentication successful')
+    await screen.findByRole('heading', { name: 'Identity verified' })
     expect(document.querySelectorAll('img, canvas')).toHaveLength(0)
   })
 })

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 export const CAMERA_MESSAGES = {
-  denied: 'Camera access was blocked. Allow the camera for this site in your browser settings, then try again.',
+  denied: 'Camera access is required for FacePay authentication. Allow the camera for this site (usually the camera icon in the address bar), then try again.',
   unsupported: 'This browser cannot access a camera (it needs HTTPS or localhost).',
   error: 'The camera could not be started. Check that no other app is using it.',
 }

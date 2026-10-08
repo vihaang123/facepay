@@ -1,4 +1,6 @@
+import { Brackets, FaceGuide } from './ScanFrame'
 import { Alert, Button } from './ui'
+import Icon from './Icon'
 import { CAMERA_MESSAGES } from '../hooks/useCamera'
 
 const CAMERA_STATE_TEXT = {
@@ -9,16 +11,19 @@ const CAMERA_STATE_TEXT = {
   error: 'Camera could not start',
 }
 
+const EDGE = { neutral: 'border-scan-edge', ok: 'border-emerald-400', bad: 'border-rose-400' }
+
 /**
- * Camera preview shared by face setup and payment authentication. The preview is mirrored (like a mirror) and always
- * keeps its 4:3 shape, so it scales down to a phone without distortion. `overlay` is a short live instruction.
+ * Dark camera stage shared by face setup and payment authentication. The preview is mirrored (like a mirror) and keeps
+ * a fixed shape, so it scales to a phone without distortion. `overlay` is a short live instruction, `scanning` shows
+ * the moving scan line (only while a capture is really under way), `tone` colours the frame by the real outcome.
  */
-export default function CameraView({ camera, busy = false, overlay = null }) {
+export default function CameraView({ camera, busy = false, overlay = null, scanning = false, tone = 'neutral', guide = true }) {
   const { videoRef, status, start, stop } = camera
   const on = status === 'active'
   return (
     <div className="flex flex-col gap-3">
-      <div className="relative mx-auto aspect-[4/3] w-full max-w-md overflow-hidden rounded-xl bg-slate-900">
+      <div className="relative mx-auto aspect-[3/4] w-full max-w-sm overflow-hidden on-dark rounded-[1.5rem] bg-scan sm:aspect-[4/3] sm:max-w-md">
         <video
           ref={videoRef}
           autoPlay
@@ -28,15 +33,22 @@ export default function CameraView({ camera, busy = false, overlay = null }) {
           className={`h-full w-full -scale-x-100 object-cover ${on ? '' : 'invisible'}`}
         />
         {!on && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4 text-center text-slate-200">
-            <svg aria-hidden="true" viewBox="0 0 24 24" className="h-10 w-10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M15 10l5-3v10l-5-3M4 7h9a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z" />
-            </svg>
-            <p className="text-sm font-medium">{CAMERA_STATE_TEXT[status]}</p>
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center text-slate-300">
+            <Icon name="camera" className="h-10 w-10" />
+            <p className="text-sm font-semibold">{CAMERA_STATE_TEXT[status]}</p>
           </div>
         )}
+        <div className="absolute inset-[7%]">
+          <Brackets color={EDGE[tone]} />
+          {on && guide && !scanning && tone === 'neutral' && (
+            <FaceGuide className="absolute left-1/2 top-1/2 h-[72%] -translate-x-1/2 -translate-y-1/2 text-white/45" />
+          )}
+          {on && scanning && (
+            <span aria-hidden="true" className="absolute inset-x-3 h-0.5 animate-scan rounded-full bg-scan-edge shadow-[0_0_14px_2px_rgb(94_234_212/0.7)]" />
+          )}
+        </div>
         {on && overlay && (
-          <p aria-hidden="true" className="absolute inset-x-0 bottom-0 bg-slate-900/75 px-3 py-2 text-center text-sm font-medium text-white">{overlay}</p>
+          <p aria-hidden="true" className="absolute inset-x-4 bottom-4 rounded-full bg-scan/80 px-4 py-2 text-center text-sm font-semibold text-white backdrop-blur-sm">{overlay}</p>
         )}
       </div>
       {CAMERA_MESSAGES[status] && <Alert tone="error">{CAMERA_MESSAGES[status]}</Alert>}
@@ -50,7 +62,7 @@ export default function CameraView({ camera, busy = false, overlay = null }) {
         )}
       </div>
       <p className="text-center text-xs text-slate-600">
-        The camera is only used while you are on this page. Nothing is recorded or sent until you capture a sample or start an authentication.
+        The camera is only used while you are on this page. Nothing is recorded or sent until you capture a sample or start a face check.
       </p>
     </div>
   )

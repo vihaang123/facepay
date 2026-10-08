@@ -48,7 +48,7 @@ checkout amount; face authentication with liveness; hidden technical details; co
 checkout; customer and merchant dashboards, transaction lists with filter/search/sort; a different person rejected; a
 motionless face failing liveness; camera permission denied; network error, 500 and 429 messages; 401 returning to the
 login page with an explanation; unknown routes; route guards between the two roles; tablet and phone layouts without
-horizontal scrolling; the mobile menu; and a complete payment on a 390×844 screen.
+horizontal scrolling; the mobile bottom navigation; and a complete payment on a 390×844 screen.
 
 ## Phase 7 re-run
 
@@ -63,3 +63,13 @@ attempt was rejected as `DISTANCE_TOO_HIGH` (the liveness stage passed; nothing 
 open-set weakness documented in `docs/final/evaluation-results.md` showing up in the browser run: the suite expects the
 genuine person to be accepted on the first try, which holds for the 6-person set the suite seeds but is not guaranteed in
 general. After removing the leftover users the suite passed 44 of 44 again. The script was not loosened.
+
+## After the fintech UI pass
+
+The interface was redesigned (brand system, bottom navigation, checkout, camera screen, confirm, processing, success, receipt,
+transaction feed, merchant console and timelines) and the suite was updated for the new labels. It now also checks that the
+nine-step customer timeline is complete after a payment, that a merchant page left open follows the payment by polling without
+a reload, and that the phone bottom navigation sits at the bottom and marks the current page. Result: 44 of 44 steps passed;
+axe reported no WCAG A/AA violations on the 10 scanned pages (an automated scan, not a compliance claim). Screenshots were
+reviewed by eye at 1280, 768 and 390 pixel widths. Two things the first pass caught that automated tests did not: a
+low-contrast step number on the landing page, and the old summary card still showing above the success screen. Both were fixed.

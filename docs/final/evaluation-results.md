@@ -186,7 +186,7 @@ check passed (first Tab stop is a real control with a visible focus ring).
 | Backend `pytest` (real PostgreSQL, 341 tests) | **341 passed**, in the development environment and again in a clean Python 3.13 virtual environment built from `backend/requirements-lock.txt` |
 | Ruff (`F`, `E9`, `B` rules) on `app`, `tests`, `alembic` and `ml/experiments` | no findings |
 | Alembic | `upgrade head` on an empty database, then `alembic check`: no drift |
-| Frontend `vitest` | **168 passed** (7 files) |
+| Frontend `vitest` | **178 passed** (8 files) |
 | Frontend lint (`oxlint`) | clean |
 | Frontend production build | succeeds; main bundle 344 kB (105 kB gzip), lazy revenue-chart chunk 359 kB (104 kB gzip), CSS 24 kB |
 

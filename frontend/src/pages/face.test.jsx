@@ -103,7 +103,7 @@ describe('face setup page', () => {
   it('is reachable from the customer navigation', async () => {
     mockApi(baseRoutes())
     renderApp('/dashboard')
-    expect(await screen.findByRole('link', { name: 'Face setup' })).toHaveAttribute('href', '/face')
+    expect((await screen.findAllByRole('link', { name: 'Face profile' }))[0]).toHaveAttribute('href', '/face')
   })
 
   it('shows pose instructions and progress from the server', async () => {
@@ -118,7 +118,7 @@ describe('face setup page', () => {
     const user = userEvent.setup()
     await openPage(baseRoutes())
     await user.click(screen.getByRole('button', { name: 'Turn camera on' }))
-    expect(await screen.findByText(/Camera access was blocked/)).toBeInTheDocument()
+    expect(await screen.findByText(/Camera access is required/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Capture sample' })).toBeDisabled()
   })
 

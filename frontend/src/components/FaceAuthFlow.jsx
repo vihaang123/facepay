@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AuthDetails } from './AuthStages'
 import CameraView from './CameraView'
-import { Alert, Button, Card, Spinner } from './ui'
+import Icon from './Icon'
+import { Alert, Button, Spinner } from './ui'
 import { useCamera } from '../hooks/useCamera'
 import { TIMING } from '../utils/authTiming'
 import { errorMessage, failureMessage } from '../utils/authMessages'
@@ -99,51 +100,69 @@ export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onEr
   const cameraOn = cameraStatus === 'active'
   const busy = ['challenge', 'baseline', 'turn', 'verifying'].includes(phase)
   const authenticated = result?.result === 'AUTHENTICATED'
-  const overlay = phase === 'baseline' ? 'Look at the camera and hold still' : phase === 'turn' ? instruction : phase === 'verifying' ? 'Verifying…' : null
+  const overlay = phase === 'baseline' ? 'Look at the camera and hold still' : phase === 'turn' ? instruction : phase === 'verifying' ? 'Analyzing your face…' : null
+  const tone = phase === 'done' ? (authenticated ? 'ok' : 'bad') : 'neutral'
+  const firstName = String(result?.identity?.name ?? '').trim().split(/\s+/)[0]
 
   return (
-    <>
-      <Card title="Camera">
-        <CameraView camera={camera} busy={busy} overlay={overlay} />
-      </Card>
+    <div className="mx-auto flex w-full max-w-md flex-col gap-5">
+      <CameraView camera={camera} busy={busy} overlay={overlay} scanning={['baseline', 'turn', 'verifying'].includes(phase)} tone={tone} guide={phase === 'idle'} />
 
-      <Card aria-label="Authentication" aria-live="polite">
-        <Progress phase={phase} cameraOn={cameraOn} result={result} />
-
+      <section aria-label="Authentication" aria-live="polite" className="flex flex-col gap-4 rounded-[1.25rem] border border-slate-200/80 bg-white p-5 shadow-card">
         {phase === 'idle' && (
-          <div className="mt-4 flex flex-col items-start gap-3">
-            <p className="text-sm text-slate-700">Ready when you are. You will look at the camera, then follow one short instruction such as turning your head.</p>
-            <div className="flex flex-wrap items-center gap-3">
-              <Button onClick={begin} disabled={!cameraOn}>Start authentication</Button>
-              {!cameraOn && <span className="text-xs text-slate-600">Turn the camera on first.</span>}
+          <>
+            <div>
+              <h2 className="text-xl font-extrabold">Position your face</h2>
+              <p className="mt-1 text-sm text-slate-700">{cameraOn ? 'Keep your face inside the frame, then start. You will look at the camera and follow one short instruction.' : 'Turn the camera on, then keep your face inside the frame.'}</p>
             </div>
+            <Button size="lg" onClick={begin} disabled={!cameraOn}>Start face check</Button>
+            {!cameraOn && <p className="-mt-2 text-xs text-slate-600">Turn the camera on first.</p>}
+          </>
+        )}
+
+        {phase === 'challenge' && (
+          <div>
+            <h2 className="flex items-center gap-2 text-xl font-extrabold"><Spinner label="Preparing" /> Getting ready</h2>
+            <p className="mt-1 text-sm text-slate-700">Preparing your security check…</p>
           </div>
         )}
 
-        {phase === 'challenge' && <p className="mt-4 flex items-center gap-2 text-sm"><Spinner label="Preparing" /> Preparing your challenge…</p>}
-
         {phase === 'baseline' && (
-          <div className="mt-4">
-            <p className="text-lg font-semibold">Look at the camera</p>
-            <p className="mt-1 text-sm text-slate-700">Hold still and face the camera.</p>
+          <div>
+            <h2 className="text-xl font-extrabold">Hold still</h2>
+            <p className="mt-1 text-sm text-slate-700">Capturing your face. Look at the camera.</p>
+            <LivenessDots step={1} />
           </div>
         )}
 
         {phase === 'turn' && (
-          <div className="mt-4">
-            <p className="text-sm font-medium text-slate-600">Liveness check</p>
-            <p className="mt-1 text-xl font-semibold">{instruction}</p>
+          <div>
+            <h2 className="text-xl font-extrabold">Quick security check</h2>
+            <p className="mt-2 text-2xl font-extrabold text-brand-700">{instruction}</p>
+            <p className="mt-1 text-sm text-slate-700">Basic liveness check. Keep your face in the frame while you move.</p>
+            <LivenessDots step={2} />
             <p className="mt-2 text-xs text-slate-600">Frames captured: {captured}</p>
           </div>
         )}
 
-        {phase === 'verifying' && <p className="mt-4 flex items-center gap-2 text-sm"><Spinner label="Verifying" /> Verifying identity…</p>}
+        {phase === 'verifying' && (
+          <div>
+            <h2 className="flex items-center gap-2 text-xl font-extrabold"><Spinner label="Verifying" /> Capturing complete</h2>
+            <p className="mt-1 text-sm text-slate-700">Analyzing your face…</p>
+          </div>
+        )}
 
         {phase === 'done' && result && (
-          <div className="mt-4 flex flex-col gap-4">
-            <Alert tone={authenticated ? 'success' : 'error'}>
-              {authenticated ? 'Authentication successful' : failureMessage(result)}
-            </Alert>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-start gap-3">
+              <span aria-hidden="true" className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${authenticated ? 'animate-pop bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                <Icon name={authenticated ? 'check' : 'x'} className="h-6 w-6" strokeWidth="2.4" />
+              </span>
+              <div>
+                <h2 className="text-xl font-extrabold">{authenticated ? 'Identity verified' : 'We could not verify you'}</h2>
+                <p role={authenticated ? undefined : 'alert'} className="mt-0.5 text-sm text-slate-700">{authenticated ? `Welcome back${firstName ? `, ${firstName}` : ''}` : failureMessage(result)}</p>
+              </div>
+            </div>
             <AuthDetails result={result} />
             {result.reason === 'NOT_ENROLLED' && (
               <Link className="text-sm font-semibold text-brand-700 underline" to={FACE_PATH}>Set up your face</Link>
@@ -151,51 +170,31 @@ export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onEr
             {Actions ? (
               <Actions result={result} authenticated={authenticated} onRetry={reset} />
             ) : (
-              <div><Button onClick={reset} variant={authenticated ? 'secondary' : 'primary'}>{authenticated ? 'Done' : 'Try again'}</Button></div>
+              <Button size="lg" onClick={reset} variant={authenticated ? 'secondary' : 'primary'}>{authenticated ? 'Done' : 'Try again'}</Button>
             )}
           </div>
         )}
 
         {phase === 'error' && (
-          <div className="mt-4 flex flex-col gap-3">
+          <div className="flex flex-col gap-3">
+            <h2 className="text-xl font-extrabold">Something went wrong</h2>
             <Alert tone="error">{error}</Alert>
-            <div><Button onClick={reset}>Try again</Button></div>
+            <Button size="lg" onClick={reset}>Try again</Button>
           </div>
         )}
-      </Card>
-    </>
+      </section>
+    </div>
   )
 }
 
-const STEPS = ['Camera', 'Face detected', 'Liveness', 'Identity', 'Result']
-
-/** Where the person is in the flow. Derived from real phase and the server's stage results. */
-function Progress({ phase, cameraOn, result }) {
-  const stage = (name) => result?.stages?.find((s) => s.stage === name)?.status
-  const state = [
-    cameraOn ? 'done' : phase === 'idle' ? 'current' : 'done',
-    phase === 'challenge' || phase === 'baseline' ? 'current' : phase === 'idle' ? 'todo' : 'done',
-    phase === 'turn' ? 'current' : ['idle', 'challenge', 'baseline'].includes(phase) ? 'todo' : stage('LIVENESS') === 'FAILED' ? 'failed' : 'done',
-    phase === 'verifying' ? 'current' : ['done'].includes(phase) ? (stage('IDENTITY') === 'PASSED' ? 'done' : stage('IDENTITY') === 'FAILED' ? 'failed' : 'todo') : 'todo',
-    phase === 'done' ? (result?.result === 'AUTHENTICATED' ? 'done' : 'failed') : 'todo',
-  ]
+/** Two dots for the two real capture stages of the liveness check: look straight, then turn. */
+function LivenessDots({ step }) {
   return (
-    <ol aria-label="Progress" className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
-      {STEPS.map((label, i) => (
-        <li
-          key={label}
-          aria-current={state[i] === 'current' ? 'step' : undefined}
-          className={
-            state[i] === 'failed' ? 'font-semibold text-rose-800'
-            : state[i] === 'done' ? 'font-semibold text-emerald-800'
-            : state[i] === 'current' ? 'font-semibold text-ink underline decoration-2 underline-offset-4'
-            : 'text-slate-600'
-          }
-        >
-          <span aria-hidden="true">{state[i] === 'done' ? '✓ ' : state[i] === 'failed' ? '✕ ' : `${i + 1}. `}</span>
-          {label}
-        </li>
+    <p className="mt-3 flex items-center gap-2 text-xs font-semibold text-slate-700" role="img" aria-label={`Step ${step} of 2`}>
+      {[1, 2].map((n) => (
+        <span key={n} aria-hidden="true" className={`h-2.5 w-2.5 rounded-full ${n < step ? 'bg-brand-700' : n === step ? 'bg-brand-700 ring-4 ring-brand-100' : 'bg-slate-300'}`} />
       ))}
-    </ol>
+      <span aria-hidden="true">{step === 1 ? 'Look straight' : 'Turn your head'}</span>
+    </p>
   )
 }
