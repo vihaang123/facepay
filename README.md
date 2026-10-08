@@ -109,13 +109,12 @@ how to obtain them is described there): [`docs/final/reproducibility.md`](docs/f
 
 ## Deployment
 
-Target architecture: **Vercel** (React + Vite frontend) calls a **Render** web service (FastAPI, OpenCV, PCA, LDA,
-KNN/SVM) over HTTPS, which uses **Render PostgreSQL**. The repository is deployment-ready (`backend/Dockerfile`,
-`render.yaml`, `frontend/vercel.json`, `.env.example` files), but **it has not been deployed**: deployment was not
-completed because hosting-provider authorization was unavailable, so there are no live URLs.
-[`docs/final/deployment-guide.md`](docs/final/deployment-guide.md) has the exact Vercel and Render settings, environment
-variables, migration command, CORS and camera/HTTPS notes, and separates what was verified locally from what needs a
-manual deployment (the Docker image has not been built).
+Live: **Vercel** frontend at https://facepay-five.vercel.app calls a **Render** FastAPI service at
+https://facepay-api-m9nn.onrender.com (health: `/health`), which uses **Render PostgreSQL**. The repository contains the
+configuration (`backend/Dockerfile`, `render.yaml`, `frontend/vercel.json`, `.env.example` files).
+[`docs/final/deployment-guide.md`](docs/final/deployment-guide.md) has the exact settings and separates what was verified
+locally, what was verified on the live site, and what was not (a complete hosted payment run and the hosted failure tests).
+Render's free tier sleeps, so the first request after idle can be slow.
 
 ## Known limitations
 

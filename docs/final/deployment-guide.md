@@ -1,16 +1,40 @@
 # Deployment guide
 
-**Status: not deployed.** Deployment not completed because hosting-provider authorization was unavailable. No Render
-tool existed in the build session, and the Vercel connection refused every write (HTTP 403, not authorised for the
-account's scope). So there is no hosted frontend, backend or database, and this guide contains no live URLs. The
-repository is deployment-ready; the steps in section 5 are what the account owner has to click through.
+**Status: deployed by the project owner (Vercel frontend + Render FastAPI + Render PostgreSQL).**
 
-Everything is labelled **Verified locally** (run in the build environment, with evidence) or **Requires manual
-deployment** (needs a Render / Vercel account and has not been run).
+* Frontend: https://facepay-five.vercel.app (Vercel)
+* Backend: https://facepay-api-m9nn.onrender.com (Render), health: https://facepay-api-m9nn.onrender.com/health
+
+The owner created the Render and Vercel services by hand; the build session had no write access to either provider. After
+that, the live stack was checked from a real browser on the Vercel origin (see "Verified on the live deployment" below).
+A full hosted payment run (merchant create, customer face authentication with liveness, confirm, receipt, histories) and
+the hosted failure tests were **not** run by the build session, so they are listed as not verified.
+
+Everything is labelled **Verified locally** (run in the build environment), **Verified on the live deployment** (run from a
+browser on the Vercel site) or **Requires manual deployment** (the account owner's steps).
 
 FacePay is an academic prototype with simulated payments. A public deployment would host real people's face data, so
 treat it as a demo: use throwaway accounts and your own face or public research images, and read
 [`security-assessment.md`](security-assessment.md) first.
+
+## Verified on the live deployment
+
+Checked from a real browser opened on `https://facepay-five.vercel.app` (HTTPS, so the camera API is available):
+
+* The page loads; deep links (`/login`, `/register`, `/checkout/<id>`, `/customer`, `/merchant`) return the single-page app.
+  Response headers include `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: no-referrer` and
+  `Permissions-Policy: camera=(self), microphone=(), geolocation=()`.
+* The JavaScript bundle contains the Render API URL and no `localhost:8000` fallback.
+* Cross-origin calls from the Vercel origin to the Render API were readable by the browser (CORS works, including the
+  preflight for JSON POSTs): `GET /health` returned `status: ok, database: ok`; a deliberately wrong login returned 401;
+  an invalid registration returned 422; `GET /users/me` without a token returned 401. None of these created data.
+* A signed-in customer session loaded the customer dashboard from the hosted API, with face-enrolment progress stored in
+  the hosted database (authenticated requests and database reads/writes work).
+
+**Not verified on the live deployment:** the merchant dashboard, a complete payment, liveness on the hosted stack,
+the four failure cases (wrong identity, liveness failure, expired payment, authorization replay), and `/docs` being
+disabled on Render (verified locally only). Render's `CORS_ORIGINS` value could not be read; CORS working for the Vercel
+origin shows it includes that origin, and the app refuses `*` in production.
 
 ## 1. Architecture
 
