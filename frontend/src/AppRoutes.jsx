@@ -15,6 +15,7 @@ import PayRequest from './pages/PayRequest'
 import Profile from './pages/Profile'
 import ReceiptPage from './pages/ReceiptPage'
 import Register from './pages/Register'
+import Security from './pages/Security'
 import Transactions from './pages/Transactions'
 
 function NotFound() {
@@ -47,6 +48,7 @@ export default function AppRoutes() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/transactions" element={<Transactions />} />
           <Route path="/face" element={<FaceRegistration />} />
+          <Route path="/security" element={<Security />} />
           <Route path="/authenticate" element={<FaceAuthentication />} />
           <Route path="/pay" element={<PayRequest />} />
           <Route path="/checkout/:sessionId" element={<Checkout />} />

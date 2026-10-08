@@ -73,3 +73,31 @@ a reload, and that the phone bottom navigation sits at the bottom and marks the 
 axe reported no WCAG A/AA violations on the 10 scanned pages (an automated scan, not a compliance claim). Screenshots were
 reviewed by eye at 1280, 768 and 390 pixel widths. Two things the first pass caught that automated tests did not: a
 low-contrast step number on the landing page, and the old summary card still showing above the success screen. Both were fixed.
+
+## After guided enrollment and payment hardening
+
+The suite was updated for the guided face setup (no Capture button, automatic capture), the six payment stages, the explicit
+confirm screen, the payment PIN and the Security page. Result on the final run: **48 of 48 steps passed**; axe reported no
+WCAG A/AA violations on the 11 scanned pages (an automated scan, not a compliance claim). Earlier runs on the same code
+failed 8 and 5 steps; the causes were all in the test harness, not the app, and are worth recording:
+
+* The simulated ORL face fills about 65% of the frame, so the (correct) "Move slightly farther away" guidance never let the
+  guided capture proceed. The simulated camera now draws a smaller face on a plain background for the guided setup.
+* The simulated camera returned the same media stream on every request; the app stops its tracks when it finishes, which
+  broke the next `getUserMedia` call. It now returns a fresh stream per request, as a real camera does.
+* The PIN was set before the first payment, so the "recently changed PIN" rule (correctly) asked for it. The PIN step now
+  runs after the first payment.
+* Ambiguous selectors after the page gained a second "Security" heading.
+
+What the new steps cover: no per-sample button and no manual pose picker; the machine visits `CHECKING_QUALITY`,
+`CAPTURING`, `CAPTURE_SUCCESS` and `NEXT_POSE` and ends in `COMPLETED` with 15 of 15; the model is prepared and "Recognise me"
+works; six separate payment stages on the confirm screen and no forbidden claims; the PIN is set from the Security page;
+after two failed face checks and a recent PIN change the mobile payment asks for the PIN and succeeds; a ₹12,000 payment
+requires the PIN, a wrong PIN is refused without losing the authorization and the right PIN pays; turning face payments off
+blocks face authentication with a link to Security; the Security page shows recent checks and payments with no scores;
+camera permission denied during guided setup ends in a clear message and a retry button.
+
+**Still simulated and unverified:** the camera. The driver plays the person (it swaps in a different frame after each capture
+and moves the face for each pose). This proves the page, state machine, upload path and server checks work together in a real
+browser. It says nothing about a physical webcam, real lighting, real head turns or the untuned thresholds in
+`enrollConfig.js`. Run it with `PW_CHROMIUM=/path/to/chromium` to use a preinstalled browser.

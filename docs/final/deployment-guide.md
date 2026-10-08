@@ -112,7 +112,7 @@ instance; the rate limiter, model cache and training lock are in process memory.
 
 **Verified locally** (PostgreSQL 16, Python 3.13 from `requirements-lock.txt`):
 
-* `alembic upgrade head` on a completely empty database applied all 5 migrations; `alembic check` then reported no drift.
+* `alembic upgrade head` on a completely empty database applied all migrations (6 since the payment-security change); `alembic check` then reported no drift.
 * That exact command run with `APP_ENV=production`, a `postgres://` URL, a freshly generated key and a generated JWT
   secret started cleanly: `GET /health` returned `{"status":"ok","database":"ok",...}` (it runs a real `SELECT 1`;
   `degraded` means the database is unreachable), `/docs` and `/openapi.json` returned 404, and register and login
@@ -136,7 +136,7 @@ names and sizes in the dashboard).
 3. **Set the environment variables** from section 2: `APP_ENV=production`, `DATABASE_URL` (internal URL),
    `JWT_SECRET`, `BIOMETRIC_KEY`, `CORS_ORIGINS` (a placeholder you will fix in step 8, for example
    `http://localhost:5173`; do not leave it at that), `FORWARDED_ALLOW_IPS=*`.
-4. **Deploy.** The container runs `alembic upgrade head` and then starts the API. Watch the logs for the five migrations
+4. **Deploy.** The container runs `alembic upgrade head` and then starts the API. Watch the logs for the migrations (0006 adds the payment-security columns and `security_events`; existing two-minute authorizations stop working, which is harmless)
    on first start.
 5. **Verify** `https://<render-service>/health` returns `{"status":"ok","database":"ok",...}` and `/docs` returns 404.
 6. **Vercel: import the repo** (Add New > Project). **Root Directory `frontend`**, Framework Preset **Vite**,

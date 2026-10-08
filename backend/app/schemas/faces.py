@@ -20,7 +20,25 @@ class PoseProgress(BaseModel):
     target: int
 
 
+class GuidedPose(BaseModel):
+    pose: str
+    instruction: str
+    count: int
+    target: int
+
+
+class GuidedProgress(BaseModel):
+    """Where the guided (automatic) enrolment flow is. Derived from the stored samples, so it resumes after a reload."""
+
+    sequence: list[GuidedPose]
+    captured: int
+    required: int
+    next_pose: str | None
+    complete: bool
+
+
 class EnrollmentStatus(BaseModel):
+    guided: GuidedProgress
     poses: list[PoseProgress]
     total_samples: int
     distinct_poses: int
@@ -38,11 +56,38 @@ class QualityOut(BaseModel):
     aligned: bool
 
 
+class Progress(BaseModel):
+    captured: int
+    required: int
+
+
 class SampleResult(BaseModel):
     accepted: bool = True
     quality: QualityOut
+    next_pose: str | None
+    progress: Progress
     enrollment: EnrollmentStatus
 
+
+class FrameGeometry(BaseModel):
+    """Where the largest face is, as fractions of the frame (0..1). No pixels, no features."""
+
+    cx: float
+    cy: float
+    width: float
+    height: float
+
+
+class AssessRequest(BaseModel):
+    image_base64: str = Field(min_length=16, max_length=2_100_000)
+
+
+class AssessResult(BaseModel):
+    """Live feedback for the guided capture. Nothing is stored. Acceptance is decided only by POST /faces/samples."""
+
+    state: str  # OK | NO_FACE | MULTIPLE_FACES | FACE_TOO_SMALL | TOO_DARK | TOO_BRIGHT | TOO_BLURRY | INVALID_IMAGE
+    faces: int
+    face: FrameGeometry | None
 
 class VariantMetrics(BaseModel):
     accuracy: float

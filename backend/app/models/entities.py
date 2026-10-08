@@ -2,6 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -34,6 +35,14 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20), default="customer", server_default="customer")
     status: Mapped[str] = mapped_column(String(20), default="active", server_default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # Security controls. Turning biometric payments off blocks face authentication for payments.
+    biometric_payments_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    # Optional payment PIN (argon2 hash), used as the second factor when a payment is higher risk.
+    payment_pin_hash: Mapped[str | None] = mapped_column(String(255))
+    pin_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    pin_failed_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    pin_locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Deleting a user removes their face profiles (DB ON DELETE CASCADE does the work)
     # but keeps authentication logs, detached (ON DELETE SET NULL).
@@ -228,6 +237,17 @@ class PaymentAuthorization(Base):
     payment_session_id: Mapped[int] = mapped_column(ForeignKey("payment_sessions.id", ondelete="CASCADE"))
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     authentication_log_id: Mapped[int | None] = mapped_column(ForeignKey("authentication_logs.id", ondelete="SET NULL"))
+    # What this authorization was issued for, copied from the session at issue time and re-checked at confirmation.
+    # Nothing biometric is stored here.
+    merchant_id: Mapped[int | None] = mapped_column(ForeignKey("merchants.id"))
+    amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    currency: Mapped[str | None] = mapped_column(String(3))
+    order_reference: Mapped[str | None] = mapped_column(String(80))
+    model_version: Mapped[str | None] = mapped_column(String(40))
+    # Risk-based step-up (prototype): when required, confirmation also needs the customer's payment PIN.
+    step_up_required: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    step_up_reasons: Mapped[str | None] = mapped_column(String(160))
+    step_up_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(20), default="ACTIVE", server_default="ACTIVE")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -252,6 +272,23 @@ class AuthenticationLog(Base):
     distance: Mapped[float | None]
     challenge: Mapped[str | None] = mapped_column(String(20))
     model_version: Mapped[str | None] = mapped_column(String(40))
+    # References only (never images): the payment session this attempt was for and, if it led to one, the transaction.
+    payment_session_ref: Mapped[str | None] = mapped_column(String(40))
+    transaction_ref: Mapped[str | None] = mapped_column(String(40))
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped[User | None] = relationship(back_populates="authentication_logs")
+
+
+class SecurityEvent(Base):
+    """Audit trail of security-relevant account actions (PIN set or failed, biometric toggled, face data removed,
+    payment limits hit). Metadata only: no images, vectors, PINs or tokens."""
+
+    __tablename__ = "security_events"
+    __table_args__ = (Index("ix_security_events_user_ts", "user_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    kind: Mapped[str] = mapped_column(String(40))
+    session_ref: Mapped[str | None] = mapped_column(String(40))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

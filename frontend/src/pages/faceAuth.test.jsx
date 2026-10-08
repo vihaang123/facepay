@@ -109,8 +109,8 @@ describe('FacePay authentication screen', () => {
 
     const list = screen.getByRole('list', { name: 'Authentication stages' })
     expect(within(list).getByText('Face detected')).toBeInTheDocument()
-    expect(within(list).getByText('Liveness verified')).toBeInTheDocument()
-    expect(within(list).getByText('Identity verified')).toBeInTheDocument()
+    expect(within(list).getByText('Basic liveness check passed')).toBeInTheDocument()
+    expect(within(list).getByText('Identity recognized')).toBeInTheDocument()
     expect(screen.getByText('Verified as:').closest('div')).toHaveTextContent('Asha Rao')
     expect(screen.getByText('87.0%')).toBeInTheDocument() // 0.8704 from the API, nothing else
     expect(screen.getByText(/1\.2345 \(limit 2\.5\)/)).toBeInTheDocument()
@@ -154,7 +154,7 @@ describe('FacePay authentication screen', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(text)
     expect(screen.getByText(`${(confidence * 100).toFixed(1)}%`)).toBeInTheDocument()
     expect(screen.queryByText(/Verified as/)).not.toBeInTheDocument()
-    expect(within(screen.getByRole('list', { name: 'Authentication stages' })).getByText('Identity not verified')).toBeInTheDocument()
+    expect(within(screen.getByRole('list', { name: 'Authentication stages' })).getByText('Identity not recognized')).toBeInTheDocument()
   })
 
   it('points users who are not in the model to face setup', async () => {

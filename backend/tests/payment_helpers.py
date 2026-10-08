@@ -80,5 +80,16 @@ def authorize(client, cust, sid, identity=0):
     return body["authorization"]["authorization_token"]
 
 
+def shown(client, cust, sid):
+    """What the checkout screen shows the customer: the details they confirm."""
+    r = client.get(f"/payments/sessions/{sid}", headers=cust["headers"])
+    if r.status_code != 200:  # e.g. a disabled account cannot open checkout: the confirm call under test must still be refused
+        return {"expected_amount": "1.00", "expected_merchant": "-", "expected_order_reference": ""}
+    c = r.json()
+    return {"expected_amount": c["amount"], "expected_merchant": c["merchant_name"], "expected_order_reference": c["order_reference"] or ""}
+
+
 def confirm(client, cust, sid, token, **extra):
-    return client.post(f"/payments/sessions/{sid}/confirm", json={"authorization_token": token, **extra}, headers=cust["headers"])
+    """Confirm the way the UI does: with the amount, merchant and order the customer was shown (override to test mismatches)."""
+    body = {"authorization_token": token, **shown(client, cust, sid), **extra}
+    return client.post(f"/payments/sessions/{sid}/confirm", json=body, headers=cust["headers"])

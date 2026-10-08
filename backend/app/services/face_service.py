@@ -16,6 +16,7 @@ import threading
 from collections import defaultdict
 from datetime import UTC, datetime
 
+import cv2
 import numpy as np
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
@@ -30,12 +31,15 @@ from app.ml.preprocessing import (
     INVALID_IMAGE,
     FaceDetector,
     FaceImageError,
+    decode_image,
     extract_face,
+    process_gray,
     vectorize,
     vectorize_many,
 )
 from app.ml.serialization import dump_model, library_versions
 from app.models import FaceProfile, FaceSample, ModelVersion, User
+from app.services import security_service as sec
 
 
 class FaceServiceError(Exception):
@@ -116,9 +120,19 @@ def _fingerprint(eligible: dict[int, list[tuple[int, str]]]) -> str:
 # ---------------------------------------------------------------- enrollment
 
 
+def guided_progress(counts: dict[str, int]) -> dict:
+    """Where the guided flow stands, from stored sample counts only (so it resumes after a reload or a new device)."""
+    target = cfg.GUIDED_SAMPLES_PER_POSE
+    sequence = [{"pose": p, "instruction": cfg.POSES[p], "count": counts.get(p, 0), "target": target} for p in cfg.GUIDED_SEQUENCE]
+    captured = sum(min(item["count"], target) for item in sequence)
+    next_pose = next((item["pose"] for item in sequence if item["count"] < target), None)
+    return {"sequence": sequence, "captured": captured, "required": target * len(sequence), "next_pose": next_pose, "complete": next_pose is None}
+
+
 def enrollment_status(db: Session, user: User) -> dict:
     counts = _sample_stats(db, user.id)
     return {
+        "guided": guided_progress(counts),
         "poses": [
             {"pose": p, "instruction": text, "count": counts.get(p, 0), "target": cfg.SAMPLES_PER_POSE_TARGET}
             for p, text in cfg.POSES.items()
@@ -133,7 +147,21 @@ def enrollment_status(db: Session, user: User) -> dict:
     }
 
 
+def _is_duplicate(db: Session, user: User, crop: np.ndarray) -> bool:
+    """True if the new crop is (almost) pixel-identical to a sample this user already stored: a frozen, repeated or
+    replayed frame. Compared on the same equalised 64x64 crops that are stored (decrypted here, never returned)."""
+    size = cfg.IMAGE_SIZE
+    new = crop.astype(np.int16)
+    for sample in db.scalars(select(FaceSample).where(FaceSample.user_id == user.id)):
+        old = np.frombuffer(crypto.decrypt(sample.crop_encrypted, _sample_context(sample.id, user.id)), np.uint8).reshape(size, size)
+        if float(np.abs(new - old.astype(np.int16)).mean()) < cfg.DUPLICATE_MAX_MEAN_DIFF:
+            return True
+    return False
+
+
 def add_sample(db: Session, user: User, pose: str, image: bytes, detector: FaceDetector) -> dict:
+    """The server alone decides whether a frame is acceptable: single face, size, brightness, sharpness (extract_face),
+    not a duplicate, and within the sample limits. The client's own checks are only guidance."""
     if pose not in cfg.POSES:
         raise FaceServiceError("UNKNOWN_POSE", f"Unknown pose. Use one of: {', '.join(cfg.POSES)}.", 422)
     counts = _sample_stats(db, user.id)
@@ -143,6 +171,8 @@ def add_sample(db: Session, user: User, pose: str, image: bytes, detector: FaceD
         raise FaceServiceError("POSE_LIMIT", "Enough samples for this pose. Try another pose.", 409)
 
     face = extract_face(image, detector)  # raises FaceImageError
+    if _is_duplicate(db, user, face.crop):
+        raise FaceServiceError("DUPLICATE_SAMPLE", "That frame is almost identical to one already captured. Move slightly and hold still again.", 409)
     sample = FaceSample(
         user_id=user.id,
         pose=pose,
@@ -154,7 +184,38 @@ def add_sample(db: Session, user: User, pose: str, image: bytes, detector: FaceD
     db.flush()  # need the id to bind the ciphertext to this row
     sample.crop_encrypted = crypto.encrypt(face.crop.tobytes(), _sample_context(sample.id, user.id))
     db.commit()
-    return {"accepted": True, "quality": face.quality.as_dict(), "enrollment": enrollment_status(db, user)}
+    status = enrollment_status(db, user)
+    guided = status["guided"]
+    return {
+        "accepted": True,
+        "quality": face.quality.as_dict(),
+        "next_pose": guided["next_pose"],
+        "progress": {"captured": guided["captured"], "required": guided["required"]},
+        "enrollment": status,
+    }
+
+
+def assess_frame(image: bytes, detector: FaceDetector) -> dict:
+    """Live feedback for guided capture: what the server's own checks would say about this frame, plus where the face
+    is. Stores nothing. Acceptance is decided only by add_sample."""
+    gray = decode_image(image)
+    h, w = gray.shape
+    scale = cfg.DETECTION_MAX_SIDE / max(h, w)
+    small = cv2.resize(gray, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA) if scale < 1 else gray
+    sh, sw = small.shape
+    boxes = sorted(detector.detect(small), key=lambda b: b.area, reverse=True)
+    significant = [b for b in boxes if boxes and b.area >= cfg.SECOND_FACE_RATIO * boxes[0].area]
+    face = None
+    if boxes:
+        b = boxes[0]
+        face = {"cx": round((b.x + b.w / 2) / sw, 4), "cy": round((b.y + b.h / 2) / sh, 4), "width": round(b.w / sw, 4), "height": round(b.h / sh, 4)}
+    try:
+        process_gray(gray, detector)
+        state = "OK"
+    except FaceImageError as exc:
+        state = {"NO_FACE": "NO_FACE", "MULTIPLE_FACES": "MULTIPLE_FACES", "FACE_TOO_SMALL": "FACE_TOO_SMALL", "TOO_DARK": "TOO_DARK",
+                 "TOO_BRIGHT": "TOO_BRIGHT", "TOO_BLURRY": "TOO_BLURRY"}.get(exc.code, "INVALID_IMAGE")
+    return {"state": state, "faces": len(significant), "face": face}
 
 
 def delete_user_face_data(db: Session, user: User) -> None:
@@ -168,6 +229,7 @@ def delete_user_face_data(db: Session, user: User) -> None:
         .where(FaceProfile.user_id == user.id, FaceProfile.status == "active")
         .values(status="revoked", feature_data=None)
     )
+    sec.record_event(db, user, "FACE_DATA_REMOVED")
     db.commit()
     registry.invalidate()
 

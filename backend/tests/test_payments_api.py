@@ -12,6 +12,7 @@ import pytest
 from sqlalchemy import func, select, text, update
 
 from app.api import faces as faces_api
+from app.core.config import get_settings
 from app.main import app
 from app.models import AuthenticationLog, PaymentAuthorization, PaymentSession, Transaction, User
 from app.services import payment_service as svc
@@ -27,6 +28,8 @@ from tests.payment_helpers import (
     start,
 )
 from tests.synthetic_scenes import BackgroundBoxDetector, empty_scene
+
+TTL = get_settings().payment_authorization_ttl_seconds
 
 
 @pytest.fixture(autouse=True)
@@ -149,7 +152,7 @@ def test_customer_opens_checkout_and_sees_only_what_they_need(client, trained, s
     assert r.status_code == 200
     v = r.json()
     assert v["merchant_name"] == "SuperGrocery" and v["order_reference"] == "SG-10492" and Decimal(v["amount"]) == Decimal("950.00")
-    assert v["status"] == "CREATED" and v["currency"] == "INR" and v["attempts_remaining"] == v["max_auth_attempts"] == svc.MAX_AUTH_FAILURES
+    assert v["status"] == "CREATED" and v["currency"] == "INR" and v["attempts_remaining"] == v["max_auth_attempts"] == svc.max_auth_failures()
     assert shop["email"] not in r.text and "merchant_id" not in v and "password" not in r.text
 
 
@@ -173,7 +176,7 @@ def test_full_flow_merchant_to_receipt_to_both_dashboards(client, trained, shop,
     assert r.status_code == 200, r.text
     res = r.json()
     assert res["result"] == "AUTHENTICATED" and res["liveness"] == "PASSED" and res["session_status"] == "AUTHENTICATED"
-    assert res["identity"]["name"] == "Asha Rao" and res["authorization"]["expires_in_seconds"] == svc.AUTHORIZATION_TTL_SECONDS
+    assert res["identity"]["name"] == "Asha Rao" and res["authorization"]["expires_in_seconds"] == TTL
     token = res["authorization"]["authorization_token"]
     assert session_row(db, sid).status == "AUTHENTICATED"
     assert client.get(f"/merchant/payment-sessions/{sid}", headers=shop["headers"]).json()["status"] == "AUTHENTICATED"
@@ -275,7 +278,7 @@ def test_authorization_lives_only_as_long_as_the_configured_ttl(client, trained,
     authorize(client, a, sid)
     (row,) = auth_rows(db)
     life = (row.expires_at - row.created_at).total_seconds()
-    assert svc.AUTHORIZATION_TTL_SECONDS - 5 <= life <= svc.AUTHORIZATION_TTL_SECONDS + 5 and svc.AUTHORIZATION_TTL_SECONDS <= 180
+    assert TTL - 5 <= life <= TTL + 5 and TTL <= 180
 
 
 def test_wrong_customer_cannot_use_someone_elses_authorization(client, trained, shop, db):
@@ -374,7 +377,13 @@ def test_changing_the_amount_in_the_database_between_display_and_confirm_is_caug
     db.execute(update(PaymentSession).values(amount=Decimal("1200.00")))
     db.commit()
     assert code(confirm(client, a, sid, token, expected_amount="950.00")) == "AMOUNT_MISMATCH"
-    assert Decimal(confirm(client, a, sid, token, expected_amount="1200.00").json()["amount"]) == Decimal("1200.00")
+    # The authorization was issued for 950.00: it is worthless for a session that now says 1200.00, even when the
+    # customer confirms the new figure. They must authenticate again for the amount they are really paying.
+    r = confirm(client, a, sid, token, expected_amount="1200.00")
+    assert r.status_code == 403 and code(r) == "AUTHORIZATION_INVALID"
+    assert txn_count(db) == 0
+    token2 = authorize(client, a, sid)
+    assert Decimal(confirm(client, a, sid, token2).json()["amount"]) == Decimal("1200.00")
 
 
 # ============================================================ session state
@@ -446,9 +455,9 @@ def test_session_expiring_while_the_camera_is_running_still_issues_nothing(clien
 def test_repeated_rejections_fail_the_session(client, trained, shop, db):
     a, _ = trained
     sid = create_session(client, shop)["session_id"]
-    for n in range(1, svc.MAX_AUTH_FAILURES):
+    for n in range(1, svc.max_auth_failures()):
         res = authenticate(client, a, sid, identity=1).json()  # a stranger's face
-        assert res["result"] == "REJECTED" and res["session_status"] == "CREATED" and res["attempts_remaining"] == svc.MAX_AUTH_FAILURES - n
+        assert res["result"] == "REJECTED" and res["session_status"] == "CREATED" and res["attempts_remaining"] == svc.max_auth_failures() - n
     last = authenticate(client, a, sid, identity=1).json()
     assert last["session_status"] == "FAILED" and last["attempts_remaining"] == 0 and last["authorization"] is None
     r = client.post(f"/payments/sessions/{sid}/authenticate/start", headers=a["headers"])
@@ -458,7 +467,7 @@ def test_repeated_rejections_fail_the_session(client, trained, shop, db):
     assert sm["failed_payments"] == 1 and sm["successful_payments"] == 0 and Decimal(sm["total_revenue"]) == 0
     # every attempt was still logged by the Phase 4 log
     db.expire_all()
-    assert db.scalar(select(func.count()).select_from(AuthenticationLog).where(AuthenticationLog.user_id == a["id"], AuthenticationLog.result == "FAILED")) == svc.MAX_AUTH_FAILURES
+    assert db.scalar(select(func.count()).select_from(AuthenticationLog).where(AuthenticationLog.user_id == a["id"], AuthenticationLog.result == "FAILED")) == svc.max_auth_failures()
 
 
 def test_camera_problems_do_not_count_against_the_session(client, trained, shop):
@@ -468,7 +477,7 @@ def test_camera_problems_do_not_count_against_the_session(client, trained, shop)
     ch = start(client, a, sid)
     frames = [b64(empty_scene()) for _ in range(6)]
     res = client.post(f"/payments/sessions/{sid}/authenticate", json={"challenge_id": ch["challenge_id"], "frames": frames}, headers=a["headers"]).json()
-    assert res["reason"] == "FACE_NOT_DETECTED" and res["attempts_remaining"] == svc.MAX_AUTH_FAILURES and res["session_status"] == "CREATED"
+    assert res["reason"] == "FACE_NOT_DETECTED" and res["attempts_remaining"] == svc.max_auth_failures() and res["session_status"] == "CREATED"
 
 
 def test_genuine_customer_recovers_after_a_rejection(client, trained, shop):
@@ -514,7 +523,7 @@ def test_missing_model_means_no_authorization(client, trained, shop, db):
     registry.invalidate()
     res = authenticate(client, a, sid).json()
     assert res["reason"] == "MODEL_UNAVAILABLE" and res["authorization"] is None and res["session_status"] == "CREATED"
-    assert res["attempts_remaining"] == svc.MAX_AUTH_FAILURES  # system problem, not the customer's fault
+    assert res["attempts_remaining"] == svc.max_auth_failures()  # system problem, not the customer's fault
 
 
 def test_malformed_authentication_requests_are_422_and_change_nothing(client, trained, shop, db):

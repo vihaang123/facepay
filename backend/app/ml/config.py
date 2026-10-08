@@ -26,7 +26,17 @@ POSES = {
     "chin_up": "Raise your chin slightly",
     "smile": "Smile or change your expression",
     "lighting": "Lean slightly toward or away from the light",
+    "chin_down": "Lower your chin slightly",
 }
+# Guided enrollment (the UI walks through these in order). A subset of POSES; "smile" and "lighting" stay supported
+# by the API but are not part of the guided flow. Pose labels are advisory: the server cannot verify head pose, and
+# recognition does not depend on the label (it is only used to check that the samples are varied).
+GUIDED_SEQUENCE = ("neutral", "turn_left", "turn_right", "chin_up", "chin_down")
+GUIDED_SAMPLES_PER_POSE = 3  # 5 poses x 3 = 15 samples, above MIN_SAMPLES_PER_USER
+# A new sample whose stored 64x64 crop differs from an existing sample of the same user by less than this mean
+# absolute grey-level difference is refused as a duplicate (a frozen or replayed frame). Webcam noise alone is above
+# this on real captures only by assumption: PROVISIONAL, not measured on real webcams.
+DUPLICATE_MAX_MEAN_DIFF = 1.5
 SAMPLES_PER_POSE_TARGET = 4
 MAX_SAMPLES_PER_POSE = 15
 MAX_SAMPLES_PER_USER = 60

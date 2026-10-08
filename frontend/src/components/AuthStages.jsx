@@ -1,9 +1,10 @@
 import { pct } from '../utils/format'
+import { paymentStageList } from '../utils/paymentStages'
 
 const STAGE_LABELS = {
   FACE_DETECTION: { PASSED: 'Face detected', FAILED: 'Face check failed', SKIPPED: 'Face detection' },
-  LIVENESS: { PASSED: 'Liveness verified', FAILED: 'Liveness check failed', SKIPPED: 'Liveness check' },
-  IDENTITY: { PASSED: 'Identity verified', FAILED: 'Identity not verified', SKIPPED: 'Identity verification' },
+  LIVENESS: { PASSED: 'Basic liveness check passed', FAILED: 'Basic liveness check failed', SKIPPED: 'Basic liveness check' },
+  IDENTITY: { PASSED: 'Identity recognized', FAILED: 'Identity not recognized', SKIPPED: 'Identity recognition' },
 }
 const STAGE_MARK = { PASSED: '✓', FAILED: '✕', SKIPPED: '–' }
 
@@ -49,5 +50,24 @@ export function AuthDetails({ result }) {
         </details>
       )}
     </>
+  )
+}
+
+const STATE_TEXT = { done: 'done', current: 'in progress', failed: 'failed', todo: 'not yet' }
+
+export function PaymentStages({ outcome, authorized, confirming, paid, className = '' }) {
+  const rows = paymentStageList({ outcome, authorized, confirming, paid })
+  return (
+    <ol aria-label="Payment stages" className={`flex flex-col gap-2 text-sm ${className}`}>
+      {rows.map((r) => (
+        <li key={r.label} className={`flex items-center gap-2.5 ${r.state === 'done' ? 'font-semibold text-emerald-800' : r.state === 'failed' ? 'font-semibold text-rose-800' : r.state === 'current' ? 'font-semibold text-slate-900' : 'text-slate-600'}`}>
+          <span aria-hidden="true" className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[0.7rem] font-bold ${r.state === 'done' ? 'bg-emerald-600 text-white' : r.state === 'failed' ? 'bg-rose-600 text-white' : r.state === 'current' ? 'bg-brand-700 text-white' : 'bg-slate-200 text-slate-600'}`}>
+            {r.state === 'done' ? '✓' : r.state === 'failed' ? '✕' : r.state === 'current' ? '•' : '–'}
+          </span>
+          <span>{r.label}</span>
+          <span className="sr-only">: {STATE_TEXT[r.state]}</span>
+        </li>
+      ))}
+    </ol>
   )
 }

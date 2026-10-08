@@ -8,7 +8,7 @@ import { useCamera } from '../hooks/useCamera'
 import { TIMING } from '../utils/authTiming'
 import { errorMessage, failureMessage } from '../utils/authMessages'
 import { captureFrame } from '../utils/capture'
-import { FACE_PATH } from '../utils/roles'
+import { FACE_PATH, SECURITY_PATH } from '../utils/roles'
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -29,6 +29,7 @@ export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onEr
   const [captured, setCaptured] = useState(0)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
+  const [errorCode, setErrorCode] = useState(null)
   const run = useRef(0) // id of the active run; changing it cancels the capture loop
   const callbacks = useRef({})
   useEffect(() => {
@@ -42,6 +43,7 @@ export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onEr
     const alive = () => run.current === id
     setResult(null)
     setError(null)
+    setErrorCode(null)
     setCaptured(0)
     setPhase('challenge')
     try {
@@ -85,6 +87,7 @@ export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onEr
     } catch (err) {
       if (!alive()) return
       setError(err instanceof Error && err.name === 'ApiError' ? errorMessage(err) : err.message || 'Something went wrong.')
+      setErrorCode(err?.code ?? null)
       setPhase('error')
       callbacks.current.onError?.(err)
     }
@@ -179,7 +182,8 @@ export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onEr
           <div className="flex flex-col gap-3">
             <h2 className="text-xl font-extrabold">Something went wrong</h2>
             <Alert tone="error">{error}</Alert>
-            <Button size="lg" onClick={reset}>Try again</Button>
+            {errorCode === 'BIOMETRIC_DISABLED' && <Link className="text-sm font-semibold text-brand-700 underline" to={SECURITY_PATH}>Open security settings</Link>}
+            <Button size="lg" onClick={reset} variant={errorCode === 'BIOMETRIC_LOCKED' ? 'secondary' : 'primary'}>Try again</Button>
           </div>
         )}
       </section>

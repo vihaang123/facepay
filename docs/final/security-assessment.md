@@ -50,9 +50,12 @@ tested on real webcams or against any standard attack protocol.
 
 | Threat | Existing mitigation | Residual risk |
 |---|---|---|
-| Client changes the amount | Amount is read only from the stored payment session; an optional `expected_amount` that differs gives 409 `AMOUNT_MISMATCH` (tests) | None known. |
+| Client changes the amount, merchant or order | Amount is read only from the stored payment session; confirm requires the amount, merchant and order the customer was shown and differing values give 409 `AMOUNT_MISMATCH`, `MERCHANT_MISMATCH` or `ORDER_MISMATCH` (tests) | None known. |
 | Replaying or reusing an authorization | Ticket is 32 random bytes, only its SHA-256 hash is stored, valid 120 s, single use, bound to customer and session; any failure returns the same `AUTHORIZATION_INVALID` (tests) | Tickets are shown once to the client and live in memory in the browser. |
-| Using a ticket for another session or customer | Binding to (customer, session) checked on confirm (tests) | None known. |
+| Using a ticket for another session, customer, merchant, amount or order | The ticket stores a snapshot (customer, session, merchant, amount, currency, order, model version, expiry) that is compared with the live session on confirm; a mismatch revokes it (tests, including database tampering and a retrained model) | None known. |
+| Unusual or large payment | Optional 6-digit payment PIN when the amount is high, face failures were recent, attempts are rapid or the PIN just changed ("Risk-based authorization prototype"); per-payment and daily simulated limits; PIN lockout (tests) | A rules sketch with no device or network signals. |
+| Repeated face failures on an account | 8 counted failures in 15 minutes block face authentication with a neutral message and `Retry-After` (tests) | In memory per process for rate limits; the lockout itself is database-backed. |
+| Customer wants face payments off | `PUT /security/biometric` and face-data removal block face authentication and confirmation (tests) | None known. |
 | Double charge / race | Confirm takes a row lock; a partial unique index allows one SUCCESS transaction per session (concurrency test) | Single-database design; not tested across multiple application instances. |
 | Expired or cancelled sessions paid | State machine CREATED to AUTHENTICATED to PAID/FAILED/EXPIRED/CANCELLED enforced server side (tests) | Expiry is evaluated on access; there is no background sweeper. |
 | Guessing faces on a session | After 5 counted failed face attempts the session becomes FAILED; face-auth attempts are rate limited per user | Attempts are per session; a new session resets the counter (the per-user rate limit still applies). |

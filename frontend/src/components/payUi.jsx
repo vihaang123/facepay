@@ -161,11 +161,24 @@ export function Receipt({ receipt, children }) {
         <Row label="Transaction ID"><span className="font-mono text-[0.8rem]">{receipt.transaction_id}</span></Row>
         <Row label="Date and time">{formatDateTime(receipt.timestamp)}</Row>
         <Row label="Payment method">{receipt.payment_method === 'FACE_PAY' ? 'FacePay' : receipt.payment_method}</Row>
-        {verified && <Row label="Authentication">Face verified</Row>}
-        {verified && <Row label="Liveness">Basic liveness check passed</Row>}
+        {verified && <Row label="Authenticated">{receipt.authentication ?? 'Face + basic liveness check'}</Row>}
         <Row label="Payment status">{ok ? 'Successful' : receipt.status}</Row>
       </dl>
       {children && <div className="no-print flex flex-col gap-2 border-t border-slate-100 px-6 py-4 sm:flex-row sm:justify-center">{children}</div>}
     </article>
+  )
+}
+
+/** The one honest description of the protection, used wherever the customer is asked to trust the flow. */
+export function SecurityNote({ className = '' }) {
+  return (
+    <details className={`rounded-xl bg-white/70 px-4 py-3 text-sm ring-1 ring-slate-200 ${className}`}>
+      <summary className="cursor-pointer font-semibold">How this payment is protected</summary>
+      <div className="mt-3 flex flex-col gap-2 text-slate-700">
+        <p>Your face is recognised, then a basic movement-based liveness check runs. Only then is a short-lived authorization created for this exact payment: this merchant, this amount, this order. It works once and expires in minutes.</p>
+        <p>You then review the payment and confirm it yourself. Large or unusual payments can also ask for your payment PIN.</p>
+        <p>FacePay is an academic prototype. The liveness check is basic and does not protect against deepfakes, replayed video, masks or other advanced attacks. Every payment is simulated and no real money moves.</p>
+      </div>
+    </details>
   )
 }

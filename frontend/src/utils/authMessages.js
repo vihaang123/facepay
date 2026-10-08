@@ -31,7 +31,14 @@ export function failureMessage(result) {
   return REASON_MESSAGES[result.reason] ?? 'Authentication was rejected.'
 }
 
+// The server words these itself, in plain language, so the screen shows them as written.
+const SERVER_WORDED = new Set([
+  'BIOMETRIC_LOCKED', 'BIOMETRIC_DISABLED', 'PER_TRANSACTION_LIMIT', 'DAILY_LIMIT_EXCEEDED',
+  'PIN_INCORRECT', 'PIN_LOCKED', 'PIN_REQUIRED', 'PIN_NOT_SET',
+])
+
 export function errorMessage(err) {
+  if (err.code && SERVER_WORDED.has(err.code)) return err.message
   if (err.code === 'TIMEOUT') return 'The server took too long to respond. Please try again.'
   if (err.status === 0) return err.message
   if (err.status === 429) return 'Too many attempts. Please wait a minute and try again.'

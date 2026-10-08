@@ -24,7 +24,7 @@ const CAMERA_SCRIPT = () => {
   const W = 568, H = 568
   const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H
   const ctx = canvas.getContext('2d')
-  const st = { img: null, left: 100, mode: 'toward', t0: null, sign: -1 }
+  const st = { img: null, left: 100, dy: 0, scale: 1, mode: 'toward', t0: null, sign: -1 }
   const draw = () => {
     ctx.fillStyle = '#222'; ctx.fillRect(0, 0, W, H)
     if (!st.img) return
@@ -36,24 +36,41 @@ const CAMERA_SCRIPT = () => {
       left = st.base + st.sign * move
     }
     ctx.imageSmoothingEnabled = true
-    ctx.drawImage(st.img, 0, 0, 1, 112, 0, 60, left, 448)
-    ctx.drawImage(st.img, 91, 0, 1, 112, left + 368, 60, W - (left + 368), 448)
-    ctx.drawImage(st.img, 0, 0, 92, 112, left, 60, 368, 448)
-    ctx.drawImage(canvas, 0, 60, W, 1, 0, 0, W, 60)
-    ctx.drawImage(canvas, 0, 507, W, 1, 0, 508, W, 60)
+    const top = 60 + st.dy
+    if (st.scale < 1) {
+      // a smaller face on a plain background, like a person sitting back from the camera (ORL crops fill the frame otherwise)
+      const w = 368 * st.scale, h = 448 * st.scale
+      ctx.drawImage(st.img, 0, 0, 92, 112, left + (368 - w) / 2, top + (448 - h) / 2, w, h)
+      return
+    }
+    ctx.drawImage(st.img, 0, 0, 1, 112, 0, top, left, 448)
+    ctx.drawImage(st.img, 91, 0, 1, 112, left + 368, top, W - (left + 368), 448)
+    ctx.drawImage(st.img, 0, 0, 92, 112, left, top, 368, 448)
+    ctx.drawImage(canvas, 0, top, W, 1, 0, 0, W, top)
+    ctx.drawImage(canvas, 0, top + 447, W, 1, 0, top + 448, W, H - (top + 448))
   }
   setInterval(draw, 66)
   window.__cam = {
-    setFace(url, left = 100) { return new Promise((res) => { const i = new Image(); i.onload = () => { st.img = i; st.left = left; st.t0 = null; draw(); res() }; i.src = url }) },
+    // opts.flip mirrors the photograph (gives a distinct frame from the same person); opts.dy moves the face up or down
+    setFace(url, left = 100, opts = {}) {
+      return new Promise((res) => {
+        const i = new Image()
+        i.onload = () => {
+          let src = i
+          if (opts.flip) { const c = document.createElement('canvas'); c.width = i.width; c.height = i.height; const x = c.getContext('2d'); x.translate(i.width, 0); x.scale(-1, 1); x.drawImage(i, 0, 0); src = c }
+          st.img = src; st.left = left; st.dy = opts.dy ?? 0; st.scale = opts.scale ?? 1; st.t0 = null; draw(); res()
+        }
+        i.src = url
+      })
+    },
     setMode(m) { st.mode = m },
     onChallenge(ch) { st.sign = ch.challenge === 'turn_right' ? -1 : 1; st.base = st.sign < 0 ? 150 : 50; st.left = st.base; st.t0 = null },
     startClock() { st.t0 = performance.now() },
     reset() { st.t0 = null; st.left = 100 },
   }
-  const stream = canvas.captureStream(15)
   navigator.mediaDevices.getUserMedia = async () => {
     if (window.__denyCamera) throw Object.assign(new Error('denied'), { name: 'NotAllowedError' })
-    return stream
+    return canvas.captureStream(15) // a fresh live stream per request, as a real camera gives (the app stops its tracks when it is done)
   }
   const orig = window.fetch.bind(window)
   window.fetch = async (...a) => {
@@ -70,7 +87,7 @@ const CAMERA_SCRIPT = () => {
   }
 }
 
-const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] })
+const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}) })
 const newCtx = async (extra = {}) => {
   const ctx = await browser.newContext({ viewport: VIEWS.desktop, ...extra })
   await ctx.addInitScript(CAMERA_SCRIPT)
@@ -150,40 +167,59 @@ await step('customer registration through the UI lands on the dashboard', async 
 })
 await step('axe: customer dashboard (new)', async () => { const v = await axe(cpage, 'customer dashboard (new)'); return `${v.length} violation types` })
 
-// ---------------- face setup: camera, capture, train, test
-await step('face setup: camera preview starts from the simulated camera', async () => {
-  await cpage.goto(APP + '/face')
-  await cpage.getByRole('button', { name: 'Turn camera on' }).click()
-  await cpage.getByRole('button', { name: 'Turn camera off' }).waitFor()
-  await cpage.evaluate((u) => window.__cam.setFace(u, 100), FACES.me[0])
-  await cpage.waitForFunction(() => { const v = document.querySelector('video'); return v && v.videoWidth > 0 })
-  await shot(cpage, '04-face-setup-camera-on')
-})
-await step('face setup: 10 samples captured across poses; progress + quality feedback shown', async () => {
-  const poses = ['neutral', 'turn_left', 'turn_right', 'chin_up']
-  let lastNotice = ''
-  for (let i = 0; i < 10; i++) {
-    await cpage.evaluate((u) => window.__cam.setFace(u, 100), FACES.me[i])
-    await cpage.waitForTimeout(250)
-    await cpage.locator(`input[name=pose][value=${poses[i % 4]}]`).check()
-    await cpage.getByRole('button', { name: 'Capture sample' }).click()
-    await cpage.getByText(/^Sample saved\./).waitFor({ timeout: 15000 })
-    lastNotice = await cpage.getByText(/^Sample saved\./).innerText()
-    await cpage.waitForTimeout(150)
+// ---------------- face setup: guided, automatic capture, then train and test
+// The simulated camera cannot turn a head, so this driver plays the person: it shows a different frame after every
+// capture and moves the face sideways or up and down for the pose the screen asks for. The app itself decides when
+// to capture; this script never clicks a capture button (there is none).
+const POSE_OFFSET = { Straight: [100, 0], Left: [140, 0], Right: [60, 0], Up: [100, -30], Down: [100, 30] }
+async function playGuidedSetup(page, who = 'me', timeoutMs = 240000) {
+  const t0 = Date.now(); let lastKey = ''; const phases = new Set()
+  while (Date.now() - t0 < timeoutMs) {
+    const phase = await page.getByTestId('enroll-stage').getAttribute('data-phase')
+    phases.add(phase)
+    if (phase === 'COMPLETED') break
+    if (phase === 'ERROR') throw new Error('guided setup stopped: ' + (await page.getByRole('region', { name: 'Guided face setup' }).innerText()).slice(0, 200))
+    const n = Number(await page.getByRole('progressbar', { name: 'Setup progress' }).getAttribute('aria-valuenow'))
+    const label = (await page.locator('ol[aria-label="Head positions"] li[aria-current=step]').first().innerText().catch(() => 'Straight')).split('\n')[0].trim()
+    const key = `${n}|${label}`
+    if (key !== lastKey) {
+      lastKey = key
+      const [left, dy] = POSE_OFFSET[label] ?? [100, 0]
+      await page.evaluate(([u, l, o]) => window.__cam.setFace(u, l, o), [FACES[who][n % 10], left, { flip: n >= 10, dy, scale: 0.6 }])
+    }
+    await page.waitForTimeout(150)
   }
-  const bar = await cpage.getByRole('progressbar', { name: 'Samples collected' }).getAttribute('aria-valuenow')
-  await shot(cpage, '05-face-setup-samples')
-  return `progressbar now=${bar}; last notice: "${lastNotice}"`
+  return [...phases]
+}
+await step('face setup: there is no per-sample Capture button and no manual pose picker', async () => {
+  await cpage.goto(APP + '/face')
+  await cpage.getByRole('button', { name: 'Start face setup' }).waitFor()
+  if (await cpage.getByRole('button', { name: /capture sample/i }).count()) throw new Error('manual capture button still present')
+  if (await cpage.getByRole('radio').count()) throw new Error('manual pose picker still present')
+  const text = await cpage.getByRole('region', { name: 'Guided face setup' }).innerText()
+  if (/\bPCA\b|\bLDA\b/.test(text)) throw new Error('jargon in the enrollment card')
+  await shot(cpage, '04-face-setup-start')
 })
-await step('face setup: train model (2+ users) and show friendly model status', async () => {
-  await cpage.getByRole('button', { name: 'Train model' }).click()
-  await cpage.getByText(/Model trained/).waitFor({ timeout: 120000 })
-  await cpage.getByText(/The model includes your face and is up to date/).waitFor()
-  await shot(cpage, '06-face-setup-trained')
+await step('face setup: auto-capture walks five head positions and finishes with "Face setup complete"', async () => {
+  await cpage.evaluate((u) => window.__cam.setFace(u, 100, { scale: 0.6 }), FACES.me[0])
+  await cpage.getByRole('button', { name: 'Start face setup' }).click()
+  await cpage.getByTestId('enroll-stage').waitFor()
+  await cpage.waitForFunction(() => { const v = document.querySelector('video'); return v && v.videoWidth > 0 })
+  await shot(cpage, '05-face-setup-positioning')
+  const phases = await playGuidedSetup(cpage)
+  for (const need of ['POSITION_FACE', 'CHECKING_QUALITY', 'CAPTURING', 'CAPTURE_SUCCESS']) if (!phases.includes(need)) throw new Error('never saw phase ' + need + ' in ' + phases.join(','))
+  await cpage.getByText('Your face profile is ready.').first().waitFor({ timeout: 180000 })
+  const bar = await cpage.getByRole('progressbar', { name: 'Setup progress' }).getAttribute('aria-valuenow')
+  if (bar !== '15') throw new Error('progress ' + bar)
+  await cpage.getByText('Face setup complete').first().waitFor()
+  await shot(cpage, '06-face-setup-complete')
+  return `phases seen: ${phases.join(' > ')}`
 })
 await step('face setup: "Recognise me" with the same person is accepted', async () => {
-  await cpage.evaluate((u) => window.__cam.setFace(u, 100), FACES.me[3])
-  await cpage.waitForTimeout(300)
+  await cpage.getByRole('button', { name: 'Turn camera on to test' }).click()
+  await cpage.getByRole('button', { name: 'Recognise me' }).waitFor()
+  await cpage.evaluate((u) => window.__cam.setFace(u, 100, { scale: 0.6 }), FACES.me[3])
+  await cpage.waitForTimeout(500)
   await cpage.getByRole('button', { name: 'Recognise me' }).click()
   await cpage.getByText('Recognised as you.').waitFor({ timeout: 15000 })
   await cpage.getByText(/Match confidence/).waitFor()
@@ -261,8 +297,13 @@ await step('FacePay authentication: camera → liveness → identity → authori
   if (!/₹950\.00/.test(amt)) throw new Error('confirm amount ' + amt)
   const body = await cpage.locator('main').innerText()
   if (/\bdistance\b/i.test(body.replace(/Technical details[\s\S]*$/m, ''))) { /* distance only inside details */ }
+  const stageTexts = (await cpage.getByRole('list', { name: 'Payment stages' }).first().locator('li').allInnerTexts()).map((t) => t.replace(/^[✓✕•–]\s*/, '').replace(/\s*:\s*(done|in progress|not yet|failed)$/, '').trim())
+  const want = ['Face detected', 'Identity recognized', 'Basic liveness check passed', 'Payment authorization created', 'Customer confirmation', 'Payment processed']
+  if (JSON.stringify(stageTexts) !== JSON.stringify(want)) throw new Error('stages: ' + JSON.stringify(stageTexts))
+  const txt = await cpage.locator('main').innerText()
+  if (/bank-grade|military-grade|impossible to hack|100% secure|cannot be spoofed/i.test(txt)) throw new Error('forbidden claim on the confirm screen')
   await shot(cpage, '15-confirm-payment')
-  return 'authorized, confirm amount ' + amt
+  return 'authorized, six stages shown, confirm amount ' + amt
 })
 await step('raw model internals are hidden behind "Technical details" by default', async () => {
   const open = await cpage.locator('details').first().evaluate((d) => d.open)
@@ -272,10 +313,10 @@ await step('raw model internals are hidden behind "Technical details" by default
 })
 await step('axe: confirm payment', async () => { const v = await axe(cpage, 'confirm payment'); return `${v.length} violation types` })
 await step('payment confirmation → processing → success screen → receipt', async () => {
-  await cpage.getByRole('button', { name: /^Confirm ₹950\.00/ }).click()
-  await cpage.getByRole('heading', { name: 'Payment Successful' }).waitFor({ timeout: 20000 })
+  await cpage.getByRole('button', { name: /^Confirm payment of ₹950\.00/ }).click()
+  await cpage.getByRole('heading', { name: 'Payment successful' }).waitFor({ timeout: 20000 })
   const done = cpage.getByRole('region', { name: 'Payment successful' })
-  for (const t of ['SuperGrocery', 'Simulated payment', 'Transaction completed']) await done.getByText(t).first().waitFor()
+  for (const t of ['SuperGrocery', 'Simulated payment', 'Authenticated: Face + basic liveness check']) await done.getByText(t).first().waitFor()
   const txid = await done.locator('.font-mono').innerText()
   if (!/^FP-[0-9A-Z]{10}$/.test(txid)) throw new Error('txid ' + txid)
   await shot(cpage, '16-success')
@@ -284,7 +325,7 @@ await step('payment confirmation → processing → success screen → receipt',
   await cpage.getByRole('link', { name: 'View receipt' }).click()
   const rec = cpage.getByRole('article', { name: 'Payment receipt' })
   await cpage.getByRole('heading', { name: 'Transaction details' }).waitFor()
-  for (const t of ['Vihaan Gandhi', 'SuperGrocery', 'SG-10492', 'FacePay', 'Face verified', 'Basic liveness check passed', 'Successful']) await rec.getByText(t).first().waitFor()
+  for (const t of ['Vihaan Gandhi', 'SuperGrocery', 'SG-10492', 'FacePay', 'Face + basic liveness check', 'Successful']) await rec.getByText(t).first().waitFor()
   await cpage.getByRole('button', { name: 'Download / Print receipt' }).waitFor()
   await shot(cpage, '17-receipt')
   return txid
@@ -350,6 +391,25 @@ await step('merchant receipt page opens from the transactions table', async () =
   await mpage.getByRole('article', { name: 'Payment receipt' }).waitFor()
 })
 
+// ---------------- security page: payment PIN (optional, used for higher-risk payments)
+await step('security: page shows face payments on; set an optional 6-digit payment PIN', async () => {
+  await cpage.goto(APP + '/security')
+  await cpage.getByRole('heading', { name: 'Security', exact: true }).waitFor()
+  const sw = cpage.getByRole('switch', { name: 'Face authentication for payments' })
+  if ((await sw.getAttribute('aria-checked')) !== 'true') throw new Error('face payments should be on')
+  await cpage.getByRole('button', { name: 'Set a PIN' }).click()
+  await cpage.getByLabel('Your account password').fill(PW)
+  await cpage.getByLabel('New 6-digit PIN').fill('482915')
+  await shot(cpage, '08b-security-pin')
+  await cpage.getByRole('button', { name: 'Save PIN' }).click()
+  await cpage.getByText('Payment PIN saved.').waitFor()
+  await cpage.getByText('A payment PIN is set.').waitFor()
+  const body = await cpage.locator('main').innerText()
+  if (/482915/.test(body)) throw new Error('PIN shown on the page')
+  await shot(cpage, '08c-security')
+})
+await step('axe: security', async () => { const v = await axe(cpage, 'security'); return `${v.length} violation types` })
+
 // ---------------- negative paths in the real browser
 let session2
 await step('wrong person (stranger photo) is rejected and the payment stays unpaid', async () => {
@@ -375,17 +435,20 @@ await step('the checkout shows remaining attempts after rejections', async () =>
   const txt = await cpage.locator('main').innerText(); return txt.match(/\d of \d face checks left/i)?.[0] ?? 'attempt counter not visible in this state'
 })
 
-await step('camera permission denied: clear message, nothing breaks', async () => {
+await step('camera permission denied: clear message, nothing breaks, setup can be retried', async () => {
   const dctx = await newCtx(); const dp = await dctx.newPage()
   await dp.addInitScript(() => { window.__denyCamera = true })
-  await dp.goto(APP + '/login')
-  await dp.getByLabel('Email').fill(CUSTOMER.email); await dp.getByLabel('Password').fill(PW)
-  await dp.getByRole('button', { name: 'Sign in' }).click()
+  await dp.goto(APP + '/register')   // a brand-new customer, so the guided setup is offered from the start
+  await dp.getByLabel('Full name').fill('Denied Camera'); await dp.getByLabel('Email').fill(`e2e-denied-${tag}@example.com`)
+  await dp.getByLabel('Password', { exact: true }).fill(PW); await dp.getByLabel('Confirm password').fill(PW)
+  await dp.getByRole('button', { name: /create account/i }).click()
   await dp.getByRole('heading', { name: /^Good (morning|afternoon|evening)/ }).waitFor()
   await dp.goto(APP + '/face')
-  await dp.getByRole('button', { name: 'Turn camera on' }).click()
-  await dp.getByText(/Camera access is required for FacePay authentication/).waitFor()
-  await dp.getByRole('button', { name: 'Try the camera again' }).waitFor()
+  await dp.getByRole('button', { name: 'Start face setup' }).click()
+  await dp.getByText(/Camera access is required for FacePay authentication/).first().waitFor()
+  await dp.getByRole('button', { name: 'Try again' }).waitFor()
+  const phase = await dp.getByTestId('enroll-stage').getAttribute('data-phase')
+  if (phase !== 'ERROR') throw new Error('phase ' + phase)
   await shot(dp, '25-camera-denied')
   await dctx.close()
 })
@@ -434,7 +497,7 @@ await step('authorization: customer cannot open merchant pages and vice-versa (r
 for (const vn of ['tablet', 'mobile']) {
   await step(`${vn}: key pages have no horizontal scroll; screenshots`, async () => {
     const bad = []
-    for (const [p, paths] of [[cpage, ['/dashboard', '/face', '/authenticate', '/transactions', '/profile']], [mpage, ['/merchant/dashboard', '/merchant/transactions', '/merchant/payments/new']]]) {
+    for (const [p, paths] of [[cpage, ['/dashboard', '/face', '/security', '/authenticate', '/transactions', '/profile']], [mpage, ['/merchant/dashboard', '/merchant/transactions', '/merchant/payments/new']]]) {
       await p.setViewportSize(VIEWS[vn])
       for (const path of paths) {
         await p.goto(APP + path); await p.waitForLoadState('networkidle')
@@ -456,6 +519,7 @@ await step('mobile: bottom navigation is visible, marks the current page and nav
   await cpage.getByRole('heading', { name: 'Activity' }).waitFor()
   if ((await nav.getByRole('link', { name: 'Activity' }).getAttribute('aria-current')) !== 'page') throw new Error('current page not marked')
 })
+let stepUpNote = ''
 await step('mobile: complete a second payment end-to-end on a 390×844 screen', async () => {
   const path = await merchantCreatesPayment('250.50', 'SG-10494')
   await cpage.setViewportSize(VIEWS.mobile)
@@ -470,16 +534,72 @@ await step('mobile: complete a second payment end-to-end on a 390×844 screen', 
   await cpage.getByText('Quick security check').waitFor({ timeout: 10000 })
   await shot(cpage, '34-mobile-liveness')
   await cpage.getByRole('heading', { name: 'Confirm payment' }).waitFor({ timeout: 30000 })
+  // two failed face checks were made a few minutes ago in this run, so the server asks for the payment PIN
+  const needsPin = await cpage.getByLabel('Payment PIN').count()
+  if (needsPin) {
+    const why = await cpage.getByText(/Because of/).innerText()
+    await cpage.getByLabel('Payment PIN').fill('482915')
+    stepUpNote = 'PIN requested: ' + why
+  }
   const o = await overflow(cpage); if (o > 0) throw new Error('overflow ' + o)
-  const btn = await cpage.getByRole('button', { name: /^Confirm ₹250\.50/ }).boundingBox(); if (!btn || btn.height < 44) throw new Error('confirm button too small ' + JSON.stringify(btn))
+  const btn = await cpage.getByRole('button', { name: /^Confirm payment of ₹250\.50/ }).boundingBox(); if (!btn || btn.height < 44) throw new Error('confirm button too small ' + JSON.stringify(btn))
   await shot(cpage, '35-mobile-confirm')
-  await cpage.getByRole('button', { name: /^Confirm ₹250\.50/ }).click()
-  await cpage.getByRole('heading', { name: 'Payment Successful' }).waitFor({ timeout: 20000 })
+  await cpage.getByRole('button', { name: /^Confirm payment of ₹250\.50/ }).click()
+  await cpage.getByRole('heading', { name: 'Payment successful' }).waitFor({ timeout: 20000 })
   await shot(cpage, '36-mobile-success')
   await cpage.getByRole('link', { name: 'View receipt' }).click()
   await cpage.getByRole('article', { name: 'Payment receipt' }).waitFor()
   await shot(cpage, '37-mobile-receipt')
-  return `camera preview ${Math.round(v.width)}×${Math.round(v.height)}px, confirm button ${Math.round(btn.width)}×${Math.round(btn.height)}px`
+  return `camera preview ${Math.round(v.width)}×${Math.round(v.height)}px, confirm button ${Math.round(btn.width)}×${Math.round(btn.height)}px; ${stepUpNote || 'no PIN asked'}`
+})
+
+// ---------------- payment hardening in the real browser
+await cpage.setViewportSize(VIEWS.desktop)
+await step('large payment: the server asks for the PIN; a wrong PIN is refused without losing the authorization; the right PIN pays', async () => {
+  const path = await merchantCreatesPayment('12000.00', 'SG-BIG-1')
+  await cpage.goto(APP + path)
+  await cpage.getByRole('button', { name: 'Pay with Face' }).click()
+  await cpage.getByRole('button', { name: 'Turn camera on' }).click()
+  await cpage.getByRole('button', { name: 'Turn camera off' }).waitFor()
+  await authenticateOnPage(cpage, 'me', 8)
+  await cpage.getByRole('heading', { name: 'Confirm payment' }).waitFor({ timeout: 30000 })
+  await cpage.getByText('Risk-based authorization prototype').waitFor()
+  await cpage.getByText(/Because of a larger amount/i).waitFor()
+  const confirm = cpage.getByRole('button', { name: /^Confirm payment of ₹12,000\.00/ })
+  if (!(await confirm.isDisabled())) throw new Error('confirm should wait for the PIN')
+  await shot(cpage, '40-pin-required')
+  await cpage.getByLabel('Payment PIN').fill('000000'); await confirm.click()
+  await cpage.getByRole('alert').filter({ hasText: /not correct/ }).waitFor({ timeout: 15000 })
+  await shot(cpage, '41-pin-wrong')
+  await cpage.getByLabel('Payment PIN').fill('482915'); await confirm.click()
+  await cpage.getByRole('heading', { name: 'Payment successful' }).waitFor({ timeout: 20000 })
+  await shot(cpage, '42-pin-success')
+})
+await step('security: turning face payments off blocks face authentication, turning them on restores it', async () => {
+  await cpage.goto(APP + '/security')
+  await cpage.getByRole('switch', { name: 'Face authentication for payments' }).click()
+  await cpage.getByText('Face payments are off.').waitFor()
+  const path = await merchantCreatesPayment('99.00', 'SG-OFF-1')
+  await cpage.goto(APP + path)
+  await cpage.getByRole('button', { name: 'Pay with Face' }).click()
+  await cpage.getByRole('button', { name: 'Turn camera on' }).click()
+  await cpage.getByRole('button', { name: 'Turn camera off' }).waitFor()
+  await authenticateOnPage(cpage, 'me', 9)
+  await cpage.getByRole('alert').filter({ hasText: /Face payments are turned off/ }).waitFor({ timeout: 15000 })
+  await cpage.getByRole('link', { name: 'Open security settings' }).waitFor()
+  await shot(cpage, '43-face-payments-off')
+  await cpage.goto(APP + '/security')
+  await cpage.getByRole('switch', { name: 'Face authentication for payments' }).click()
+  await cpage.getByText('Face payments are on.').waitFor()
+})
+await step('security page lists recent face checks, payments and events without raw biometric data', async () => {
+  await cpage.goto(APP + '/security')
+  await cpage.getByRole('heading', { name: 'Recent face checks' }).waitFor()
+  await cpage.getByText('Successful').first().waitFor()
+  await cpage.getByText(/Unsuccessful/).first().waitFor()
+  const text = await cpage.locator('main').innerText()
+  if (/confidence|distance|vector|embedding/i.test(text)) throw new Error('scores shown on the security page')
+  await shot(cpage, '44-security-activity')
 })
 
 fs.writeFileSync('results.json', JSON.stringify({ results, axeReport }, null, 2))

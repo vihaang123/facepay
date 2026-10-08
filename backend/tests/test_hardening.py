@@ -123,11 +123,11 @@ def test_rate_limiter_still_limits_after_housekeeping(monkeypatch):
 def test_deleting_face_data_is_rate_limited(client, customer, monkeypatch):
     from app.api import faces as faces_api
 
-    monkeypatch.setattr(faces_api.face_limiter, "enabled", True)
-    monkeypatch.setattr(faces_api.face_limiter, "max_requests", 2)
-    faces_api.face_limiter.reset()
+    monkeypatch.setattr(faces_api.enroll_limiter, "enabled", True)
+    monkeypatch.setattr(faces_api.enroll_limiter, "max_requests", 2)
+    faces_api.enroll_limiter.reset()
     codes = [client.delete("/faces/samples", headers=customer["headers"]).status_code for _ in range(4)]
-    faces_api.face_limiter.reset()
+    faces_api.enroll_limiter.reset()
     assert codes == [204, 204, 429, 429]
 
 

@@ -125,6 +125,8 @@ Render's free tier sleeps, so the first request after idle can be slow.
 * Tokens are kept in `localStorage`; no refresh tokens, revocation, email verification, password reset or Content-Security-Policy.
 * One encryption key, no rotation. No consent records or retention policy.
 * No refunds, balances, payouts or idempotency keys.
+* Guided face setup was exercised with a simulated camera only; its brightness, sharpness, motion and head-position thresholds are untuned, pose labels are client-asserted, and the duplicate-frame threshold is provisional.
+* The payment PIN and risk rules are a prototype sketch, not a fraud system.
 
 ## Documentation
 
@@ -134,6 +136,7 @@ Render's free tier sleeps, so the first request after idle can be slow.
 | [`docs/final/evaluation-results.md`](docs/final/evaluation-results.md) | All measured results and their conditions |
 | [`docs/final/reproducibility.md`](docs/final/reproducibility.md) | Environment, dataset, seeds, commands |
 | [`docs/final/security-assessment.md`](docs/final/security-assessment.md) | Threats, mitigations, residual risks |
+| [`docs/final/guided-enrollment-and-payment-hardening.md`](docs/final/guided-enrollment-and-payment-hardening.md) | Guided auto-capture enrollment, authorization binding, PIN step-up, limits, Security page |
 | [`docs/final/deployment-guide.md`](docs/final/deployment-guide.md) | Deployment preparation and checks |
 | [`docs/final/demo-script.md`](docs/final/demo-script.md) | Eight-minute demo walkthrough |
 | [`docs/ml-architecture.md`](docs/ml-architecture.md), [`docs/ml-feasibility.md`](docs/ml-feasibility.md) | Pipeline design and feasibility experiments |

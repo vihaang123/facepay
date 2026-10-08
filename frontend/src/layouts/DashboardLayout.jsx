@@ -3,7 +3,7 @@ import Icon from '../components/Icon'
 import { Avatar, Button, Logo } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
 import {
-  DASHBOARD_PATH, FACE_PATH, LOGIN_PATH, NEW_PAYMENT_PATH, PAY_PATH, PROFILE_PATH, TRANSACTIONS_PATH,
+  DASHBOARD_PATH, FACE_PATH, LOGIN_PATH, NEW_PAYMENT_PATH, PAY_PATH, PROFILE_PATH, SECURITY_PATH, TRANSACTIONS_PATH,
 } from '../utils/roles'
 
 // [label, path, icon, end]. The same list drives the desktop bar and the phone's bottom navigation.
@@ -13,6 +13,7 @@ const NAV = {
     ['Pay', PAY_PATH, 'link'],
     ['Activity', TRANSACTIONS_PATH.customer, 'receipt'],
     ['Face profile', FACE_PATH, 'face'],
+    ['Security', SECURITY_PATH, 'shield', false, 'desktop'], // phones reach it from Profile; five items is the most a thumb bar holds
     ['Profile', PROFILE_PATH.customer, 'user'],
   ],
   merchant: [
@@ -83,7 +84,7 @@ export default function DashboardLayout() {
       {!focused && (
         <nav aria-label="Mobile" className="no-print fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
           <ul className="mx-auto flex max-w-md justify-around px-1">
-            {NAV[role].map(([label, to, icon, end]) => (
+            {NAV[role].filter((item) => item[4] !== 'desktop').map(([label, to, icon, end]) => (
               <li key={to} className="flex-1">
                 <NavLink
                   to={to}

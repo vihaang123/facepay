@@ -8,6 +8,8 @@ from app.database.session import get_db
 from app.ml.preprocessing import FaceDetector, FaceImageError, HaarFaceDetector
 from app.models import User
 from app.schemas.faces import (
+    AssessRequest,
+    AssessResult,
     EnrollmentStatus,
     ModelStatus,
     ModelSummary,
@@ -21,6 +23,8 @@ from app.services import face_service as svc
 _s = get_settings()
 face_limiter = RateLimiter(_s.face_rate_limit_per_minute, enabled=_s.rate_limit_enabled)
 train_limiter = RateLimiter(_s.train_rate_limit_per_minute, enabled=_s.rate_limit_enabled)
+enroll_limiter = RateLimiter(_s.enroll_rate_limit_per_minute, enabled=_s.rate_limit_enabled)  # sample uploads and removals
+assess_limiter = RateLimiter(_s.assess_rate_limit_per_minute, enabled=_s.rate_limit_enabled)  # live framing feedback
 
 _detector: FaceDetector | None = None
 
@@ -59,7 +63,16 @@ def enrollment(user: User = Depends(get_current_customer), db: Session = Depends
     return svc.enrollment_status(db, user)
 
 
-@router.post("/samples", response_model=SampleResult, status_code=201, dependencies=[Depends(_limit(face_limiter))])
+@router.post("/assess", response_model=AssessResult, dependencies=[Depends(_limit(assess_limiter))])
+def assess(data: AssessRequest, user: User = Depends(get_current_customer), detector: FaceDetector = Depends(get_detector)):
+    """Live framing feedback for guided capture. Stateless: the frame is analysed and discarded, never stored."""
+    try:
+        return svc.assess_frame(svc.decode_upload(data.image_base64), detector)
+    except FaceImageError as exc:
+        raise _http(exc) from None
+
+
+@router.post("/samples", response_model=SampleResult, status_code=201, dependencies=[Depends(_limit(enroll_limiter))])
 def upload_sample(
     data: SampleUpload,
     user: User = Depends(get_current_customer),
@@ -72,7 +85,7 @@ def upload_sample(
         raise _http(exc) from None
 
 
-@router.delete("/samples", status_code=204, dependencies=[Depends(_limit(face_limiter))])
+@router.delete("/samples", status_code=204, dependencies=[Depends(_limit(enroll_limiter))])
 def delete_samples(user: User = Depends(get_current_customer), db: Session = Depends(get_db)):
     svc.delete_user_face_data(db, user)
 

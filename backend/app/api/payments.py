@@ -76,7 +76,16 @@ def complete_authentication(
 
 @router.post("/sessions/{session_id}/confirm", response_model=ReceiptOut, dependencies=[Depends(_pay_limit)])
 def confirm(session_id: str, data: ConfirmRequest, user: User = Depends(get_current_customer), db: Session = Depends(get_db)):
-    return svc.confirm_payment(db, user, session_id, data.authorization_token, data.expected_amount)
+    return svc.confirm_payment(
+        db,
+        user,
+        session_id,
+        data.authorization_token,
+        expected_amount=data.expected_amount,
+        expected_merchant=data.expected_merchant,
+        expected_order_reference=data.expected_order_reference,
+        pin=data.pin,
+    )
 
 
 @router.get("/transactions", response_model=list[CustomerTransactionOut])

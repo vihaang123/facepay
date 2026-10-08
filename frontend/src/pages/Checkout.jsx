@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
-import { AuthDetails } from '../components/AuthStages'
+import { Link, useParams } from 'react-router-dom'
+import { AuthDetails, PaymentStages } from '../components/AuthStages'
 import Icon from '../components/Icon'
 import FaceAuthFlow from '../components/FaceAuthFlow'
-import { Amount, MerchantHeader, Row, SimulatedTag, StatusBadge, Timeline } from '../components/payUi'
+import { Amount, MerchantHeader, Row, SecurityNote, SimulatedTag, StatusBadge, Timeline } from '../components/payUi'
 import { Alert, Button, ButtonLink, Card, ErrorState, Skeleton } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
 import { ApiError } from '../services/api'
 import { authenticateForPayment, confirmPayment, getCheckout, startPaymentAuth } from '../services/payments'
-import { DASHBOARD_PATH, RECEIPT_PATH } from '../utils/roles'
-import { formatMoney, isPayable } from '../utils/format'
+import { DASHBOARD_PATH, RECEIPT_PATH, SECURITY_PATH } from '../utils/roles'
+import { formatDateTime, formatMoney, isPayable } from '../utils/format'
 import { customerTimeline } from '../utils/timeline'
 
 const TERMINAL_MESSAGES = {
@@ -25,6 +25,8 @@ const CONFIRM_ERRORS = {
   AUTHORIZATION_INVALID: "We couldn't authorize this payment. Please try again.",
   AUTHORIZATION_USED: "We couldn't authorize this payment. Please try again.",
   AMOUNT_MISMATCH: 'The amount for this payment changed. Please review it and verify your face again.',
+  MERCHANT_MISMATCH: 'The merchant for this payment changed. Please review it and verify your face again.',
+  ORDER_MISMATCH: 'The order for this payment changed. Please review it and verify your face again.',
   SESSION_ALREADY_PAID: 'This payment was already completed. Check your payment history before paying again.',
 }
 
@@ -53,29 +55,24 @@ function Secured() {
   return (
     <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-slate-600">
       <Icon name="lock" className="h-3.5 w-3.5" />
-      Secured by FacePay Authentication
+      Face + basic liveness check, then your confirmation
     </p>
   )
 }
 
-/** One verified fact on the confirm and processing screens. */
-function Check({ children, pending = false }) {
-  return (
-    <li className="flex items-center gap-2.5 text-sm font-semibold">
-      {pending ? (
-        <span aria-hidden="true" className="h-5 w-5 animate-spin rounded-full border-2 border-brand-200 border-t-brand-700" />
-      ) : (
-        <span aria-hidden="true" className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white"><Icon name="check" className="h-3 w-3" strokeWidth="3.2" /></span>
-      )}
-      {children}
-    </li>
-  )
-}
+const PIN_LENGTH = 6
 
-function Authorized({ session, auth, outcome, error, onConfirm, onRestart }) {
+function Authorized({ session, auth, outcome, error, pinError, busy, onConfirm, onRestart }) {
   const left = useSecondsLeft(auth.expiresAt)
+  const [pin, setPin] = useState('')
   const expired = left === 0
   const amount = formatMoney(session.amount, session.currency)
+  const needsPin = auth.stepUp
+  const pinReady = !needsPin || (auth.pinSet && pin.length === PIN_LENGTH)
+  const submit = (e) => {
+    e.preventDefault()
+    if (pinReady && !busy) onConfirm(needsPin ? pin : undefined)
+  }
   return (
     <section aria-label="Confirm payment" className="animate-rise flex flex-col gap-5">
       <div className="rounded-[1.5rem] border border-slate-200/80 bg-white p-6 text-center shadow-card">
@@ -84,11 +81,13 @@ function Authorized({ session, auth, outcome, error, onConfirm, onRestart }) {
         <dl className="mt-5 text-left">
           <Row label="To">{session.merchant_name}</Row>
           <Row label="Order">{session.order_reference ?? '—'}</Row>
-          <Row label="Authentication"><span className="text-emerald-800">✓ Face verified</span></Row>
-          <Row label="Liveness"><span className="text-emerald-800">✓ Passed</span></Row>
+          <Row label="Authenticated"><span className="text-emerald-800">Face + basic liveness check</span></Row>
         </dl>
         <SimulatedTag className="mt-3" />
       </div>
+
+      <PaymentStages outcome={outcome} authorized />
+
       {error && <Alert tone="error">{error}</Alert>}
       {expired ? (
         <div className="flex flex-col gap-3">
@@ -96,11 +95,34 @@ function Authorized({ session, auth, outcome, error, onConfirm, onRestart }) {
           <Button size="lg" onClick={onRestart}>Verify again</Button>
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
-          <Button size="lg" onClick={onConfirm}>Confirm {amount}</Button>
-          <Button variant="ghost" onClick={onRestart}>Cancel</Button>
-          <p className="text-center text-xs text-slate-600">This confirmation can be used once and stays valid for {clock(left)}.</p>
-        </div>
+        <form onSubmit={submit} className="flex flex-col gap-3" noValidate>
+          {needsPin && (
+            <div className="rounded-xl bg-amber-50 p-4 text-sm ring-1 ring-amber-200">
+              <p className="font-semibold text-amber-900">This payment needs your payment PIN</p>
+              {auth.stepUpReasons.length > 0 && <p className="mt-1 text-amber-900">Because of {auth.stepUpReasons.join(', ')}.</p>}
+              <p className="mt-1 text-xs text-amber-900">Risk-based authorization prototype</p>
+              {auth.pinSet ? (
+                <div className="mt-3">
+                  <label htmlFor="payment-pin" className="block text-sm font-semibold text-slate-900">Payment PIN</label>
+                  <input
+                    id="payment-pin" name="payment-pin" type="password" inputMode="numeric" autoComplete="off" maxLength={PIN_LENGTH}
+                    value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH))}
+                    aria-describedby={pinError ? 'pin-error' : undefined} aria-invalid={pinError ? true : undefined}
+                    className="mt-1 w-40 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-center text-xl tracking-[0.4em]"
+                  />
+                  {pinError && <p id="pin-error" role="alert" className="mt-2 text-sm font-semibold text-rose-800">{pinError}</p>}
+                </div>
+              ) : (
+                <p className="mt-3">
+                  You have not set a payment PIN yet. <Link className="font-semibold underline" to={SECURITY_PATH}>Set one in Security</Link>, then verify your face again.
+                </p>
+              )}
+            </div>
+          )}
+          <Button size="lg" type="submit" disabled={!pinReady} loading={busy}>Confirm payment of {amount}</Button>
+          <Button variant="ghost" onClick={onRestart} disabled={busy}>Cancel</Button>
+          <p className="text-center text-xs text-slate-600">This authorization is for this payment only, can be used once and stays valid for {clock(left)}.</p>
+        </form>
       )}
       <details className="rounded-xl bg-white/70 px-4 py-3 text-sm ring-1 ring-slate-200">
         <summary className="cursor-pointer font-semibold">How FacePay verified you</summary>
@@ -111,35 +133,32 @@ function Authorized({ session, auth, outcome, error, onConfirm, onRestart }) {
 }
 
 /** Shown only while the confirm request is really in flight; it ends when the server answers. */
-function Processing() {
+function Processing({ outcome }) {
   return (
-    <section aria-label="Processing payment" className="animate-rise flex flex-col items-center gap-5 rounded-[1.5rem] border border-slate-200/80 bg-white p-8 shadow-card" role="status">
-      <h2 className="text-xl font-extrabold">Processing payment</h2>
-      <ul className="flex flex-col gap-3">
-        <Check>Face verified</Check>
-        <Check>Liveness verified</Check>
-        <Check>Authorization verified</Check>
-        <Check pending>Processing transaction</Check>
-      </ul>
+    <section aria-label="Processing payment" className="animate-rise flex flex-col gap-5 rounded-[1.5rem] border border-slate-200/80 bg-white p-8 shadow-card" role="status">
+      <h2 className="text-center text-xl font-extrabold">Processing payment</h2>
+      <PaymentStages outcome={outcome} authorized confirming />
     </section>
   )
 }
 
-function Success({ receipt, session }) {
+function Success({ receipt, session, outcome }) {
   return (
     <section aria-label="Payment successful" className="flex flex-col gap-5">
       <div className="rounded-[1.5rem] border border-slate-200/80 bg-white p-8 text-center shadow-card">
-        <span aria-hidden="true" className="mx-auto flex h-20 w-20 animate-pop items-center justify-center rounded-full bg-emerald-600 text-white">
+        <span aria-hidden="true" className="mx-auto flex h-20 w-20 motion-safe:animate-pop items-center justify-center rounded-full bg-emerald-600 text-white">
           <Icon name="check" className="h-10 w-10" strokeWidth="2.6" />
         </span>
-        <h1 className="mt-5 text-2xl font-extrabold">Payment Successful</h1>
+        <h1 className="mt-5 text-2xl font-extrabold">Payment successful</h1>
         <Amount value={receipt.amount} currency={receipt.currency} className="mt-2 text-5xl" data-testid="paid-amount" />
         <p className="mt-2 text-lg font-bold">{receipt.merchant_name ?? session.merchant_name}</p>
         <p className="mt-3 text-xs text-slate-600">Transaction</p>
         <p className="font-mono text-sm font-semibold">{receipt.transaction_id}</p>
-        <p className="mt-3 flex items-center justify-center gap-1.5 text-sm font-semibold text-emerald-800"><Icon name="check" className="h-4 w-4" strokeWidth="2.6" />Transaction completed</p>
+        <p className="mt-3 text-sm font-semibold text-emerald-800">Authenticated: {receipt.authentication ?? 'Face + basic liveness check'}</p>
+        <p className="mt-1 text-xs text-slate-600">{formatDateTime(receipt.timestamp)}</p>
         <SimulatedTag className="mt-4" />
       </div>
+      <PaymentStages outcome={outcome} authorized paid />
       <div className="flex flex-col gap-2">
         <ButtonLink to={RECEIPT_PATH.customer(receipt.transaction_id)} size="lg">View receipt</ButtonLink>
         <ButtonLink to={DASHBOARD_PATH.customer} variant="secondary" size="lg">Done</ButtonLink>
@@ -164,7 +183,7 @@ function Summary({ session, payable, attempts, onPay }) {
       </dl>
       {payable && (
         <div className="mt-5 flex flex-col gap-3">
-          <p className="text-center text-sm font-semibold">Pay securely with FacePay</p>
+          <p className="text-center text-sm font-semibold">Pay with FacePay</p>
           <Button size="lg" onClick={onPay}><Icon name="face" className="h-5 w-5" />Pay with Face</Button>
           <Secured />
           <p className="text-center text-xs text-slate-600">{attempts}</p>
@@ -184,6 +203,7 @@ export default function Checkout() {
   const [auth, setAuth] = useState(null) // { token, expiresAt }
   const [outcome, setOutcome] = useState(null)
   const [confirmError, setConfirmError] = useState(null)
+  const [pinError, setPinError] = useState(null)
   const [receipt, setReceipt] = useState(null)
 
   const load = useCallback(async () => {
@@ -203,13 +223,17 @@ export default function Checkout() {
     return () => { live = false }
   }, [token, sessionId])
 
-  const restart = () => { setAuth(null); setOutcome(null); setConfirmError(null); setStep('summary') }
+  const restart = () => { setAuth(null); setOutcome(null); setConfirmError(null); setPinError(null); setStep('summary') }
 
   const onOutcome = (result) => {
     setSession((s) => ({ ...s, status: result.session_status, attempts_remaining: result.attempts_remaining }))
     setOutcome(result)
     if (result.result === 'AUTHENTICATED' && result.authorization) {
-      setAuth({ token: result.authorization.authorization_token, expiresAt: result.authorization.expires_at })
+      const a = result.authorization
+      setAuth({
+        token: a.authorization_token, expiresAt: a.expires_at,
+        stepUp: Boolean(a.step_up_required), stepUpReasons: a.step_up_reasons ?? [], pinSet: Boolean(a.pin_set),
+      })
       setConfirmError(null)
       setStep('authorized')
     }
@@ -219,25 +243,40 @@ export default function Checkout() {
     if (err.status === 404 || err.status === 409) load() // the session changed under us: show its real state
   }
 
-  const confirm = async () => {
+  const confirm = async (pin) => {
     setStep('processing')
     setConfirmError(null)
+    setPinError(null)
     try {
-      const done = await confirmPayment(token, sessionId, { authorizationToken: auth.token, expectedAmount: session.amount })
+      const done = await confirmPayment(token, sessionId, {
+        authorizationToken: auth.token,
+        // Exactly what the customer was shown. The server compares each one with the session and the authorization.
+        expectedAmount: session.amount,
+        expectedMerchant: session.merchant_name,
+        expectedOrderReference: session.order_reference ?? '',
+        pin,
+      })
       setReceipt(done)
       setSession((s) => ({ ...s, status: 'PAID' }))
       setStep('paid')
     } catch (err) {
-      const known = err instanceof ApiError && err.code && CONFIRM_ERRORS[err.code]
-      if (known) {
+      const code = err instanceof ApiError ? err.code : null
+      if (code === 'PIN_INCORRECT' || code === 'PIN_REQUIRED') {
+        setStep('authorized') // the authorization is still valid; only the PIN needs another try
+        setPinError(err.message)
+      } else if (code === 'PIN_LOCKED' || code === 'PER_TRANSACTION_LIMIT' || code === 'DAILY_LIMIT_EXCEEDED' || code === 'BIOMETRIC_DISABLED') {
         restart()
-        setNotice(CONFIRM_ERRORS[err.code])
+        setNotice(err.message)
+        load()
+      } else if (code && CONFIRM_ERRORS[code]) {
+        restart()
+        setNotice(CONFIRM_ERRORS[code])
         load()
       } else if (err instanceof ApiError && err.status === 409) {
         restart()
         load()
       } else {
-        setStep('authorized') // network / server trouble: the ticket is still valid, let them retry
+        setStep('authorized') // network / server trouble: the authorization is still valid, let them retry
         setConfirmError(`${err.message} Your payment was not confirmed.`)
       }
     }
@@ -296,12 +335,14 @@ export default function Checkout() {
       )}
 
       {step === 'authorized' && auth && outcome && (
-        <Authorized session={session} auth={auth} outcome={outcome} error={confirmError} onConfirm={confirm} onRestart={restart} />
+        <Authorized session={session} auth={auth} outcome={outcome} error={confirmError} pinError={pinError} onConfirm={confirm} onRestart={restart} />
       )}
 
-      {step === 'processing' && <Processing />}
+      {step === 'processing' && <Processing outcome={outcome} />}
 
-      {step === 'paid' && receipt && <Success receipt={receipt} session={session} />}
+      {step === 'paid' && receipt && <Success receipt={receipt} session={session} outcome={outcome} />}
+
+      <SecurityNote />
 
       <Card title="Payment timeline" className="!p-5">
         <Timeline steps={timeline} />

@@ -21,6 +21,7 @@ export const PROFILE_PATH = {
 export const TRANSACTIONS_PATH = { customer: '/transactions', merchant: '/merchant/transactions' }
 
 export const FACE_PATH = '/face'
+export const SECURITY_PATH = '/security'
 export const AUTHENTICATE_PATH = '/authenticate'
 export const PAY_PATH = '/pay'
 

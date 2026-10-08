@@ -48,12 +48,17 @@ class CheckoutOut(BaseModel):
     expires_at: datetime | None
     max_auth_attempts: int
     attempts_remaining: int
+    authorization_seconds: int
 
 
 class AuthorizationOut(BaseModel):
     authorization_token: str  # shown once; the server keeps only its hash
     expires_in_seconds: int
     expires_at: datetime
+    # Risk-based authorization PROTOTYPE: when true, confirming also needs the payment PIN.
+    step_up_required: bool = False
+    step_up_reasons: list[str] = []  # plain-language reasons, never internal scores
+    pin_set: bool = False
 
 
 class PaymentAuthResult(AuthResult):
@@ -69,13 +74,17 @@ class PaymentVerifyRequest(VerifyRequest):
 
 
 class ConfirmRequest(BaseModel):
-    """Only the ticket and, optionally, the amount the customer was shown. The amount that is charged is always
-    the one stored in the payment session; a different expected_amount is refused."""
+    """The customer's explicit confirmation: the authorization ticket plus the amount, merchant and order they were
+    shown. All three must match the payment session, which alone decides what is charged. A payment PIN is needed
+    only when the authorization says step-up is required."""
 
     model_config = ConfigDict(extra="forbid")
 
     authorization_token: str = Field(min_length=20, max_length=128)
-    expected_amount: Decimal | None = Field(default=None, max_digits=14, decimal_places=2)
+    expected_amount: Decimal = Field(max_digits=14, decimal_places=2)
+    expected_merchant: str = Field(max_length=160)
+    expected_order_reference: str = Field(max_length=80)
+    pin: str | None = Field(default=None, max_length=12)
 
 
 class ReceiptOut(BaseModel):
@@ -90,6 +99,7 @@ class ReceiptOut(BaseModel):
     order_reference: str | None
     description: str | None
     session_id: str | None
+    authentication: str  # e.g. "Face + basic liveness check"
 
 
 class CustomerTransactionOut(BaseModel):

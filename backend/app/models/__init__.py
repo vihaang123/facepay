@@ -7,6 +7,7 @@ from app.models.entities import (  # noqa: F401
     ModelVersion,
     PaymentAuthorization,
     PaymentSession,
+    SecurityEvent,
     Transaction,
     User,
 )

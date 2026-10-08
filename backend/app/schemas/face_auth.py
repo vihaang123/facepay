@@ -74,5 +74,7 @@ class AttemptOut(BaseModel):
     liveness_result: str | None
     challenge: str | None
     model_version: str | None
+    payment_session_ref: str | None = None
+    transaction_ref: str | None = None
 
     model_config = {"from_attributes": True}

@@ -8,11 +8,11 @@ export function customerTimeline({ session, outcome, authorized = false, receipt
     ['Merchant creates payment', true],
     ['Customer opens checkout', true],
     ['Face detected', stage('FACE_DETECTION') === 'PASSED'],
-    ['Identity verified', stage('IDENTITY') === 'PASSED'],
+    ['Identity recognized', stage('IDENTITY') === 'PASSED'],
     ['Basic liveness check passed', stage('LIVENESS') === 'PASSED'],
-    ['Authorization approved', authorized || paid],
-    ['Payment confirmed', paid],
-    ['Transaction created', paid],
+    ['Payment authorization created', authorized || paid],
+    ['Customer confirmation', paid],
+    ['Payment processed', paid],
     ['Receipt generated', paid],
   ]
   const firstOpen = flow.findIndex(([, done]) => !done)

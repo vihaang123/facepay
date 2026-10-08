@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
+import Icon from '../components/Icon'
+import { useGuidedEnrollment } from '../hooks/useGuidedEnrollment'
+import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion'
+import { POSE_COPY } from '../utils/enrollConfig'
+import { LIVE_PHASES, PHASE } from '../utils/enrollMachine'
 import CameraView from '../components/CameraView'
 import { StatusBadge } from '../components/payUi'
 import { Alert, Button, Card, ConfirmPanel, ErrorState, PageHeader, Spinner } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
-import { useCamera } from '../hooks/useCamera'
-import { deleteSamples, getEnrollment, getModel, recognize, trainModel, uploadSample } from '../services/faces'
+import { CAMERA_MESSAGES, useCamera } from '../hooks/useCamera'
+import { deleteSamples, getEnrollment, getModel, recognize, trainModel } from '../services/faces'
 import { captureFrame } from '../utils/capture'
 import { faceStatus } from '../utils/faceStatus'
 import { pct } from '../utils/format'
@@ -80,20 +85,141 @@ function ModelPanel({ model }) {
   )
 }
 
-const qualityNote = (q) =>
-  q ? `Image quality looked good (face ${q.face_size}px wide${q.aligned ? ', well aligned' : ''}).` : ''
+
+const poseCopy = (pose, fallback) => POSE_COPY[pose] ?? { label: fallback ?? pose, title: fallback ?? 'Hold still', hint: '', retry: fallback ?? '' }
+
+/** The five head positions as a row of steps. Each shows its state in words and an icon, never by colour alone. */
+function PoseSteps({ sequence, currentPose, running }) {
+  return (
+    <ol aria-label="Head positions" className="flex items-start justify-between gap-1">
+      {sequence.map((p) => {
+        const done = p.count >= p.target
+        const current = running && p.pose === currentPose && !done
+        return (
+          <li key={p.pose} aria-current={current ? 'step' : undefined} className="flex min-w-0 flex-1 flex-col items-center gap-1 text-center">
+            <span
+              aria-hidden="true"
+              className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${done ? 'bg-emerald-600 text-white' : current ? 'bg-brand-700 text-white ring-4 ring-brand-100' : 'bg-slate-200 text-slate-700'}`}
+            >
+              {done ? <Icon name="check" className="h-4 w-4" strokeWidth="3" /> : p.count}
+            </span>
+            <span className={`text-xs ${current ? 'font-bold text-slate-900' : 'text-slate-700'}`}>{poseCopy(p.pose).label}</span>
+            <span className="sr-only">{done ? 'done' : current ? 'current' : `${p.count} of ${p.target} captured`}</span>
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+function headlineFor(state, ctx) {
+  const { phase, pose } = state
+  const copy = poseCopy(pose)
+  switch (phase) {
+    case PHASE.IDLE:
+      if (ctx.complete) return { title: 'Face setup complete', text: ctx.trained ? 'Your face is set up. You can pay with FacePay.' : 'All five positions are captured. Finish setup to start paying with your face.' }
+      return {
+        title: ctx.captured > 0 ? 'Continue your face setup' : 'Set up FacePay with your face',
+        text: 'FacePay will guide you through five head positions and capture each one automatically. It takes about a minute.',
+      }
+    case PHASE.CAMERA_STARTING: return { title: 'Starting your camera', text: 'Allow camera access if your browser asks.' }
+    case PHASE.POSITION_FACE:
+    case PHASE.CHECKING_QUALITY: return { title: copy.title, text: state.message || copy.hint }
+    case PHASE.CAPTURING: return { title: 'Capturing', text: 'Hold still for a moment.' }
+    case PHASE.CAPTURE_SUCCESS: return { title: 'Captured', text: state.complete ? 'That was the last one.' : 'Nice. Keep going.' }
+    case PHASE.NEXT_POSE: return { title: `Next: ${poseCopy(state.nextPose).title.toLowerCase()}`, text: 'Get ready.' }
+    case PHASE.COMPLETED: return { title: 'Face setup complete', text: ctx.finishing ? 'Preparing your face profile…' : ctx.trained ? 'Your face profile is ready.' : 'Finish setup to start paying with your face.' }
+    default: return { title: 'Face setup stopped', text: state.error === 'camera' ? CAMERA_MESSAGES[ctx.cameraStatus] ?? CAMERA_MESSAGES.error : state.error }
+  }
+}
+
+function GuidedSetup({ camera, enrollment, model, token, reducedMotion, onSample, finishing, finishError, onFinish }) {
+  const guided = enrollment.guided
+  const flow = useGuidedEnrollment({ token, camera, guided, reducedMotion, onSample, onComplete: onFinish })
+  const { state, start, cancel } = flow
+  const running = [PHASE.CAMERA_STARTING, ...LIVE_PHASES, PHASE.CAPTURING, PHASE.CAPTURE_SUCCESS, PHASE.NEXT_POSE].includes(state.phase)
+  const trained = Boolean(model?.includes_you && !model.stale)
+  const complete = guided.complete || state.phase === PHASE.COMPLETED
+  const head = headlineFor(state, { complete, trained, captured: guided.captured, finishing, cameraStatus: camera.status })
+  const warn = state.phase === PHASE.POSITION_FACE && state.message
+  const guideTone = state.phase === PHASE.CHECKING_QUALITY || state.phase === PHASE.CAPTURING ? 'ok' : warn ? 'warn' : null
+  const tone = state.phase === PHASE.CAPTURE_SUCCESS || state.phase === PHASE.COMPLETED ? 'ok' : 'neutral'
+  const current = guided.sequence.find((p) => p.pose === state.pose)
+  const overlay = running && [...LIVE_PHASES, PHASE.CAPTURING].includes(state.phase) ? (state.message || poseCopy(state.pose).title) : null
+
+  return (
+    <Card title="Set up your face" aria-label="Guided face setup">
+      <div data-testid="enroll-stage" data-phase={state.phase} data-motion={reducedMotion ? 'reduced' : 'full'}>
+        <CameraView
+          camera={camera}
+          controls={false}
+          busy={running}
+          overlay={overlay}
+          tone={tone}
+          guideTone={guideTone}
+          flash={state.phase === PHASE.CAPTURE_SUCCESS}
+          guide={running}
+          footnote="Frames are checked on the server and are not kept. When a position is captured, only a small grayscale crop is stored, encrypted."
+        />
+      </div>
+
+      <div className="mt-5 flex flex-col gap-4">
+        <div role="status" aria-live="polite" aria-atomic="true">
+          <h2 className="text-xl font-extrabold">{head.title}</h2>
+          {head.text && <p className={`mt-1 text-sm ${warn ? 'font-semibold text-amber-800' : 'text-slate-700'}`}>{head.text}</p>}
+        </div>
+
+        <PoseSteps sequence={guided.sequence} currentPose={state.pose} running={running} />
+        <Progress value={guided.captured} max={guided.required} label="Setup progress" />
+        {running && current && (
+          <p className="text-xs text-slate-700" data-testid="pose-samples">
+            {poseCopy(current.pose).label}: {current.count} of {current.target} captured
+          </p>
+        )}
+
+        {finishError && <Alert tone="error">{finishError}</Alert>}
+
+        <div className="flex flex-col gap-2 sm:flex-row">
+          {state.phase === PHASE.IDLE && !complete && <Button size="lg" onClick={start} className="sm:flex-1">{guided.captured > 0 ? 'Continue face setup' : 'Start face setup'}</Button>}
+          {state.phase === PHASE.IDLE && complete && !trained && <Button size="lg" onClick={onFinish} loading={finishing} className="sm:flex-1">Finish setup</Button>}
+          {state.phase === PHASE.ERROR && <Button size="lg" onClick={start} className="sm:flex-1">Try again</Button>}
+          {state.phase === PHASE.COMPLETED && !trained && !finishing && <Button size="lg" onClick={onFinish} className="sm:flex-1">Finish setup</Button>}
+          {running && <Button variant="secondary" onClick={cancel} className="sm:flex-1">Cancel setup</Button>}
+        </div>
+      </div>
+      
+    </Card>
+  )
+}
+
+function HowItWorks() {
+  return (
+    <Card title="How FacePay works">
+      <details className="text-sm text-slate-700">
+        <summary className="cursor-pointer font-medium text-slate-800">Read how your face is used</summary>
+        <div className="mt-3 flex flex-col gap-2">
+          <p>Each captured position is reduced on the server to a small grayscale crop and stored encrypted. Raw camera frames are not kept.</p>
+          <p>The crops are projected with PCA, which keeps the main ways faces differ, then LDA, which pulls different people further apart. A classifier compares a new face with enrolled profiles.</p>
+          <p>Recognising your face is only one part of paying. Each payment also needs a basic movement-based liveness check, a short-lived authorization tied to that payment, and your own confirmation. Large or unusual payments can ask for a payment PIN too.</p>
+          <p>This is an academic prototype. The liveness check is basic and does not protect against deepfakes, replayed video, masks or other advanced attacks. All payments are simulated.</p>
+        </div>
+      </details>
+    </Card>
+  )
+}
 
 export default function FaceRegistration() {
   const { token } = useAuth()
   const camera = useCamera()
   const { videoRef, status: cameraStatus } = camera
+  const reducedMotion = usePrefersReducedMotion()
   const [enrollment, setEnrollment] = useState(null)
   const [model, setModel] = useState(null)
   const [loadError, setLoadError] = useState(null)
-  const [busy, setBusy] = useState(null) // 'capture' | 'train' | 'recognize' | 'delete'
+  const [busy, setBusy] = useState(null) // 'train' | 'recognize' | 'delete'
   const [notice, setNotice] = useState(null) // { tone, text }
+  const [finishError, setFinishError] = useState(null)
   const [result, setResult] = useState(null)
-  const [pose, setPose] = useState('neutral')
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   const refresh = useCallback(async () => {
@@ -124,21 +250,24 @@ export default function FaceRegistration() {
     }
   }
 
-  const capture = () =>
-    run('capture', async () => {
-      const res = await uploadSample(token, { imageBase64: captureFrame(videoRef.current), pose })
-      setEnrollment(res.enrollment)
-      setNotice({ tone: 'success', text: `Sample saved. ${qualityNote(res.quality)}`.trim() })
-    })
-
-  const train = () =>
-    run('train', async () => {
-      const m = await trainModel(token)
-      setModel(m)
+  // Setup is complete: release the camera and prepare the shared model. A failure leaves a retry button.
+  const finish = useCallback(async () => {
+    camera.stop()
+    setBusy('train')
+    setFinishError(null)
+    try {
+      setModel(await trainModel(token))
       setResult(null)
       await refresh()
-      setNotice({ tone: 'success', text: 'Model trained. You are ready to pay with FacePay.' })
-    })
+      setNotice({ tone: 'success', text: 'Your face profile is ready. You can pay with FacePay.' })
+    } catch (err) {
+      setFinishError(err.message)
+      await refresh()
+    } finally {
+      setBusy(null)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, refresh, camera.stop])
 
   const test = () =>
     run('recognize', async () => {
@@ -150,73 +279,53 @@ export default function FaceRegistration() {
     run('delete', async () => {
       await deleteSamples(token)
       setResult(null)
+      setFinishError(null)
       await refresh()
-      setNotice({ tone: 'success', text: 'Your face data was deleted.' })
+      setNotice({ tone: 'success', text: 'Your face data was deleted. Face payments are off until you set up your face again.' })
     })
   }
 
   const cameraOn = cameraStatus === 'active'
   const status = enrollment ? faceStatus(enrollment, model) : null
-  const currentPose = enrollment?.poses.find((p) => p.pose === pose)
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Face setup"
-        subtitle="Capture varied samples, train the model, then test it. Images are reduced to a small grayscale crop on the server and stored encrypted; they are never shown back. This is an academic prototype."
+        subtitle="FacePay guides you through five head positions and captures each one for you. This is an academic prototype and payments are simulated."
         actions={status && <StatusBadge status={status.badge} label={status.label} />}
       />
 
       {loadError && <ErrorState message={loadError} onRetry={refresh} />}
       {notice && <Alert tone={notice.tone}>{notice.text}</Alert>}
 
-      <Card title="1. Camera">
-        <CameraView camera={camera} busy={busy !== null} overlay={cameraOn && currentPose ? currentPose.instruction : null} />
-      </Card>
+      {!enrollment ? (
+        loadError ? null : <Spinner label="Loading enrollment" />
+      ) : (
+        <GuidedSetup
+          camera={camera}
+          enrollment={enrollment}
+          model={model}
+          token={token}
+          reducedMotion={reducedMotion}
+          onSample={(res) => setEnrollment(res.enrollment)}
+          finishing={busy === 'train'}
+          finishError={finishError}
+          onFinish={finish}
+        />
+      )}
 
-      <Card title="2. Capture samples">
-        {!enrollment ? (
-          loadError ? null : <Spinner label="Loading enrollment" />
-        ) : (
-          <>
-            <Progress value={enrollment.total_samples} max={enrollment.min_samples_to_train} label="Samples collected" />
-            <p className="mt-2 text-sm text-slate-700">
-              You need at least {enrollment.min_samples_to_train} samples across {enrollment.min_poses_to_train} different poses
-              (you have {enrollment.total_samples} across {enrollment.distinct_poses}; up to {enrollment.max_samples} are kept).
-            </p>
-            <fieldset className="mt-4 flex flex-col gap-2">
-              <legend className="mb-1 text-sm font-medium">Choose the pose you are about to capture</legend>
-              {enrollment.poses.map((p) => (
-                <label key={p.pose} className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-sm ${pose === p.pose ? 'border-brand-700 bg-brand-50' : 'border-slate-200'}`}>
-                  <input type="radio" name="pose" value={p.pose} checked={pose === p.pose} onChange={() => setPose(p.pose)} className="accent-brand-700" />
-                  <span className="flex-1">{p.instruction}</span>
-                  <span className="text-xs text-slate-700" data-testid={`count-${p.pose}`}>{p.count}/{p.target}</span>
-                </label>
-              ))}
-            </fieldset>
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              <Button onClick={capture} loading={busy === 'capture'} disabled={!cameraOn || busy !== null}>
-                Capture sample
-              </Button>
-              {!cameraOn && <span className="text-xs text-slate-600">Turn the camera on first.</span>}
-            </div>
-          </>
-        )}
-      </Card>
-
-      <Card title="3. Train the model">
+      <Card title="Your face data">
         <p className="text-sm text-slate-700">
-          Trains one model on every enrolled user with enough samples. Recognition needs at least two enrolled users.
+          {enrollment?.total_samples
+            ? `${enrollment.total_samples} ${enrollment.total_samples === 1 ? 'position is' : 'positions are'} stored as small encrypted grayscale crops. You can remove them at any time.`
+            : 'No face data is stored for you.'}
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <Button onClick={train} loading={busy === 'train'} disabled={!enrollment?.eligible || busy !== null}>
-            Train model
-          </Button>
           <Button variant="secondary" onClick={() => setConfirmDelete(true)} disabled={!enrollment?.total_samples || busy !== null || confirmDelete}>
             Delete my face data
           </Button>
         </div>
-        {enrollment && !enrollment.eligible && <p className="mt-2 text-xs text-slate-600">Capture more samples to enable training.</p>}
         {confirmDelete && (
           <div className="mt-4">
             <ConfirmPanel
@@ -234,13 +343,15 @@ export default function FaceRegistration() {
 
       {model && <ModelPanel model={model} />}
 
-      <Card title="4. Test recognition">
-        <p className="text-sm text-slate-700">Checks one new camera frame against the trained model.</p>
+      <HowItWorks />
+
+      <Card title="Test recognition">
+        <p className="text-sm text-slate-700">Checks one new camera frame against the trained model. This is a practice check and does not pay or log you in.</p>
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <Button onClick={test} loading={busy === 'recognize'} disabled={!cameraOn || !model?.includes_you || busy !== null}>
-            Recognise me
+          <Button onClick={cameraOn ? test : camera.start} loading={busy === 'recognize' || cameraStatus === 'requesting'} disabled={!model?.includes_you || busy !== null}>
+            {cameraOn ? 'Recognise me' : 'Turn camera on to test'}
           </Button>
-          {!model?.includes_you && <span className="text-xs text-slate-600">Train a model that includes you first.</span>}
+          {!model?.includes_you && <span className="text-xs text-slate-600">Finish face setup first.</span>}
         </div>
         {result && (
           <div className="mt-4" aria-live="polite">

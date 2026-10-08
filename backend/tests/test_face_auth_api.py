@@ -187,9 +187,13 @@ def test_excessive_distance_is_rejected(client, trained, db):
     assert res["identity"]["distance"] > res["identity"]["distance_threshold"]
 
 
-def test_calibrated_threshold_on_synthetic_data_accepts_some_genuine_and_no_strangers(client, trained_calibrated):
+def test_calibrated_threshold_on_synthetic_data_accepts_some_genuine_and_no_strangers(client, trained_calibrated, monkeypatch):
     """Sanity check of the real, untouched threshold (not a performance claim: synthetic identities, 2 users).
     By construction of the percentile rule a sizeable share of genuine attempts is rejected."""
+    from app.core.config import get_settings
+
+    # This is a measurement of the matcher, so the account lockout (covered in test_payment_security) must not interrupt it.
+    monkeypatch.setattr(get_settings(), "biometric_lockout_failures", 10_000)
     a, _ = trained_calibrated
     genuine = [attempt(client, a, 0, start_var=300 + 5 * k)["result"] for k in range(10)]
     strangers = [attempt(client, a, 9, start_var=300 + 5 * k)["result"] for k in range(10)]
@@ -404,7 +408,7 @@ def test_every_attempt_is_logged_and_users_see_only_their_own(client, trained, d
     assert [m["result"] for m in mine] == ["FAILED", "FAILED", "SUCCESS"]  # newest first, only Asha's
     assert mine[0]["failure_reason"] == "LIVENESS_FAILED" and mine[1]["failure_reason"] == "IDENTITY_MISMATCH"
     assert set(mine[0]) == {"id", "timestamp", "result", "failure_reason", "failure_detail", "confidence", "distance",
-                            "liveness_result", "challenge", "model_version"}
+                            "liveness_result", "challenge", "model_version", "payment_session_ref", "transaction_ref"}
     assert client.get("/face-auth/attempts?limit=1", headers=a["headers"]).json()[0]["id"] == mine[0]["id"]
     assert client.get("/face-auth/attempts?limit=0", headers=a["headers"]).status_code == 422
 

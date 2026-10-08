@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Alert, Button, FormField } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
+import { SECURITY_PATH } from '../utils/roles'
 import { runValidators, validatePhone, validateRequired } from '../utils/validation'
 
 export default function Profile() {
@@ -74,6 +76,11 @@ export default function Profile() {
           Save changes
         </Button>
       </form>
+      {!isMerchant && (
+        <p className="mt-4 text-sm text-slate-700">
+          Looking for face payment controls, your payment PIN or recent activity? Open <Link className="font-semibold text-brand-800 underline" to={SECURITY_PATH}>Security</Link>.
+        </p>
+      )}
     </div>
   )
 }

@@ -10,10 +10,18 @@ export const authenticateForPayment = (token, sessionId, { challengeId, frames }
   apiFetch(`/payments/sessions/${enc(sessionId)}/authenticate`, {
     method: 'POST', token, json: { challenge_id: challengeId, frames }, signal,
   })
-// Only the one-time ticket and the amount the customer was shown. The server charges the session's own amount.
-export const confirmPayment = (token, sessionId, { authorizationToken, expectedAmount }) =>
+// The one-time ticket plus everything the customer was shown. The server compares each of them with the session and the
+// ticket's own snapshot, and charges the session's own amount, never a value supplied here.
+export const confirmPayment = (token, sessionId, { authorizationToken, expectedAmount, expectedMerchant, expectedOrderReference, pin }) =>
   apiFetch(`/payments/sessions/${enc(sessionId)}/confirm`, {
-    method: 'POST', token, json: { authorization_token: authorizationToken, expected_amount: expectedAmount },
+    method: 'POST', token,
+    json: {
+      authorization_token: authorizationToken,
+      expected_amount: expectedAmount,
+      expected_merchant: expectedMerchant,
+      expected_order_reference: expectedOrderReference,
+      ...(pin ? { pin } : {}),
+    },
   })
 // Transaction lists: { limit, offset, status, q, sort }. Only the parameters that are set are sent.
 const query = (params) => {

@@ -17,15 +17,14 @@ from sqlalchemy import exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
+from app.ml import registry
 from app.ml.preprocessing import FaceDetector
 from app.models import AuthenticationLog, Merchant, PaymentAuthorization, PaymentSession, Transaction, User
 from app.services import face_auth_service
+from app.services import security_service as sec
+from app.services.security_service import COUNTED_REASONS  # rejections that count against the session (and the account)
 
-AUTHORIZATION_TTL_SECONDS = 120
-MAX_AUTH_FAILURES = 5
-# Rejections that say "this face / movement was not accepted" count against the session. Camera or system
-# problems (no face, blur, model unavailable, expired challenge, ...) do not lock a customer out.
-COUNTED_REASONS = {"LIVENESS_FAILED", "IDENTITY_MISMATCH", "LOW_CONFIDENCE", "DISTANCE_TOO_HIGH", "MULTIPLE_FACES_DETECTED"}
 PAYABLE = ("CREATED", "AUTHENTICATED")
 _ID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"  # no I, L, O, U
 
@@ -117,14 +116,21 @@ def _locked_session(db: Session, session_id: str) -> PaymentSession:
     return ps
 
 
+def max_auth_failures() -> int:
+    return get_settings().max_auth_failures_per_session
+
+
 def _attempts_remaining(ps: PaymentSession) -> int:
-    return max(0, MAX_AUTH_FAILURES - ps.failed_auth_attempts)
+    return max(0, max_auth_failures() - ps.failed_auth_attempts)
 
 
 # ------------------------------------------------------------------ merchant side
 
 
 def create_session(db: Session, merchant: Merchant, *, amount: Decimal, order_reference: str, description: str | None, expires_in_minutes: int) -> PaymentSession:
+    limit = get_settings().per_transaction_limit
+    if amount > limit:
+        raise _err(422, "PER_TRANSACTION_LIMIT", f"The simulated limit is ₹{limit:,.0f} per payment.")
     ps = PaymentSession(
         session_id="ps_" + secrets.token_urlsafe(16),
         merchant_id=merchant.id,
@@ -223,33 +229,43 @@ def checkout_view(db: Session, session_id: str) -> dict:
         "currency": ps.currency,
         "status": ps.status,
         "expires_at": ps.expires_at,
-        "max_auth_attempts": MAX_AUTH_FAILURES,
+        "max_auth_attempts": max_auth_failures(),
+        "authorization_seconds": get_settings().payment_authorization_ttl_seconds,
         "attempts_remaining": _attempts_remaining(ps),
     }
 
 
 def start_authentication(db: Session, user: User, session_id: str) -> dict:
+    sec.require_biometric_allowed(db, user)  # switched off, or too many rejected attempts: before any camera work
     ps = _locked_session(db, session_id)
     _require_payable(db, ps)
+    sec.check_amount_limits(db, user, ps.amount, ps.session_id)
     db.commit()
     return face_auth_service.issue_challenge(db, user)
 
 
 def authenticate_for_payment(db: Session, user: User, session_id: str, challenge_id: str, frames: list[str], detector: FaceDetector) -> dict:
+    sec.require_biometric_allowed(db, user)
     ps = _locked_session(db, session_id)
     _require_payable(db, ps)
+    sec.check_amount_limits(db, user, ps.amount, ps.session_id)
     pk = ps.id
     db.commit()  # release the row lock: the ML work below can take a while
 
     result = face_auth_service.authenticate(db, user, challenge_id, frames, detector)
+    log = db.get(AuthenticationLog, result["authentication_id"])
+    log.payment_session_ref = session_id  # audit reference only; nothing biometric
+    db.commit()
 
     ps = _locked_session(db, session_id)
     authorization = None
     if result["result"] == "AUTHENTICATED":
         if ps.status not in PAYABLE:  # cancelled / expired while the camera was running
             _reject(db, *_NOT_PAYABLE[ps.status])
+        ttl = get_settings().payment_authorization_ttl_seconds
         raw = secrets.token_urlsafe(32)
-        expires_at = _now() + timedelta(seconds=AUTHORIZATION_TTL_SECONDS)
+        expires_at = _now() + timedelta(seconds=ttl)
+        risk = sec.assess_risk(db, user, ps)
         db.execute(  # at most one live authorization per (session, customer)
             update(PaymentAuthorization)
             .where(PaymentAuthorization.payment_session_id == pk, PaymentAuthorization.user_id == user.id, PaymentAuthorization.status == "ACTIVE")
@@ -262,13 +278,28 @@ def authenticate_for_payment(db: Session, user: User, session_id: str, challenge
                 user_id=user.id,
                 authentication_log_id=result["authentication_id"],
                 expires_at=expires_at,
+                # Snapshot of exactly what this authorization is for. Confirmation re-checks every field.
+                merchant_id=ps.merchant_id,
+                amount=ps.amount,
+                currency=ps.currency,
+                order_reference=ps.order_reference,
+                model_version=result["model_version"],
+                step_up_required=risk.higher,
+                step_up_reasons=",".join(risk.reasons) or None,
             )
         )
         ps.status = "AUTHENTICATED"
-        authorization = {"authorization_token": raw, "expires_in_seconds": AUTHORIZATION_TTL_SECONDS, "expires_at": expires_at}
+        authorization = {
+            "authorization_token": raw,
+            "expires_in_seconds": ttl,
+            "expires_at": expires_at,
+            "step_up_required": risk.higher,
+            "step_up_reasons": [sec.RISK_LABELS[r] for r in risk.reasons],
+            "pin_set": user.payment_pin_hash is not None,
+        }
     elif result["reason"] in COUNTED_REASONS and ps.status in PAYABLE:
         ps.failed_auth_attempts += 1
-        if ps.failed_auth_attempts >= MAX_AUTH_FAILURES:
+        if ps.failed_auth_attempts >= max_auth_failures():
             ps.status = "FAILED"
             _sweep(db, session_pk=pk)
     db.commit()
@@ -277,6 +308,18 @@ def authenticate_for_payment(db: Session, user: User, session_id: str, challenge
 
 
 # ------------------------------------------------------------------ confirmation
+
+
+def _authentication_label(db: Session, ps: PaymentSession | None) -> str:
+    """How the payer was verified, for the receipt. Derived from the consumed authorization, not from the client."""
+    if ps is None:
+        return "Face + basic liveness check"
+    auth = db.scalar(
+        select(PaymentAuthorization).where(PaymentAuthorization.payment_session_id == ps.id, PaymentAuthorization.status == "CONSUMED")
+    )
+    if auth is not None and auth.step_up_verified_at is not None:
+        return "Face + basic liveness check + payment PIN"
+    return "Face + basic liveness check"
 
 
 def _receipt(db: Session, txn: Transaction) -> dict:
@@ -293,14 +336,34 @@ def _receipt(db: Session, txn: Transaction) -> dict:
         "order_reference": ps.order_reference if ps else None,
         "description": ps.description if ps else None,
         "session_id": ps.session_id if ps else None,
+        "authentication": _authentication_label(db, ps),
     }
 
 
-def confirm_payment(db: Session, user: User, session_id: str, token: str, expected_amount: Decimal | None) -> dict:
+def confirm_payment(
+    db: Session,
+    user: User,
+    session_id: str,
+    token: str,
+    *,
+    expected_amount: Decimal,
+    expected_merchant: str,
+    expected_order_reference: str,
+    pin: str | None = None,
+) -> dict:
+    """The explicit customer confirmation. Face recognition alone never gets here: the caller must hold a live,
+    single-use authorization issued for exactly this customer, session, merchant, amount, currency and order, and
+    must state the amount, merchant and order they were shown. Higher-risk payments also need the payment PIN."""
+    sec.require_biometric_enabled(user)  # switched off after authenticating: the ticket is no longer honoured
     ps = _locked_session(db, session_id)  # row lock: two confirmations of one session are serialized
     _require_payable(db, ps)
-    if expected_amount is not None and expected_amount != ps.amount:
+    merchant = db.get(Merchant, ps.merchant_id)
+    if expected_amount != ps.amount:
         _reject(db, 409, "AMOUNT_MISMATCH", "The amount shown does not match this payment session. Reload the checkout.")
+    if expected_merchant.strip() != merchant.business_name:
+        _reject(db, 409, "MERCHANT_MISMATCH", "The merchant shown does not match this payment session. Reload the checkout.")
+    if expected_order_reference.strip() != (ps.order_reference or ""):
+        _reject(db, 409, "ORDER_MISMATCH", "The order shown does not match this payment session. Reload the checkout.")
 
     auth = db.scalar(select(PaymentAuthorization).where(PaymentAuthorization.token_hash == _hash(token)).with_for_update())
     invalid = _err(403, "AUTHORIZATION_INVALID", "Face authorization is not valid for this payment. Authenticate again.")
@@ -320,6 +383,28 @@ def confirm_payment(db: Session, user: User, session_id: str, token: str, expect
     if log is None or log.user_id != user.id or log.result != "SUCCESS":
         db.commit()
         raise invalid
+    # The ticket must match the payment as it is now. A missing snapshot (an authorization issued before it existed)
+    # or any difference makes the ticket worthless, and so does a model retrained since the face check.
+    active = registry.active_model_row(db)
+    snapshot_ok = (
+        auth.merchant_id == ps.merchant_id
+        and auth.amount is not None
+        and auth.amount == ps.amount
+        and auth.currency == ps.currency
+        and auth.order_reference == ps.order_reference
+        and auth.model_version is not None
+        and active is not None
+        and auth.model_version == active.version
+    )
+    if not snapshot_ok:
+        auth.status = "REVOKED"
+        db.commit()
+        raise invalid
+
+    sec.check_amount_limits(db, user, ps.amount, ps.session_id)
+    if auth.step_up_required:
+        sec.verify_pin(db, user, pin, ps.session_id)  # raises (and commits the failure count) unless the PIN is right
+        auth.step_up_verified_at = _now()
 
     now = _now()
     auth.status, auth.consumed_at = "CONSUMED", now
@@ -335,6 +420,8 @@ def confirm_payment(db: Session, user: User, session_id: str, token: str, expect
         timestamp=now,
     )
     db.add(txn)
+    log.transaction_ref = txn.transaction_id
+    sec.record_event(db, user, "PAYMENT_CONFIRMED", ps.session_id)
     try:
         db.commit()
     except IntegrityError:

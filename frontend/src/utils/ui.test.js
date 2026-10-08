@@ -48,7 +48,7 @@ describe('customer payment timeline', () => {
   it('marks the step that failed', () => {
     const outcome = { result: 'REJECTED', stages: stages('PASSED', 'FAILED', 'SKIPPED') }
     const steps = customerTimeline({ session: { status: 'CREATED' }, outcome })
-    expect(steps.find((s) => s.state === 'failed').label).toBe('Identity verified')
+    expect(steps.find((s) => s.state === 'failed').label).toBe('Identity recognized')
   })
 })
 
