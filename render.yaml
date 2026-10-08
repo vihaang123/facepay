@@ -1,0 +1,34 @@
+# Render Blueprint for the FacePay backend and its PostgreSQL database (Vercel hosts the frontend separately).
+# Not validated against a live Render account (no Render access was available when this was written): check the plan
+# names and sizes in the dashboard before applying. Contains no secrets; values marked sync:false are entered in the
+# Render dashboard when the Blueprint is first applied.
+databases:
+  - name: facepay-db
+    databaseName: facepay
+    user: facepay
+    plan: free          # free databases are time-limited on Render; pick a paid plan for anything you want to keep
+
+services:
+  - type: web
+    name: facepay-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: starter       # the backend needs roughly 500 MB RAM (NumPy, scikit-learn, OpenCV); a 512 MB plan may run out
+    numInstances: 1     # keep one instance: rate limiter, model cache and training lock are in process memory
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: facepay-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: BIOMETRIC_KEY
+        sync: false     # 32 random bytes, base64. See backend/.env.example. Never commit it.
+      - key: CORS_ORIGINS
+        sync: false     # exact Vercel origin, e.g. https://your-app.vercel.app (set after the frontend URL is known)
+      - key: FORWARDED_ALLOW_IPS
+        value: "*"      # trust Render's proxy for the client IP so per-IP rate limits work

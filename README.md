@@ -19,7 +19,7 @@ single-use server-side payment authorizations and encrypted storage of face data
 ## Architecture
 
 ```
-React + Vite + Tailwind (Vercel-ready)  ──►  FastAPI  ──►  PostgreSQL
+React + Vite + Tailwind (Vercel)  ──►  FastAPI (Render)  ──►  PostgreSQL (Render)
                                               └─ ML pipeline: Haar detector → PCA → LDA → KNN/SVM → liveness → policy
 ```
 
@@ -109,10 +109,13 @@ how to obtain them is described there): [`docs/final/reproducibility.md`](docs/f
 
 ## Deployment
 
-The frontend has a Vercel configuration, the backend a Dockerfile and a pinned dependency lock, and the database is any
-PostgreSQL. **It has not been deployed**: no backend or database host was available, and a frontend alone would not work.
-[`docs/final/deployment-guide.md`](docs/final/deployment-guide.md) lists the steps, variables and a smoke-test checklist, and
-marks what was and was not verified (the Docker image has not been built).
+Target architecture: **Vercel** (React + Vite frontend) calls a **Render** web service (FastAPI, OpenCV, PCA, LDA,
+KNN/SVM) over HTTPS, which uses **Render PostgreSQL**. The repository is deployment-ready (`backend/Dockerfile`,
+`render.yaml`, `frontend/vercel.json`, `.env.example` files), but **it has not been deployed**: deployment was not
+completed because hosting-provider authorization was unavailable, so there are no live URLs.
+[`docs/final/deployment-guide.md`](docs/final/deployment-guide.md) has the exact Vercel and Render settings, environment
+variables, migration command, CORS and camera/HTTPS notes, and separates what was verified locally from what needs a
+manual deployment (the Docker image has not been built).
 
 ## Known limitations
 

@@ -1,5 +1,6 @@
 # Academic-prototype backend image. Works on any container host (Render, Railway, Fly.io, a VPS).
-# NOT built or run in the Phase 7 environment (no Docker daemon there); see docs/final/deployment-guide.md.
+# The image has not been built or run in the environments used so far (no Docker daemon); the same start command was
+# run directly and verified. See docs/final/deployment-guide.md.
 FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 APP_ENV=production

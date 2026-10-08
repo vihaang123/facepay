@@ -1,3 +1,5 @@
+import base64
+import binascii
 from functools import lru_cache
 
 from pydantic import field_validator, model_validator
@@ -53,8 +55,17 @@ class Settings(BaseSettings):
         if self.app_env.lower() == "production":
             if not self.biometric_key:
                 raise ValueError("BIOMETRIC_KEY must be set when APP_ENV=production")
+            try:
+                key = base64.b64decode(self.biometric_key, validate=True)
+            except (binascii.Error, ValueError):
+                raise ValueError("BIOMETRIC_KEY must be base64 (32 random bytes)") from None
+            if len(key) != 32:
+                raise ValueError("BIOMETRIC_KEY must decode to exactly 32 bytes")
             if "change-me" in self.jwt_secret.lower():
                 raise ValueError("JWT_SECRET still has the example placeholder value")
+            origins = self.cors_origin_list
+            if not origins or "*" in origins:
+                raise ValueError("CORS_ORIGINS must list the exact frontend origin(s) in production, not * or empty")
         return self
 
     @property

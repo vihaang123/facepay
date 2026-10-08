@@ -1,118 +1,149 @@
 # Deployment guide
 
-**Status: not deployed.** Phase 7 prepared and checked the configuration, but no hosted frontend, backend or database was
-created. Deploying the frontend alone would give a page whose every API call fails, and no backend or database host
-account was available to this project. Nothing below has been run against a hosted provider; the parts that were
-verified locally are marked **verified locally**. Do not read this guide as proof of a working public deployment.
+**Status: not deployed.** Deployment not completed because hosting-provider authorization was unavailable. No Render
+tool existed in the build session, and the Vercel connection refused every write (HTTP 403, not authorised for the
+account's scope). So there is no hosted frontend, backend or database, and this guide contains no live URLs. The
+repository is deployment-ready; the steps in section 5 are what the account owner has to click through.
 
-FacePay is an academic prototype with simulated payments. A public deployment would host real people's face data, so treat
-it as a demo: use throwaway accounts and your own face or public research images, and read
+Everything is labelled **Verified locally** (run in the build environment, with evidence) or **Requires manual
+deployment** (needs a Render / Vercel account and has not been run).
+
+FacePay is an academic prototype with simulated payments. A public deployment would host real people's face data, so
+treat it as a demo: use throwaway accounts and your own face or public research images, and read
 [`security-assessment.md`](security-assessment.md) first.
 
-## 1. What gets deployed
+## 1. Architecture
 
-| Part | Where it can run | Config in the repo |
+```text
+Browser (HTTPS, camera permission)
+   |
+   v
+Vercel          React + Vite static build        frontend/  (vercel.json: SPA rewrite + security headers)
+   |  HTTPS, VITE_API_BASE_URL
+   v
+Render          FastAPI web service (Docker)     backend/   (OpenCV, PCA, LDA, KNN/SVM, AES-GCM biometric store)
+   |  DATABASE_URL (internal)
+   v
+Render          PostgreSQL                       users, face profiles, payment sessions, transactions
+```
+
+| Part | Host | Config in the repo |
 |---|---|---|
-| Frontend (static React build) | Vercel (or any static host) | `frontend/vercel.json`, `frontend/.env.example` |
-| Backend (FastAPI, includes the PCA+LDA pipeline) | Any container host (Render, Railway, Fly.io, a VPS) | `backend/Dockerfile`, `backend/requirements-lock.txt` |
-| Database | Any PostgreSQL 14+ (a free tier of a hosted provider is enough) | Alembic migrations in `backend/alembic` |
+| Frontend | Vercel, Root Directory `frontend`, Vite preset | `frontend/vercel.json`, `frontend/.env.example` |
+| Backend | Render Web Service, Docker runtime | `backend/Dockerfile`, `backend/requirements-lock.txt`, `render.yaml` (optional Blueprint) |
+| Database | Render PostgreSQL | Alembic migrations in `backend/alembic` |
 
-The backend needs roughly 500 MB of RAM (NumPy, scikit-learn and OpenCV are loaded; training builds a small matrix per
-user). A free tier that sleeps will make the first request slow.
+The backend needs roughly 500 MB of RAM (NumPy, scikit-learn and OpenCV are loaded). Trained models, face samples and
+profiles are stored encrypted in PostgreSQL, not on disk, so Render's ephemeral filesystem is fine.
 
-## 2. Prerequisites
+## 2. Environment variables (read from `backend/app/core/config.py`; none are invented)
 
-* Python 3.13 (the version the code and `requirements-lock.txt` were tested with) or the provided Dockerfile
-* Node 20+ for the frontend build
-* A PostgreSQL database you can connect to over TLS, and its connection string
-* HTTPS on both sites. Browsers only allow camera access on HTTPS (or `localhost`), so the camera will not start on plain HTTP.
+### Backend (Render Environment tab, never in git). Full list with explanations: `backend/.env.example`
 
-## 3. Environment variables
-
-### Backend (set in the host's secret/environment settings, never in git)
-
-| Variable | Required | Notes |
+| Variable | Production | Notes |
 |---|---|---|
-| `APP_ENV` | yes | `production`. Refuses to start without `BIOMETRIC_KEY` or with the example `JWT_SECRET`; turns off `/docs`, `/redoc`, `/openapi.json`. |
-| `DATABASE_URL` | yes | `postgres://`, `postgresql://` and `postgresql+psycopg://` URLs are all accepted (the first two are rewritten to the psycopg 3 driver; **verified locally** by a unit test). Add `?sslmode=require` if your provider needs it. |
-| `JWT_SECRET` | yes | At least 16 characters; use 48+ random characters. `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
-| `BIOMETRIC_KEY` | yes | 32 random bytes, base64: `python -c "from app.core.crypto import generate_key; print(generate_key())"` run in `backend/`. **Back it up.** Losing or changing it makes every stored face sample, model and profile unreadable (users must re-enrol). |
-| `CORS_ORIGINS` | yes | Exact frontend origin(s), comma separated, e.g. `https://your-app.vercel.app`. No wildcard, no trailing slash. |
-| `JWT_ALGORITHM`, `JWT_EXPIRE_MINUTES` | no | Defaults `HS256`, `60`. |
-| `RATE_LIMIT_ENABLED`, `AUTH_/FACE_/FACE_AUTH_/PAYMENT_/TRAIN_RATE_LIMIT_PER_MINUTE` | no | Defaults are in `backend/.env.example`. Keep rate limiting on. |
-| `PORT` | host-provided | The Dockerfile listens on `$PORT` (default 8000). |
+| `APP_ENV` | required: `production` | Enables the startup secret checks; disables `/docs`, `/redoc`, `/openapi.json`. |
+| `DATABASE_URL` | required | Use Render's **Internal Database URL**. `postgres://`, `postgresql://` and `postgresql+psycopg://` are all accepted (rewritten to the psycopg 3 driver). **Verified locally** with a `postgres://` URL. |
+| `JWT_SECRET` | required | 16+ characters (use 48+); the example placeholder is refused. `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
+| `BIOMETRIC_KEY` | required | AES-256 key: 32 random bytes, base64. See section 3. |
+| `CORS_ORIGINS` | required | Exact Vercel origin(s), comma separated, e.g. `https://your-app.vercel.app`. `*` or an empty list stops the app starting in production. |
+| `FORWARDED_ALLOW_IPS` | recommended on Render: `*` | Read by uvicorn. Lets the per-IP rate limits see the real client behind Render's proxy. Only set it when the app is reachable only through that proxy. |
+| `JWT_ALGORITHM`, `JWT_EXPIRE_MINUTES`, `RATE_LIMIT_ENABLED`, `AUTH_/FACE_/FACE_AUTH_/PAYMENT_/TRAIN_RATE_LIMIT_PER_MINUTE` | optional | Defaults in `.env.example`. Keep rate limiting on. |
+| `PORT` | provided by Render | Read by the Docker start command (default 8000). Do not set it. |
 
-`TEST_DATABASE_URL` is for pytest only and must point at a database whose name ends in `_test`. Never set it on the host.
+`TEST_DATABASE_URL` is for pytest only; never set it on a host.
 
-### Frontend (Vercel project settings)
+### Frontend (Vercel Project Settings > Environment Variables)
 
 | Variable | Notes |
 |---|---|
-| `VITE_API_BASE_URL` | Public URL of the backend, e.g. `https://facepay-api.example.com`, no trailing slash. It is compiled into the bundle at build time, so changing it needs a rebuild. It is not a secret. |
+| `VITE_API_BASE_URL` | Public HTTPS URL of the Render service, e.g. `https://<your-service>.onrender.com`, no trailing slash. Not a secret, but compiled in at build time: **redeploy after changing it.** The source contains no hosted URL (default is `http://localhost:8000`). |
 
-## 4. Database setup
+## 3. Biometric key
 
-1. Create an empty PostgreSQL database (any name) and a user that owns it.
-2. Put its connection string in `DATABASE_URL` on the backend host.
-3. Schema is created only by migrations: `alembic upgrade head` (the Docker image runs it at every start; it is a no-op when
-   the schema is current). Five migrations exist (`0001`..`0005`). **Verified locally**: `alembic upgrade head` on an empty
-   database, then `alembic check` reports no drift between the models and the migrations.
+`BIOMETRIC_KEY` encrypts every stored face crop, model and profile (AES-256-GCM). It must come from Render's environment
+and must never be committed; the repository contains only an empty placeholder.
 
-## 5. Backend deployment (container host)
+The administrator generates it once, on any machine with the backend dependencies:
 
-The simplest path that needs no code changes is a Docker web service built from `backend/`:
+```bash
+cd backend && python -c "from app.core.crypto import generate_key; print(generate_key())"
+```
 
-1. Create a web service from this repository with **root directory `backend`** and **Dockerfile** build.
-2. Set the environment variables from section 3.
-3. Health check path: `/health` (returns `{"status":"ok","database":"ok",...}` and does a real `SELECT 1`; `degraded` means the database is unreachable).
-4. Keep **one instance and one worker**. The rate limiter, the model cache and the training lock live in process memory.
-   Several workers or instances would each count separately and could train concurrently.
+Paste the output into Render as `BIOMETRIC_KEY` and keep a private backup (password manager). Losing or changing it
+makes all stored face data unreadable and every user must re-enrol. In production the app **refuses to start** if the
+key is missing, is not base64, or does not decode to exactly 32 bytes (**verified locally**, with tests).
 
-Without Docker: `pip install -r requirements-lock.txt`, then
-`alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1`.
+## 4. Start command and migrations
 
-What was and was not checked for the backend:
+The Docker image's command is (module path `app.main:app` verified against the code):
 
-* **Verified locally:** the production settings validator (refuses to start without `BIOMETRIC_KEY` / with the example
-  secret), `/docs` disabled in production, health endpoint, migrations on an empty database, the dependency set installing
-  into a clean Python 3.13 virtualenv and passing the full test suite.
-* **Not verified:** `docker build` (there was no Docker daemon in the Phase 7 environment), any hosted provider, TLS, a
-  hosted PostgreSQL, behaviour behind a reverse proxy.
+```bash
+alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1
+```
 
-Behind a proxy the app sees the proxy's address as the client, so the per-IP rate limits become effectively global.
-For anything beyond a demo, configure forwarded headers and also limit request body size at the proxy (the app's own 12 MB
-limit trusts the `Content-Length` header).
+Migrations therefore run on every start and are a no-op when the schema is current. To run them by hand
+(Render Shell, or locally against the hosted URL): `cd backend && alembic upgrade head`. Keep one worker and one
+instance; the rate limiter, model cache and training lock are in process memory.
 
-## 6. Frontend deployment (Vercel)
+**Verified locally** (PostgreSQL 16, Python 3.13 from `requirements-lock.txt`):
 
-1. Import the repository, set **Root Directory** to `frontend`.
-2. Framework preset: Vite. Build command `npm run build`, output directory `dist` (these are the defaults).
-3. Add `VITE_API_BASE_URL` (Production and Preview) pointing at the backend.
-4. Deploy. `frontend/vercel.json` already provides the single-page-app rewrite (deep links such as `/checkout/<id>` load
-   `index.html`) and response headers: `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer` and
-   `Permissions-Policy: camera=(self), microphone=(), geolocation=()`.
-5. Add the final Vercel URL to the backend's `CORS_ORIGINS` and redeploy/restart the backend. Preview deployments have
-   different URLs; add them only if you need them.
+* `alembic upgrade head` on a completely empty database applied all 5 migrations; `alembic check` then reported no drift.
+* That exact command run with `APP_ENV=production`, a `postgres://` URL, a freshly generated key and a generated JWT
+  secret started cleanly: `GET /health` returned `{"status":"ok","database":"ok",...}` (it runs a real `SELECT 1`;
+  `degraded` means the database is unreachable), `/docs` and `/openapi.json` returned 404, and register and login
+  (database writes and reads) succeeded.
+* CORS: the configured origin received `Access-Control-Allow-Origin`; another origin received none.
+* Startup refused in production without `JWT_SECRET`/`DATABASE_URL`, without `BIOMETRIC_KEY`, and with `CORS_ORIGINS=*`.
+* An encrypt/decrypt round trip with that production key.
 
-**Verified locally:** `npm run build` (production build, no dev-only code or secrets in `dist`; the only environment value
-compiled in is `VITE_API_BASE_URL`), and the built app served by `vite preview` passing the 44-step browser run.
-**Not verified:** the Vercel build itself and the SPA rewrite on Vercel. No Content-Security-Policy is set (see the
-security assessment).
+**Not verified:** `docker build` (no Docker daemon was available, so the OpenCV-headless/NumPy/scikit-learn install on
+`python:3.13-slim` is untested here; the same pins install and pass the suite in a clean Python 3.13 virtualenv), any
+Render behaviour, TLS, behaviour behind Render's proxy, and `render.yaml` (written without Render access; check plan
+names and sizes in the dashboard).
 
-## 7. Production configuration checklist
+## 5. Deployment order (Requires manual deployment)
 
-- [ ] `APP_ENV=production`; `JWT_SECRET` and `BIOMETRIC_KEY` generated fresh, stored only in the host's secret store, and the key backed up
-- [ ] `CORS_ORIGINS` is exactly the frontend origin
-- [ ] Database reachable over TLS; credentials not in the repository, logs or screenshots
-- [ ] One backend instance, one worker
-- [ ] HTTPS on both origins
-- [ ] `/docs` and `/openapi.json` return 404
-- [ ] Rate limiting enabled
-- [ ] Demo accounts only; a privacy notice appropriate to your setting (see the report's ethical section)
+1. **Render: create PostgreSQL** (New > PostgreSQL). Copy its **Internal Database URL**.
+2. **Render: create the Web Service** (New > Web Service, this GitHub repo, `main`). Runtime **Docker**, Dockerfile path
+   `backend/Dockerfile`, Docker build context `backend`. One instance. Health check path `/health`. Use a plan with
+   at least 1 GB RAM if the free/512 MB plan runs out of memory.
+   Alternative: New > Blueprint, pointing at `render.yaml`, then fill in the two `sync:false` values.
+3. **Set the environment variables** from section 2: `APP_ENV=production`, `DATABASE_URL` (internal URL),
+   `JWT_SECRET`, `BIOMETRIC_KEY`, `CORS_ORIGINS` (a placeholder you will fix in step 8, for example
+   `http://localhost:5173`; do not leave it at that), `FORWARDED_ALLOW_IPS=*`.
+4. **Deploy.** The container runs `alembic upgrade head` and then starts the API. Watch the logs for the five migrations
+   on first start.
+5. **Verify** `https://<render-service>/health` returns `{"status":"ok","database":"ok",...}` and `/docs` returns 404.
+6. **Vercel: import the repo** (Add New > Project). **Root Directory `frontend`**, Framework Preset **Vite**,
+   build `npm run build`, output `dist` (the defaults). `frontend/vercel.json` gives the SPA rewrite (deep links such as
+   `/checkout/<id>` load `index.html`) and the headers `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`
+   and `Permissions-Policy: camera=(self), microphone=(), geolocation=()`.
+7. **Set `VITE_API_BASE_URL`** (Production and Preview) to the Render URL and deploy.
+8. **Update CORS:** set the Render `CORS_ORIGINS` to the Vercel origin (for example `https://your-app.vercel.app`, no
+   trailing slash; add the production alias only, previews have other URLs) and let the service restart.
+9. **Test the whole app** (sections 7 and 8).
 
-## 8. Smoke test after deploying
+## 6. Camera and HTTPS
 
-Run these in order. Use a throwaway email. Replace `$API` and `$APP`.
+The camera needs a secure context. On `http://localhost` the development camera flow works; the deployed Vercel site is
+HTTPS, so it works there, and the browser must be allowed to use the camera for that site. On plain HTTP anywhere else
+the browser exposes no camera API at all and the app shows "Camera not available" (it has no insecure fallback).
+The HTTPS page must call an HTTPS API; an HTTP API would be blocked as mixed content. The Vercel header
+`Permissions-Policy: camera=(self)` allows the camera only for the site itself.
+
+## 7. Production checklist
+
+- [ ] `APP_ENV=production`; `JWT_SECRET` and `BIOMETRIC_KEY` generated fresh, held only in Render's environment, key backed up
+- [ ] `CORS_ORIGINS` is exactly the Vercel origin (not `*`, not localhost)
+- [ ] Database URL is the internal URL; credentials not in the repository, logs or screenshots
+- [ ] One backend instance, one worker, `FORWARDED_ALLOW_IPS=*` only because the service sits behind Render's proxy
+- [ ] HTTPS on both origins; `/docs` and `/openapi.json` return 404
+- [ ] Rate limiting enabled; demo accounts only; a privacy notice appropriate to your setting
+
+## 8. Smoke test after deploying (Requires manual deployment)
+
+Run these in order. Use a throwaway email. Replace `$API` (the Render URL) and `$APP` (the Vercel URL).
 
 ```bash
 curl -s $API/health                                  # {"status":"ok","database":"ok",...}
@@ -136,7 +167,8 @@ simulated-camera run (`docs/browser-testing/`) and label it as simulated; it is 
 
 | Symptom | Likely cause |
 |---|---|
-| Backend exits at start with `BIOMETRIC_KEY must be set` / `JWT_SECRET still has the example placeholder` | Production validator working as intended; set real values. |
+| Backend exits at start with `BIOMETRIC_KEY must be set` / `must be base64` / `exactly 32 bytes`, `JWT_SECRET still has the example placeholder` or `CORS_ORIGINS must list the exact frontend origin(s)` | Production validator working as intended; set real values (section 2, 3). |
+| Render deploy killed or restarting, out-of-memory in the logs | Plan too small for NumPy/scikit-learn/OpenCV; use a larger instance. |
 | Frontend shows "can't reach the server" | Wrong `VITE_API_BASE_URL` (needs a rebuild after changing), backend asleep, or mixed content (HTTPS page calling an HTTP API). |
 | Browser console shows a CORS error | `CORS_ORIGINS` does not exactly match the page origin (scheme, host, no trailing slash). |
 | `/health` says `degraded` | Database unreachable: URL, firewall, `sslmode`. |
@@ -144,5 +176,5 @@ simulated-camera run (`docs/browser-testing/`) and label it as simulated; it is 
 | Camera does not start | Page is not HTTPS, permission denied, or another app holds the camera. |
 | "Not enough users" when training | The shared model needs at least two enrolled customers, each with enough samples. |
 | Everyone must re-enrol after a deploy | `BIOMETRIC_KEY` changed or was lost. |
-| 429 responses | Rate limit; behind a proxy all clients share one address. |
+| 429 responses | Rate limit; if everyone gets them, `FORWARDED_ALLOW_IPS=*` is missing so all clients look like one address. |
 | 413 on face upload | Request over 12 MB (frames are normally a few MB). |

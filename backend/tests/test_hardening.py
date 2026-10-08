@@ -68,6 +68,23 @@ def test_production_rejects_the_example_jwt_secret():
         make(app_env="production", biometric_key=GOOD_KEY, jwt_secret="change-me-to-a-long-random-string")
 
 
+@pytest.mark.parametrize("bad", ["not-base64!!", "c2hvcnQ="])
+def test_production_rejects_a_malformed_biometric_key_at_startup(bad):
+    with pytest.raises(ValueError, match="BIOMETRIC_KEY"):
+        make(app_env="production", biometric_key=bad)
+
+
+@pytest.mark.parametrize("bad", ["*", "https://a.example,*", " , "])
+def test_production_rejects_wildcard_or_empty_cors(bad):
+    with pytest.raises(ValueError, match="CORS_ORIGINS"):
+        make(app_env="production", biometric_key=GOOD_KEY, cors_origins=bad)
+
+
+def test_production_accepts_an_exact_https_origin():
+    s = make(app_env="production", biometric_key=GOOD_KEY, cors_origins="https://facepay.example.app")
+    assert s.cors_origin_list == ["https://facepay.example.app"]
+
+
 def test_production_with_real_secrets_is_accepted():
     assert make(app_env="production", biometric_key=GOOD_KEY).is_production
 
