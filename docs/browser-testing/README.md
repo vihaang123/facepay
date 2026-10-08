@@ -1,4 +1,4 @@
-# Real-browser test (Phase 6)
+# Real-browser test (Phase 6, re-run in Phase 7)
 
 `run.mjs` drives the **built frontend** in headless Chromium (Playwright) against the **real API and PostgreSQL**. It is
 not part of the unit-test suites (it needs the whole stack running) and is kept so the run can be repeated.
@@ -29,6 +29,7 @@ python -c "from app.ml import config as c; c.MIN_SAMPLES_PER_USER = 8; import uv
 # 3. frontend: npm run build && npx vite preview --port 5173 --host localhost
 # 4. seed + run (needs `playwright` and `axe-core` installed where run.mjs lives, and the ORL .npz with arrays X, y)
 ORL_NPZ=/path/to/orl.npz python seed.py && node run.mjs
+# add BLUR_CAMERA=1 to blur the camera preview in screenshots (used for the pictures in docs/final/screenshots)
 ```
 
 The script prints PASS/FAIL per step, saves screenshots under `shots/` and `results.json`.
@@ -48,3 +49,17 @@ checkout; customer and merchant dashboards, transaction lists with filter/search
 motionless face failing liveness; camera permission denied; network error, 500 and 429 messages; 401 returning to the
 login page with an explanation; unknown routes; route guards between the two roles; tablet and phone layouts without
 horizontal scrolling; the mobile menu; and a complete payment on a 390×844 screen.
+
+## Phase 7 re-run
+
+The suite was run twice more on the Phase 7 code (once normally, once with `BLUR_CAMERA=1` for the documentation
+screenshots): 44 of 44 steps passed both times and axe again reported no violations on the 10 scanned pages. The only
+change to the script was the optional blur and the landing-page tagline, which was reworded to "Facial authentication for
+simulated digital payments." The camera is still simulated; no physical webcam was used.
+
+One run during Phase 7 failed 8 steps (36 of 44) for a reason worth recording: three extra customers left over from the
+local benchmark were still enrolled, so the shared model had 9 people instead of 6, and the genuine customer's first
+attempt was rejected as `DISTANCE_TOO_HIGH` (the liveness stage passed; nothing was wrong with the UI). That is the
+open-set weakness documented in `docs/final/evaluation-results.md` showing up in the browser run: the suite expects the
+genuine person to be accepted on the first try, which holds for the 6-person set the suite seeds but is not guaranteed in
+general. After removing the leftover users the suite passed 44 of 44 again. The script was not loosened.

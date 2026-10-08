@@ -95,8 +95,8 @@ def run_draw(X, y, c, seed):
     i2 = {}
     for name in ("pred", "rand"):
         first_claim = pred_claim if name == "pred" else rand_claim
-        lookup = dict(zip(imp, first_claim))
-        i2[name] = two(ip, lambda i: np.array([lookup[j] for j in i]))
+        lookup = dict(zip(imp, first_claim, strict=True))
+        i2[name] = two(ip, lambda i, lookup=lookup: np.array([lookup[j] for j in i]))
 
     rows = {}
     for pct in PCTS:

@@ -53,6 +53,11 @@ def test_development_defaults_still_work():
     assert not make().is_production
 
 
+@pytest.mark.parametrize("given", ["postgres://u:p@h:5432/db", "postgresql://u:p@h:5432/db", "postgresql+psycopg://u:p@h:5432/db"])
+def test_hosted_database_urls_use_the_psycopg_driver(given):
+    assert make(database_url=given).database_url == "postgresql+psycopg://u:p@h:5432/db"
+
+
 def test_production_requires_a_biometric_key():
     with pytest.raises(ValueError, match="BIOMETRIC_KEY"):
         make(app_env="production", biometric_key="")

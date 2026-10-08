@@ -31,6 +31,15 @@ class Settings(BaseSettings):
     # Checkout, confirmation and payment-session reads per customer per minute.
     payment_rate_limit_per_minute: int = 30
 
+    @field_validator("database_url")
+    @classmethod
+    def _driver_url(cls, v: str) -> str:
+        """Hosted PostgreSQL providers hand out postgres:// or postgresql:// URLs; this app uses the psycopg 3 driver."""
+        for prefix in ("postgres://", "postgresql://"):
+            if v.startswith(prefix):
+                return "postgresql+psycopg://" + v[len(prefix):]
+        return v
+
     @field_validator("jwt_secret")
     @classmethod
     def _secret_not_empty(cls, v: str) -> str:

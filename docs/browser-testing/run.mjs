@@ -74,6 +74,12 @@ const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] }
 const newCtx = async (extra = {}) => {
   const ctx = await browser.newContext({ viewport: VIEWS.desktop, ...extra })
   await ctx.addInitScript(CAMERA_SCRIPT)
+  // BLUR_CAMERA=1: documentation screenshots must not show the (public research dataset) faces used as the simulated camera
+  if (process.env.BLUR_CAMERA) {
+    await ctx.addInitScript(() => document.addEventListener('DOMContentLoaded', () => {
+      const st = document.createElement('style'); st.textContent = 'video{filter:blur(28px)!important}'; document.head.appendChild(st)
+    }))
+  }
   return ctx
 }
 const shot = (page, name) => page.screenshot({ path: `shots/${name}.png`, fullPage: true })
@@ -109,7 +115,7 @@ await step('landing page renders with tagline + prototype notice (3 viewports, n
     await cpage.goto(APP + '/')
     await cpage.getByRole('heading', { name: 'Pay with your face.' }).waitFor()
     const text = await cpage.locator('body').innerText()
-    if (!text.includes('Secure digital payment authentication using facial recognition.')) throw new Error('tagline missing')
+    if (!text.includes('Facial authentication for simulated digital payments.')) throw new Error('tagline missing')
     if (!/Academic prototype/.test(text)) throw new Error('prototype notice missing')
     if (/bank-grade|military-grade|fraud-proof/i.test(text)) throw new Error('forbidden claim present')
     const o = await overflow(cpage); if (o > 0) throw new Error(`${vn}: horizontal overflow ${o}px`)

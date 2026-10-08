@@ -1,7 +1,7 @@
 """Tunable constants for the face pipeline.
 
 Quality thresholds are PROVISIONAL: they were set against public benchmark images and a
-few test photos, not against real webcam captures. Recalibrate with real captures (Phase 7).
+few test photos, not against real webcam captures. Not recalibrated on real captures: see docs/final/evaluation-results.md.
 """
 
 IMAGE_SIZE = 64  # stored crop is IMAGE_SIZE x IMAGE_SIZE grayscale (4096 features)
@@ -42,7 +42,7 @@ KNN_NEIGHBORS = 3
 # Percentile of out-of-fold genuine distances used as the accept threshold. ORL open-set benchmark
 # (ml/results/orl_benchmark.json): p95 accepted ~every impostor that claimed the predicted identity;
 # p70 gave FRR ~0.20, FAR ~0.02 (random claim) / ~0.45 (worst case). A trade-off knob, not a calibrated
-# security level: recalibrate on real webcam data in Phase 7.
+# security level: not recalibrated on real webcam data (see docs/final/evaluation-results.md).
 DISTANCE_THRESHOLD_PERCENTILE = 70.0
 
 # ---------------------------------------------------------------- Phase 4: authentication

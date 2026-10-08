@@ -1,0 +1,87 @@
+{
+  "conditions": "local single-process uvicorn + local PostgreSQL, one client, sequential requests, localhost",
+  "health": {
+    "n": 200,
+    "median_ms": 2.92,
+    "p95_ms": 3.57,
+    "max_ms": 48.0
+  },
+  "register_bcrypt": {
+    "n": 3,
+    "median_ms": 142.7,
+    "p95_ms": 142.7,
+    "max_ms": 167.43
+  },
+  "login_bcrypt": {
+    "n": 3,
+    "median_ms": 151.74,
+    "p95_ms": 151.74,
+    "max_ms": 152.62
+  },
+  "face_sample_upload": {
+    "n": 24,
+    "median_ms": 112.94,
+    "p95_ms": 132.98,
+    "max_ms": 181.95
+  },
+  "train_model_3_users_24_samples_ms": 2602.8,
+  "faces_recognize_single_frame": {
+    "n": 30,
+    "median_ms": 127.99,
+    "p95_ms": 144.69,
+    "max_ms": 149.68
+  },
+  "payment_flow": {
+    "create_session": {
+      "n": 10,
+      "median_ms": 19.47,
+      "p95_ms": 22.49,
+      "max_ms": 24.86
+    },
+    "challenge": {
+      "n": 10,
+      "median_ms": 17.79,
+      "p95_ms": 21.34,
+      "max_ms": 21.49
+    },
+    "verify_7_frames": {
+      "n": 10,
+      "median_ms": 728.92,
+      "p95_ms": 750.97,
+      "max_ms": 787.51
+    },
+    "confirm": {
+      "n": 10,
+      "median_ms": 19.65,
+      "p95_ms": 22.54,
+      "max_ms": 25.25
+    },
+    "customer_transactions": {
+      "n": 30,
+      "median_ms": 7.75,
+      "p95_ms": 9.78,
+      "max_ms": 10.91
+    },
+    "merchant_transactions": {
+      "n": 30,
+      "median_ms": 6.6,
+      "p95_ms": 8.61,
+      "max_ms": 9.75
+    },
+    "customer_summary": {
+      "n": 30,
+      "median_ms": 6.27,
+      "p95_ms": 7.83,
+      "max_ms": 7.96
+    },
+    "merchant_summary": {
+      "n": 30,
+      "median_ms": 13.96,
+      "p95_ms": 16.3,
+      "max_ms": 18.08
+    }
+  },
+  "payment_flow_auth_results": {
+    "AUTHENTICATED": 10
+  }
+}

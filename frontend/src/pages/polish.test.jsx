@@ -26,7 +26,7 @@ describe('landing page', () => {
 
   it('explains the product and says plainly that it is a simulation', async () => {
     const text = await html()
-    expect(text).toContain('Secure digital payment authentication using facial recognition.')
+    expect(text).toContain('Facial authentication for simulated digital payments.')
     expect(text).toMatch(/Academic prototype/)
     expect(text).toMatch(/no real money moves/i)
   })

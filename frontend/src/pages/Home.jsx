@@ -38,7 +38,7 @@ export default function Home() {
             Academic prototype · payments are simulated · no real money moves
           </p>
           <h1 className="mt-5 max-w-2xl text-4xl font-bold tracking-tight sm:text-5xl">Pay with your face.</h1>
-          <p className="mt-4 max-w-2xl text-lg text-slate-700">Secure digital payment authentication using facial recognition.</p>
+          <p className="mt-4 max-w-2xl text-lg text-slate-700">Facial authentication for simulated digital payments.</p>
           <p className="mt-3 max-w-2xl text-sm text-slate-600">
             FacePay is a student project that explores how a face check with a liveness challenge can authorise a payment.
             Face recognition uses PCA + LDA, a classical machine-learning method.

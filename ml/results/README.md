@@ -1,4 +1,4 @@
-# Measured results (Phase 3)
+# Measured results (Phase 3 to 5; final Phase 7 numbers are in `final_evaluation.json` and `docs/final/evaluation-results.md`)
 
 Every number below was produced by the scripts in `ml/experiments/` and is stored in the JSON files
 beside this file. **Dataset: AT&T/ORL (40 subjects x 10 images), a public benchmark, not webcam captures from

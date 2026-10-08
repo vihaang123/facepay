@@ -655,3 +655,41 @@ def test_session_without_enrolled_face_cannot_authorize(client, shop):
     sid = create_session(client, shop)["session_id"]
     res = authenticate(client, c, sid).json()
     assert res["result"] == "REJECTED" and res["reason"] in ("NOT_ENROLLED", "MODEL_UNAVAILABLE") and res["authorization"] is None
+
+
+def _count_queries(client, path, headers):
+    """Number of SQL statements the request issues (the N+1 check compares this at different list sizes)."""
+    from sqlalchemy import event
+
+    from app.database.session import engine
+
+    n = []
+
+    def hook(*_a, **_k):
+        n.append(1)
+
+    event.listen(engine, "before_cursor_execute", hook)
+    try:
+        assert client.get(path, headers=headers).status_code == 200
+    finally:
+        event.remove(engine, "before_cursor_execute", hook)
+    return len(n)
+
+
+def test_list_endpoints_use_a_constant_number_of_queries(client, trained, shop):
+    """No N+1: listing 1 transaction and listing 6 issue the same number of SQL statements."""
+    a, _ = trained
+    paths = [("/payments/transactions?limit=50", a["headers"]), ("/merchant/transactions?limit=50", shop["headers"]),
+             ("/payments/summary", a["headers"]), ("/merchant/summary", shop["headers"])]
+
+    def pay(i):
+        sid = create_session(client, shop, ref=f"Q-{i}")["session_id"]
+        confirm(client, a, sid, authorize(client, a, sid))
+
+    pay(0)
+    one = [_count_queries(client, p, h) for p, h in paths]
+    for i in range(1, 6):
+        pay(i)
+    six = [_count_queries(client, p, h) for p, h in paths]
+    assert one == six, (one, six)
+    assert max(six) <= 10  # measured: 2, 2, 2 and 9 (the merchant summary runs several constant aggregate queries)
