@@ -3,10 +3,16 @@ import { Link } from 'react-router-dom'
 import { AuthDetails } from './AuthStages'
 import CameraView from './CameraView'
 import Icon from './Icon'
+import ModelNotReady from './ModelNotReady'
 import { Alert, Button, Spinner } from './ui'
+import { useAuth } from '../hooks/useAuth'
 import { useCamera } from '../hooks/useCamera'
+import { useReadiness } from '../hooks/useReadiness'
+import { trainModel } from '../services/faces'
+import { isModelIssue, notReady } from '../utils/modelIssues'
+import { positionHint } from '../utils/positionHint'
 import { TIMING } from '../utils/authTiming'
-import { classifyError, classifyRejection } from '../utils/authMessages'
+import { classifyError, classifyRejection, failureMessage } from '../utils/authMessages'
 import { liveStages } from '../utils/faceStages'
 import { captureFrame } from '../utils/capture'
 import { FACE_PATH, SECURITY_PATH } from '../utils/roles'
@@ -21,8 +27,19 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
  *   verify({ challengeId, frames }, { signal }) -> the backend's decision (result, reason, stages, identity, ...)
  *   onOutcome(outcome) / onError(err)           -> called when an attempt ends
  *   Actions (component, optional)               -> replaces the default "Done" / "Try again" button; gets { result, authenticated, onRetry }
+ *   assess(frameBase64) (optional)              -> the server's look at a preview frame; used only for framing advice
+ *
+ * Before the camera is offered it asks the server whether recognition can run at all (a trained model that includes this
+ * customer). If it cannot, the reason and the one thing to do about it are shown, no frames are captured or sent, and
+ * nothing is retried on a timer. A technical problem is never presented as a face that did not match.
  */
-export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onError, Actions, authorized = false }) {
+export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onError, Actions, assess, authorized = false }) {
+  const { token } = useAuth()
+  const readiness = useReadiness(token)
+  const [training, setTraining] = useState(false)
+  const [trainError, setTrainError] = useState(null)
+  const [hint, setHint] = useState(null)
+  const started = useRef(false) // one check at a time: a double tap cannot start two
   const camera = useCamera()
   const { videoRef, status: cameraStatus } = camera
   const [phase, setPhase] = useState('idle') // idle | challenge | baseline | turn | verifying | done | error
@@ -35,12 +52,14 @@ export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onEr
   const run = useRef(0) // id of the active run; changing it cancels the capture loop
   const callbacks = useRef({})
   useEffect(() => {
-    callbacks.current = { requestChallenge, verify, onOutcome, onError }
+    callbacks.current = { requestChallenge, verify, onOutcome, onError, assess }
   })
 
   useEffect(() => () => { run.current = -1 }, [])
 
   const begin = async () => {
+    if (started.current || readiness.state?.ready !== true) return
+    started.current = true
     const id = ++run.current
     const alive = () => run.current === id
     setResult(null)
@@ -84,48 +103,121 @@ export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onEr
         clearTimeout(timer)
       }
       if (!alive()) return
+      if (outcome?.result !== 'AUTHENTICATED' && isModelIssue(outcome?.reason)) {
+        // The server could not run recognition: show why and what to do, not a "try again" that would send frames again.
+        readiness.setState(notReady(outcome.reason, failureMessage(outcome)))
+        setPhase('idle')
+        callbacks.current.onOutcome?.(outcome)
+        return
+      }
       setResult(outcome)
       setPhase('done')
       callbacks.current.onOutcome?.(outcome)
     } catch (err) {
       if (!alive()) return
+      if (isModelIssue(err?.code)) {
+        readiness.setState(notReady(err.code, err.message))
+        setPhase('idle')
+        callbacks.current.onError?.(err)
+        return
+      }
       const found = err?.name === 'ApiError' ? classifyError(err) : { category: 'other', title: 'Face check stopped', message: err?.message || 'Something went wrong.' }
       setProblem(found)
       setError(found.message)
       setErrorCode(err?.code ?? null)
       setPhase('error')
       callbacks.current.onError?.(err)
+    } finally {
+      if (run.current === id) started.current = false
     }
   }
 
   const reset = () => {
     run.current++
+    started.current = false
     setPhase('idle')
     setResult(null)
     setError(null)
   }
 
   const cameraOn = cameraStatus === 'active'
+  const blocked = readiness.state && !readiness.state.ready ? readiness.state : null
+  const canStart = cameraOn && readiness.state?.ready === true
+  const train = async () => {
+    setTraining(true)
+    setTrainError(null)
+    try {
+      await trainModel(token)
+      await readiness.recheck()
+    } catch (err) {
+      setTrainError(err?.message || 'Training did not complete. Try again.')
+    } finally {
+      setTraining(false)
+    }
+  }
+
+  // Framing advice while the person lines up (never during a check, and only when the server can actually recognise them).
+  useEffect(() => {
+    if (phase !== 'idle' || !cameraOn || readiness.state?.ready !== true || !callbacks.current.assess) return undefined
+    let stop = false
+    let inFlight = false
+    const tick = async () => {
+      if (stop || inFlight) return
+      inFlight = true
+      try {
+        const frame = captureFrame(videoRef.current, { maxSide: 480, quality: 0.6 })
+        const looked = await callbacks.current.assess(frame)
+        if (!stop) setHint(positionHint(looked))
+      } catch {
+        // advice only: a failed look just shows no advice
+      } finally {
+        inFlight = false
+      }
+    }
+    tick()
+    const timer = setInterval(tick, 1500)
+    return () => { stop = true; clearInterval(timer) }
+  }, [phase, cameraOn, readiness.state?.ready, videoRef])
+
   const busy = ['challenge', 'baseline', 'turn', 'verifying'].includes(phase)
   const authenticated = result?.result === 'AUTHENTICATED'
   const overlay = phase === 'baseline' ? 'Look at the camera and hold still' : phase === 'turn' ? instruction : phase === 'verifying' ? 'Analyzing your face…' : null
   const tone = phase === 'done' ? (authenticated ? 'ok' : 'bad') : 'neutral'
   const rejection = result && !authenticated ? classifyRejection(result) : null
-  const stages = liveStages({ cameraStatus, phase, result, authorized: authorized || (authenticated && Boolean(result?.authorization)) })
+  const stages = liveStages({
+    cameraStatus, phase, result, authorized: authorized || (authenticated && Boolean(result?.authorization)),
+    modelReady: readiness.state ? readiness.state.ready : null,
+  })
   const firstName = String(result?.identity?.name ?? '').trim().split(/\s+/)[0]
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-5">
-      <CameraView camera={camera} busy={busy} overlay={overlay} scanning={['baseline', 'turn', 'verifying'].includes(phase)} tone={tone} guide={phase === 'idle'} />
+      {blocked && (
+        <ModelNotReady readiness={blocked} onRecheck={readiness.recheck} onTrain={train} checking={readiness.checking} training={training} trainError={trainError} />
+      )}
 
-      <section aria-label="Authentication" aria-live="polite" className="flex flex-col gap-4 rounded-[1.25rem] border border-slate-200/80 bg-white p-5 shadow-card">
+      {!blocked && (
+        <CameraView camera={camera} busy={busy} overlay={overlay} scanning={['baseline', 'turn', 'verifying'].includes(phase)} tone={tone} guide={phase === 'idle'} guideTone={phase === 'idle' && hint ? (hint.tone === 'ok' ? 'ok' : 'warn') : null} />
+      )}
+
+      {!blocked && <section aria-label="Authentication" aria-live="polite" className="flex flex-col gap-4 rounded-[1.25rem] border border-slate-200/80 bg-white p-5 shadow-card">
         {phase === 'idle' && (
           <>
             <div>
               <h2 className="text-xl font-extrabold">Position your face</h2>
-              <p className="mt-1 text-sm text-slate-700">{cameraOn ? 'Keep your face inside the frame, then start. You will look at the camera and follow one short instruction.' : 'Turn the camera on, then keep your face inside the frame.'}</p>
+              <p className="mt-1 text-sm text-slate-700">{cameraOn ? 'Hold the phone at eye level and keep your whole face inside the frame, then start. You will look at the camera and follow one short instruction.' : 'Turn the camera on, then keep your whole face inside the frame.'}</p>
+              {cameraOn && hint && (
+                <p role="status" aria-live="polite" data-testid="position-hint" className={`mt-2 text-sm font-semibold ${hint.tone === 'ok' ? 'text-emerald-800' : 'text-amber-900'}`}>{hint.message}</p>
+              )}
             </div>
-            <Button size="lg" onClick={begin} disabled={!cameraOn}>Start face check</Button>
+            {readiness.lookupError && !readiness.state && (
+              <Alert tone="error">
+                {readiness.lookupError}{' '}
+                <button type="button" onClick={readiness.recheck} className="font-semibold underline">Check again</button>
+              </Alert>
+            )}
+            {!readiness.state && !readiness.lookupError && <p role="status" className="text-sm text-slate-600">Checking that face recognition is ready…</p>}
+            <Button size="lg" onClick={begin} disabled={!canStart}>Start face check</Button>
             {!cameraOn && <p className="-mt-2 text-xs text-slate-600">Turn the camera on first.</p>}
           </>
         )}
@@ -193,9 +285,9 @@ export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onEr
             <Button size="lg" onClick={reset} variant={errorCode === 'BIOMETRIC_LOCKED' ? 'secondary' : 'primary'}>Try again</Button>
           </div>
         )}
-      </section>
+      </section>}
 
-      {phase !== 'idle' && <FaceStages rows={stages} />}
+      {(phase !== 'idle' || blocked) && <FaceStages rows={stages} />}
     </div>
   )
 }

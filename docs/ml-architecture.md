@@ -67,7 +67,27 @@ another user.
 
 Errors are `{detail: {code, message}}` with codes such as NO_FACE, MULTIPLE_FACES, FACE_TOO_SMALL, TOO_BLURRY, TOO_DARK,
 TOO_BRIGHT, INVALID_IMAGE, UNKNOWN_POSE, POSE_LIMIT, SAMPLE_LIMIT, NOT_ENOUGH_SAMPLES, NOT_ENOUGH_USERS, TRAINING_BUSY,
-MODEL_NOT_TRAINED, NOT_IN_MODEL, MODEL_UNAVAILABLE, RATE_LIMITED.
+TRAINING_FAILED, RATE_LIMITED, and the model-readiness codes below.
+
+### Model readiness (`GET /faces/readiness`, `face_service.inspect_model`)
+
+One function decides whether recognition can run for a customer, and every path (challenge, recognize, authenticate,
+payment) uses it, so a technical problem is never reported as "identity mismatch". Checked in order:
+
+| Code | Meaning | Next action |
+|---|---|---|
+| `ENROLLMENT_INSUFFICIENT` | the customer has fewer than 12 usable samples or fewer than 3 poses (unusable captures are never stored, so they never count), or is not in the model | ENROLL |
+| `INSUFFICIENT_IDENTITIES` | fewer than 2 people have a finished setup, so PCA/LDA cannot be fitted (LDA needs >= 2 classes) | WAIT_FOR_SECOND_PERSON |
+| `MODEL_NOT_TRAINED` / `MODEL_NOT_FOUND` | no active model / profiles without a model | TRAIN |
+| `MODEL_STALE` | the customer's samples are not in the active model | TRAIN |
+| `MODEL_VERSION_INCOMPATIBLE`, `MODEL_LOAD_FAILED` | stored model cannot be deserialized | TRAIN |
+| `BIOMETRIC_DECRYPTION_FAILED` | key mismatch; retraining will not help | CONTACT_ADMIN |
+
+A database error is raised as a server error, not mapped to a model code. Training is all-or-nothing: a fit failure
+(`TRAINING_FAILED`) or a persistence failure rolls back and leaves the previous model in place. Server logs
+(`facepay.face`) carry the code and exception type only, never images, vectors, keys or tokens. Model problems do not
+count toward the failed-attempt lockout. A model that is older than the customer's latest samples but still contains
+them is reported as `stale` but does not block, because each profile is bound to its model version.
 
 ## Known limitations
 

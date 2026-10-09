@@ -6,6 +6,7 @@ import FaceAuthFlow from '../components/FaceAuthFlow'
 import { Amount, MerchantHeader, Row, SecurityNote, SimulatedTag, StatusBadge, Timeline } from '../components/payUi'
 import { Alert, Button, ButtonLink, Card, ErrorState, Skeleton } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
+import { assessFrame } from '../services/faces'
 import { ApiError } from '../services/api'
 import { authenticateForPayment, confirmPayment, getCheckout, startPaymentAuth } from '../services/payments'
 import { cancelTransfer } from '../services/transfers'
@@ -370,6 +371,7 @@ export default function Checkout() {
             verify={(payload, opts) => authenticateForPayment(token, sessionId, payload, opts)}
             onOutcome={onOutcome}
             onError={onAuthError}
+            assess={(frame) => assessFrame(token, frame)}
           />
           <Button variant="ghost" onClick={restart} className="self-center">Back to payment</Button>
         </>

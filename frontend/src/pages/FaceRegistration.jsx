@@ -9,7 +9,7 @@ import { StatusBadge } from '../components/payUi'
 import { Alert, Button, Card, ConfirmPanel, ErrorState, PageHeader, Spinner } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
 import { CAMERA_MESSAGES, useCamera } from '../hooks/useCamera'
-import { deleteSamples, getEnrollment, getModel, recognize, trainModel } from '../services/faces'
+import { deleteSamples, getEnrollment, getModel, getReadiness, recognize, trainModel } from '../services/faces'
 import { captureFrame } from '../utils/capture'
 import { faceStatus } from '../utils/faceStatus'
 
@@ -36,6 +36,26 @@ function Progress({ value, max, label }) {
 }
 
 /** What a customer needs to know about the model: whether it is ready and includes them. Settings and scores are admin-only. */
+/** Whether a face check can run right now, and if not, exactly why. Wording comes from the server. */
+function ReadinessPanel({ readiness }) {
+  const c = readiness.checks
+  return (
+    <Card title="Recognition status" aria-label="Recognition status">
+      {readiness.ready
+        ? <Alert tone="success">Face recognition is ready for your account.</Alert>
+        : <Alert tone="warning">{readiness.message}</Alert>}
+      {c && (
+        <ul className="mt-3 flex flex-col gap-1 text-sm text-slate-700">
+          <li>Usable samples: {c.samples.have} of {c.samples.need} needed</li>
+          <li>Head positions covered: {c.poses.have} of {c.poses.need} needed</li>
+          <li>{c.people_with_finished_setup.enough ? 'At least two people have a finished setup.' : 'Recognition needs at least two people with a finished setup. FacePay never creates a second person for you.'}</li>
+          <li>{c.model_active ? (c.you_are_in_model ? 'You are part of the trained model.' : 'The trained model does not include you yet.') : 'No trained model yet.'}</li>
+        </ul>
+      )}
+    </Card>
+  )
+}
+
 function ModelPanel({ model }) {
   return (
     <Card title="Face model" aria-label="Model">
@@ -183,6 +203,7 @@ export default function FaceRegistration() {
   const reducedMotion = usePrefersReducedMotion()
   const [enrollment, setEnrollment] = useState(null)
   const [model, setModel] = useState(null)
+  const [readiness, setReadiness] = useState(null)
   const [loadError, setLoadError] = useState(null)
   const [busy, setBusy] = useState(null) // 'train' | 'recognize' | 'delete'
   const [notice, setNotice] = useState(null) // { tone, text }
@@ -198,6 +219,11 @@ export default function FaceRegistration() {
       setLoadError(null)
     } catch (err) {
       setLoadError(err.message)
+    }
+    try {
+      setReadiness(await getReadiness(token))
+    } catch {
+      setReadiness(null) // the status line is advice; the page works without it
     }
   }, [token])
 
@@ -309,6 +335,7 @@ export default function FaceRegistration() {
         )}
       </Card>
 
+      {readiness && <ReadinessPanel readiness={readiness} />}
       {model && <ModelPanel model={model} />}
 
       <HowItWorks />

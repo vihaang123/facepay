@@ -517,13 +517,21 @@ def test_disabled_account_cannot_authenticate_or_confirm(client, trained, shop, 
 def test_missing_model_means_no_authorization(client, trained, shop, db):
     a, _ = trained
     sid = create_session(client, shop)["session_id"]
+    ch = start(client, a, sid)  # the challenge was issued while the model still existed
     db.execute(text("UPDATE model_versions SET status = 'retired'"))
     db.commit()
     from app.ml import registry
+    from tests.payment_helpers import b64
+    from tests.synthetic_scenes import GOOD_TURN, sequence
     registry.invalidate()
-    res = authenticate(client, a, sid).json()
-    assert res["reason"] == "MODEL_UNAVAILABLE" and res["authorization"] is None and res["session_status"] == "CREATED"
+    frames = [b64(f) for f in sequence(0, ch["challenge"], GOOD_TURN)]
+    res = client.post(f"/payments/sessions/{sid}/authenticate", json={"challenge_id": ch["challenge_id"], "frames": frames}, headers=a["headers"]).json()
+    assert res["reason"] in ("MODEL_NOT_FOUND", "MODEL_NOT_TRAINED", "INSUFFICIENT_IDENTITIES") and res["authorization"] is None
+    assert res["session_status"] == "CREATED"
     assert res["attempts_remaining"] == svc.max_auth_failures()  # system problem, not the customer's fault
+    # and a new payment check cannot even start: the customer is told why instead of being asked for frames
+    again = client.post(f"/payments/sessions/{sid}/authenticate/start", headers=a["headers"])
+    assert again.status_code == 409 and again.json()["detail"]["code"] == res["reason"]
 
 
 def test_malformed_authentication_requests_are_422_and_change_nothing(client, trained, shop, db):
@@ -662,8 +670,8 @@ def test_empty_merchant_summary(client, shop):
 def test_session_without_enrolled_face_cannot_authorize(client, shop):
     c = new_customer(client, "No Face")
     sid = create_session(client, shop)["session_id"]
-    res = authenticate(client, c, sid).json()
-    assert res["result"] == "REJECTED" and res["reason"] in ("NOT_ENROLLED", "MODEL_UNAVAILABLE") and res["authorization"] is None
+    r = client.post(f"/payments/sessions/{sid}/authenticate/start", headers=c["headers"])
+    assert r.status_code == 409 and r.json()["detail"]["code"] in ("ENROLLMENT_INSUFFICIENT", "MODEL_STALE")  # no frames are ever requested
 
 
 def _count_queries(client, path, headers):

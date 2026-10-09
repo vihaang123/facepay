@@ -4,22 +4,30 @@ Reuses the Phase 3 pipeline unchanged (preprocessing, FacePipeline, encrypted fa
 Never returns or stores images, crops or feature vectors; the log holds metadata only.
 """
 
+import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 
 import numpy as np
+from fastapi import HTTPException
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.ml import config as cfg
-from app.ml import liveness, registry
+from app.ml import liveness
 from app.ml.preprocessing import FaceDetector, FaceImageError, decode_image, process_gray, vectorize
 from app.models import AuthenticationLog, FaceAuthChallenge, User
 from app.services import auth_policy as policy
-from app.services.face_service import active_profile, decode_upload, is_enrolled_in, load_profile_payload
+from app.services.face_service import decode_upload, inspect_model
 
 
 def issue_challenge(db: Session, user: User) -> dict:
+    # Do not start (and do not let the browser capture frames for) a check that cannot be decided: say why instead.
+    state = inspect_model(db, user)
+    if not state.ready:
+        raise HTTPException(
+            state.http_status, detail={"code": state.code, "message": state.message, "next_action": state.next_action}
+        )
     now = datetime.now(UTC)
     db.execute(  # housekeeping: old challenges are useless
         delete(FaceAuthChallenge).where(FaceAuthChallenge.user_id == user.id, FaceAuthChallenge.expires_at < now - timedelta(days=1))
@@ -78,7 +86,9 @@ def _log(db: Session, user: User, decision: policy.Decision, *, challenge, liven
 
 
 def _stages(ev: policy.Evidence, decision: policy.Decision, liveness_result: str) -> list[dict]:
-    pre_image = decision.reason in ("ACCOUNT_DISABLED", "CHALLENGE_INVALID", "CHALLENGE_EXPIRED", "MODEL_UNAVAILABLE", "NOT_ENROLLED")
+    not_ready = decision.reason in policy.MODEL_NOT_READY_REASONS
+    pre_model = decision.reason in ("ACCOUNT_DISABLED", "CHALLENGE_INVALID", "CHALLENGE_EXPIRED")
+    pre_image = pre_model or not_ready
     face_ok = None if pre_image else (ev.image_reason is None)
     live = {"PASSED": "PASSED", "FAILED": "FAILED"}.get(liveness_result, "SKIPPED")
     identity_reached = (not pre_image) and ev.image_reason is None and ev.liveness_passed is True
@@ -86,7 +96,9 @@ def _stages(ev: policy.Evidence, decision: policy.Decision, liveness_result: str
         ident = "SKIPPED"
     else:
         ident = "PASSED" if decision.authenticated else "FAILED"
+    model = "SKIPPED" if pre_model else ("FAILED" if not_ready else "PASSED")
     return [
+        {"stage": "MODEL", "status": model},
         {"stage": "FACE_DETECTION", "status": "SKIPPED" if face_ok is None else ("PASSED" if face_ok else "FAILED")},
         {"stage": "LIVENESS", "status": live},
         {"stage": "IDENTITY", "status": ident},
@@ -100,7 +112,7 @@ def authenticate(db: Session, user: User, token: str, frames_b64: list[str], det
         decision = policy.decide(evidence)
         entry = _log(db, user, decision, **ctx)
         reached = evidence.liveness_passed is True and evidence.image_reason is None and decision.reason not in (
-            "ACCOUNT_DISABLED", "CHALLENGE_INVALID", "CHALLENGE_EXPIRED", "MODEL_UNAVAILABLE", "NOT_ENROLLED")
+            "ACCOUNT_DISABLED", "CHALLENGE_INVALID", "CHALLENGE_EXPIRED") and decision.reason not in policy.MODEL_NOT_READY_REASONS
         identity = None
         if reached and evidence.frames:
             identity = {
@@ -132,19 +144,13 @@ def authenticate(db: Session, user: User, token: str, frames_b64: list[str], det
         if status != "OK":
             return finish(policy.Evidence(challenge=status))
 
-        try:
-            loaded = registry.load_active(db)
-        except Exception:
-            loaded = None
-        if loaded is None:
-            return finish(policy.Evidence(model_available=False))
-        row, model = loaded
-        ctx["model_version"] = row.version
-        profile = active_profile(db, user.id)
-        if not is_enrolled_in(profile, row):
-            return finish(policy.Evidence(enrolled=False))
-        stored = load_profile_payload(profile, user.id, row.version)
-        centroid, threshold = np.array(stored["centroid"]), float(stored["distance_threshold"])
+        state = inspect_model(db, user)  # a database error here propagates (a server error), it is never "model unavailable"
+        if state.row is not None:
+            ctx["model_version"] = state.row.version
+        if not state.ready:
+            return finish(policy.Evidence(model_issue=state.code))
+        model = state.model
+        centroid, threshold = np.array(state.payload["centroid"]), float(state.payload["distance_threshold"])
         ctx["distance_threshold"] = threshold
 
         # --- decode + detect every frame
@@ -192,6 +198,7 @@ def authenticate(db: Session, user: User, token: str, frames_b64: list[str], det
         )
     except Exception:
         db.rollback()
+        logging.getLogger("facepay.face").exception("face authentication failed unexpectedly user_id=%s", user.id)
         _log(db, user, policy.Decision(False, "INTERNAL_ERROR"), **ctx)
         raise
 

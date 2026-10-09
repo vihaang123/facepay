@@ -419,10 +419,9 @@ def test_removing_face_data_retires_the_profile_and_is_audited(client, trained, 
     assert ov["face_enrolled"] is False and ov["samples_stored"] == 0
     assert "FACE_DATA_REMOVED" in events(db, a["id"])
     sid = create_session(client, shop, amount="1499", ref="ORD-10294")["session_id"]
-    r = authenticate(client, a, sid)
-    # Removing the only trained customer's data retires the shared model, so the check cannot run at all;
-    # with other customers still in a model the reason would be NOT_ENROLLED. Either way: no authorization.
-    assert r.json()["reason"] in ("NOT_ENROLLED", "MODEL_UNAVAILABLE") and r.json()["authorization"] is None
+    r = client.post(f"/payments/sessions/{sid}/authenticate/start", headers=a["headers"])
+    # Removing a trained customer's data retires the shared model, so no check can start for them or anyone else.
+    assert r.status_code == 409 and r.json()["detail"]["code"] in ("ENROLLMENT_INSUFFICIENT", "INSUFFICIENT_IDENTITIES")
 
 
 def test_the_overview_shows_attempts_transactions_limits_and_never_biometric_data(client, trained, shop, db):

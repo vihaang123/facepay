@@ -111,3 +111,29 @@ class RecognitionResult(BaseModel):
     predicted_is_you: bool
     model_version: str
     quality: QualityOut
+
+
+class CountCheck(BaseModel):
+    have: int
+    need: int
+
+
+class ReadinessChecks(BaseModel):
+    samples: CountCheck
+    poses: CountCheck
+    people_with_finished_setup: dict[str, bool]  # {"enough": bool}; other people are never counted out loud or named
+    model_active: bool
+    you_are_in_model: bool
+
+
+class Readiness(BaseModel):
+    """Can this customer be recognised right now? If not, a safe code, a sentence, and what to do about it. Says nothing
+    about the person's face: no decision was made about it."""
+
+    ready: bool
+    code: str | None
+    message: str
+    next_action: str | None  # ENROLL | TRAIN | WAIT_FOR_SECOND_PERSON | CONTACT_ADMIN
+    stale: bool
+    model_version: str | None
+    checks: ReadinessChecks

@@ -1,6 +1,7 @@
 import { paymentStageList } from '../utils/paymentStages'
 
 const STAGE_LABELS = {
+  MODEL: { PASSED: 'Model ready', FAILED: 'Model not ready', SKIPPED: 'Recognition model' },
   FACE_DETECTION: { PASSED: 'Face detected', FAILED: 'Face check failed', SKIPPED: 'Face detection' },
   LIVENESS: { PASSED: 'Basic liveness check passed', FAILED: 'Basic liveness check failed', SKIPPED: 'Basic liveness check' },
   IDENTITY: { PASSED: 'Identity recognized', FAILED: 'Identity not recognized', SKIPPED: 'Identity recognition' },
@@ -13,7 +14,7 @@ export function Stages({ stages }) {
       {stages.map((s) => (
         <li key={s.stage} className={s.status === 'PASSED' ? 'text-emerald-800' : s.status === 'FAILED' ? 'text-rose-800' : 'text-slate-600'}>
           <span aria-hidden="true" className="mr-2 inline-block w-4 text-center font-bold">{STAGE_MARK[s.status]}</span>
-          {STAGE_LABELS[s.stage][s.status]}
+          {STAGE_LABELS[s.stage]?.[s.status] ?? s.stage}
         </li>
       ))}
     </ol>

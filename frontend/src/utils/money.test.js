@@ -21,14 +21,19 @@ describe('face check stages', () => {
   const states = (rows) => Object.fromEntries(rows.map((r) => [r.key, r.state]))
 
   it('marks nothing done that has not happened', () => {
-    expect(states(liveStages({ cameraStatus: 'idle', phase: 'idle' }))).toEqual({ camera: 'todo', face: 'todo', quality: 'todo', liveness: 'todo', identity: 'todo', authorization: 'todo', confirm: 'todo' })
+    expect(states(liveStages({ cameraStatus: 'idle', phase: 'idle' }))).toEqual({ camera: 'todo', face: 'todo', quality: 'todo', model: 'todo', liveness: 'todo', identity: 'todo', match: 'todo', authorization: 'todo', confirm: 'todo' })
     expect(states(liveStages({ cameraStatus: 'active', phase: 'turn' }))).toMatchObject({ camera: 'done', liveness: 'current', identity: 'todo' })
     expect(states(liveStages({ cameraStatus: 'active', phase: 'verifying' }))).toMatchObject({ face: 'current', quality: 'current', identity: 'current' })
   })
   it('follows the server’s stage results and names the confirmation step once authorized', () => {
     const rows = liveStages({ cameraStatus: 'active', phase: 'done', result: passed, authorized: true })
-    expect(states(rows)).toEqual({ camera: 'done', face: 'done', quality: 'done', liveness: 'done', identity: 'done', authorization: 'done', confirm: 'current' })
-    expect(rows.map((r) => r.label)).toEqual(['Camera ready', 'Face detected', 'Image quality checked', 'Basic liveness passed', 'Identity matched', 'Authorization created', 'Confirmation required'])
+    expect(states(rows)).toEqual({ camera: 'done', face: 'done', quality: 'done', model: 'done', liveness: 'done', identity: 'done', match: 'done', authorization: 'done', confirm: 'current' })
+    expect(rows.map((r) => r.label)).toEqual(['Camera ready', 'Face detected', 'Image quality checked', 'Model ready', 'Liveness challenge passed', 'Identity recognized', 'Match accepted', 'Authorization created', 'Confirmation required'])
+  })
+  it('a model that cannot run fails the model step and marks nothing after it as done', () => {
+    const rows = liveStages({ cameraStatus: 'active', phase: 'idle', modelReady: false })
+    expect(states(rows)).toMatchObject({ camera: 'done', model: 'failed', liveness: 'todo', identity: 'todo', match: 'todo' })
+    expect(rows.find((r) => r.key === 'model').label).toBe('Model not ready')
   })
   it('a mismatch fails identity only; poor quality fails quality but not detection; no face fails detection', () => {
     const mismatch = { reason: 'IDENTITY_MISMATCH', stages: [{ stage: 'FACE_DETECTION', status: 'PASSED' }, { stage: 'LIVENESS', status: 'PASSED' }, { stage: 'IDENTITY', status: 'FAILED' }] }

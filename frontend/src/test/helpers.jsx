@@ -35,7 +35,11 @@ const respond = (status, body) => ({ ok: status >= 200 && status < 300, status, 
  * Replaces fetch. `routes` maps "METHOD /path" to { status, body } or a function returning it.
  * Returns the mock; `mock.calls` records { key, body, headers } for every request.
  */
-export function mockApi(routes) {
+// Face recognition is ready unless a test says otherwise (the face check asks before it opens the camera).
+export const READY = { ready: true, code: null, message: '', next_action: null, stale: false, model_version: 1 }
+
+export function mockApi(given) {
+  const routes = { 'GET /faces/readiness': { body: READY }, ...given }
   const calls = []
   const fn = vi.fn(async (url, init = {}) => {
     const key = `${(init.method || 'GET').toUpperCase()} ${new URL(url).pathname}`

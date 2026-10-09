@@ -222,7 +222,7 @@ describe('paying with FacePay', () => {
 
   it('a rejected face keeps the customer on the camera step with the reason and attempts left', async () => {
     await payWithFace({ [`POST /payments/sessions/${SID}/authenticate`]: { body: authRejected('IDENTITY_MISMATCH') } })
-    expect(await screen.findByRole('alert')).toHaveTextContent(/could not verify that this is you/)
+    expect(await screen.findByRole('alert')).toHaveTextContent(/couldn't match this face to the enrolled account/)
     expect(screen.queryByRole('heading', { name: 'Confirm payment' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Confirm/ })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
@@ -267,7 +267,10 @@ describe('paying with FacePay', () => {
 
   it('model unavailable is reported without blaming the customer', async () => {
     await payWithFace({ [`POST /payments/sessions/${SID}/authenticate`]: { body: authRejected('MODEL_UNAVAILABLE', { identity: null, stages: stages('SKIPPED', 'SKIPPED', 'SKIPPED'), liveness: 'NOT_EVALUATED', attempts_remaining: 5 }) } })
-    expect(await screen.findByRole('alert')).toHaveTextContent(/unavailable or needs to be retrained/)
+    expect(await screen.findByRole('heading', { name: 'Recognition model not ready' })).toBeInTheDocument()
+    expect(screen.getByText('Nothing was decided about your face.')).toBeInTheDocument()
+    expect(screen.queryByText(/couldn't match/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Confirm payment' })).not.toBeInTheDocument()
   })
 
   it('backend error while authenticating', async () => {

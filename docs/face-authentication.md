@@ -43,7 +43,9 @@ real webcam head turns.
 ## Authentication policy (`app/services/auth_policy.py`, pure function `decide`)
 
 Reasons are evaluated in order: `ACCOUNT_DISABLED`, `CHALLENGE_INVALID`, `CHALLENGE_EXPIRED`,
-`MODEL_UNAVAILABLE`, `NOT_ENROLLED`, image reasons (`FACE_NOT_DETECTED`, `MULTIPLE_FACES_DETECTED`,
+a model-readiness code (`ENROLLMENT_INSUFFICIENT`, `INSUFFICIENT_IDENTITIES`, `MODEL_NOT_TRAINED`,
+`MODEL_NOT_FOUND`, `MODEL_STALE`, `MODEL_VERSION_INCOMPATIBLE`, `MODEL_LOAD_FAILED`, `BIOMETRIC_DECRYPTION_FAILED`; see
+`ml-architecture.md`), image reasons (`FACE_NOT_DETECTED`, `MULTIPLE_FACES_DETECTED`,
 `FACE_TOO_SMALL`, `POOR_IMAGE_QUALITY`, `INVALID_IMAGE`), `LIVENESS_FAILED`, `IDENTITY_MISMATCH`,
 `LOW_CONFIDENCE`, `DISTANCE_TOO_HIGH`. Authenticated only if **every** baseline frame is predicted as the
 logged-in user, with classifier score for that user ≥ 0.5 (`AUTH_MIN_CONFIDENCE`) and distance to the user's
@@ -71,3 +73,12 @@ No candidate qualified, so P0 stays and thresholds were not tuned to look better
 classifier is a weak verifier; genuine users can be rejected and should expect to retry (about 60–70 % per
 attempt at the 70th-percentile threshold); with few enrolled users a stranger can pass the identity vote and
 is stopped mainly by the distance gate. ORL is not webcam data, so these numbers are indicative only.
+
+
+## Why "Recognition is unavailable" appears
+
+The shared PCA -> LDA -> classifier model needs at least two people with a finished setup. With one enrolled person no
+model can exist, however many samples that person captured. The face screen now asks `GET /faces/readiness` before it
+opens the camera, shows which condition applies and the one action that fixes it, and sends no frames while the model
+is not ready. The seven visible stages (camera, face, quality, model, liveness, identity, match) are marked only from
+what actually happened.

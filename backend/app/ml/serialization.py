@@ -17,7 +17,12 @@ from app.ml.pipeline import FacePipeline
 
 
 class ModelLoadError(Exception):
-    pass
+    """The stored model cannot be used. `kind` is a safe category (never the exception text) for what went wrong:
+    VERSION_MISMATCH (trained with other library versions), DECRYPT (wrong key or tampered), CORRUPT, TYPE."""
+
+    def __init__(self, message: str, kind: str = "CORRUPT"):
+        super().__init__(message)
+        self.kind = kind
 
 
 def library_versions() -> dict:
@@ -41,14 +46,14 @@ def load_model(blob: bytes, version: str, saved_versions: dict | None) -> FacePi
         for lib in ("scikit-learn", "numpy"):
             a, b = saved_versions.get(lib, ""), current[lib]
             if a.split(".")[:2] != b.split(".")[:2]:
-                raise ModelLoadError(f"model {version} was trained with {lib} {a}, running {b}; retrain required")
+                raise ModelLoadError(f"model {version} was trained with {lib} {a}, running {b}; retrain required", "VERSION_MISMATCH")
     try:
         raw = crypto.decrypt(blob, _context(version))
         model = joblib.load(io.BytesIO(raw))
     except crypto.BiometricCryptoError as exc:
-        raise ModelLoadError(f"model {version} cannot be decrypted: {exc}") from exc
+        raise ModelLoadError(f"model {version} cannot be decrypted: {exc}", "DECRYPT") from exc
     except Exception as exc:  # corrupt pickle etc.
-        raise ModelLoadError(f"model {version} is corrupt: {exc}") from exc
+        raise ModelLoadError(f"model {version} is corrupt: {exc}", "CORRUPT") from exc
     if not isinstance(model, FacePipeline):
-        raise ModelLoadError(f"model {version} has an unexpected type")
+        raise ModelLoadError(f"model {version} has an unexpected type", "TYPE")
     return model

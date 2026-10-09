@@ -1,15 +1,25 @@
 // What the user is told for each machine-readable rejection reason. Never names anyone else.
+import { MODEL_FALLBACK_MESSAGE, isModelIssue } from './modelIssues'
+
 const REASON_MESSAGES = {
   FACE_NOT_DETECTED: 'We could not find your face. Face the camera in good light and try again.',
   MULTIPLE_FACES_DETECTED: 'More than one face is visible. For your security, only you may be in front of the camera.',
   FACE_TOO_SMALL: 'You are too far from the camera. Move closer and try again.',
   POOR_IMAGE_QUALITY: 'The picture was not clear enough (too dark, too bright or blurry). Improve the light and hold still.',
   INVALID_IMAGE: 'The camera image could not be read. Try again.',
-  IDENTITY_MISMATCH: 'We could not verify that this is you.',
+  IDENTITY_MISMATCH: "We couldn't match this face to the enrolled account.",
   LOW_CONFIDENCE: 'The match was not confident enough to verify you. Try again facing the camera in good light.',
   DISTANCE_TOO_HIGH: 'Your face was not close enough to your enrolled profile. Try again facing the camera in good light.',
-  MODEL_UNAVAILABLE: 'Face recognition is not available right now. Please try again later.',
+  MODEL_UNAVAILABLE: MODEL_FALLBACK_MESSAGE,
   NOT_ENROLLED: 'Your face is not part of the current model yet. Set up and train your face first.',
+  ENROLLMENT_INSUFFICIENT: 'Your face setup is not finished. Capture the remaining face samples first.',
+  INSUFFICIENT_IDENTITIES: 'The recognition model needs at least two people with a finished face setup. Another person has to complete their own setup.',
+  MODEL_NOT_TRAINED: MODEL_FALLBACK_MESSAGE,
+  MODEL_NOT_FOUND: MODEL_FALLBACK_MESSAGE,
+  MODEL_STALE: MODEL_FALLBACK_MESSAGE,
+  MODEL_VERSION_INCOMPATIBLE: MODEL_FALLBACK_MESSAGE,
+  MODEL_LOAD_FAILED: MODEL_FALLBACK_MESSAGE,
+  BIOMETRIC_DECRYPTION_FAILED: MODEL_FALLBACK_MESSAGE,
   ACCOUNT_DISABLED: 'This account is disabled.',
   CHALLENGE_EXPIRED: 'That took too long and the challenge expired. Start again.',
   CHALLENGE_INVALID: 'That challenge is no longer valid. Start again.',
@@ -55,7 +65,9 @@ const REASON_CATEGORY = {
   FACE_NOT_DETECTED: 'quality', MULTIPLE_FACES_DETECTED: 'quality', FACE_TOO_SMALL: 'quality', POOR_IMAGE_QUALITY: 'quality', INVALID_IMAGE: 'quality',
   LIVENESS_FAILED: 'liveness',
   IDENTITY_MISMATCH: 'mismatch', LOW_CONFIDENCE: 'mismatch', DISTANCE_TOO_HIGH: 'mismatch',
-  NOT_ENROLLED: 'enrollment', MODEL_UNAVAILABLE: 'model',
+  NOT_ENROLLED: 'enrollment', ENROLLMENT_INSUFFICIENT: 'enrollment', MODEL_UNAVAILABLE: 'model',
+  INSUFFICIENT_IDENTITIES: 'model', MODEL_NOT_TRAINED: 'model', MODEL_NOT_FOUND: 'model', MODEL_STALE: 'model',
+  MODEL_VERSION_INCOMPATIBLE: 'model', MODEL_LOAD_FAILED: 'model', BIOMETRIC_DECRYPTION_FAILED: 'model',
   CHALLENGE_EXPIRED: 'challenge', CHALLENGE_INVALID: 'challenge', ACCOUNT_DISABLED: 'account',
 }
 export const CATEGORY_TITLES = {
@@ -76,14 +88,13 @@ export const CATEGORY_TITLES = {
 /** A decision about the face: { category, title, message }. */
 export function classifyRejection(result) {
   const category = REASON_CATEGORY[result.reason] ?? 'other'
-  const message = result.reason === 'MODEL_UNAVAILABLE'
-    ? 'Face recognition is unavailable or needs to be retrained. This is not about your face. Set up your face again or try later.'
-    : failureMessage(result)
+  const message = category === 'model' ? `${failureMessage(result)} This is not about your face.` : failureMessage(result)
   return { category, title: CATEGORY_TITLES[category], message }
 }
 
 /** A request that failed before any decision: { category, title, message }. Never reported as a mismatch. */
 export function classifyError(err) {
+  if (isModelIssue(err?.code)) return { category: 'model', title: CATEGORY_TITLES.model, message: `${err.message} This is not about your face.` }
   if (err?.code && SERVER_WORDED.has(err.code)) return { category: 'other', title: CATEGORY_TITLES.other, message: err.message }
   if (err?.code === 'TIMEOUT' || err?.status === 0) {
     return { category: 'network', title: CATEGORY_TITLES.network, message: `${errorMessage(err)} Nothing was decided about your face, so you can try again.` }

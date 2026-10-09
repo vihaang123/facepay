@@ -9,7 +9,7 @@ import app.models  # noqa: F401  (registers all tables on Base.metadata)
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)  # keep application loggers (facepay.*) alive
 
 # Database URL always comes from the environment, never from alembic.ini.
 config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))

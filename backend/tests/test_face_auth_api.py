@@ -6,7 +6,7 @@ import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.api import faces as faces_api
 from app.core import crypto
@@ -85,6 +85,11 @@ def get_challenge(client, cust):
     return r.json()
 
 
+def stages(res):
+    """{"MODEL": "PASSED", "FACE_DETECTION": ..., "LIVENESS": ..., "IDENTITY": ...} from an authentication result."""
+    return {s["stage"]: s["status"] for s in res["stages"]}
+
+
 def verify(client, cust, challenge_id, frames):
     return client.post("/face-auth/verify", json={"challenge_id": challenge_id, "frames": [b64(f) for f in frames]}, headers=cust["headers"])
 
@@ -99,7 +104,8 @@ def attempt(client, cust, identity, moves=GOOD_TURN, **kw):
 # ------------------------------------------------------------ challenge endpoint
 
 
-def test_challenge_is_random_single_user_and_documented(client, customer):
+def test_challenge_is_random_single_user_and_documented(client, trained):
+    customer, _ = trained
     seen = set()
     for _ in range(30):
         c = get_challenge(client, customer)
@@ -125,7 +131,7 @@ def test_correct_user_with_completed_challenge_is_authenticated_and_logged(clien
     res = attempt(client, a, identity=0)
     assert res["result"] == "AUTHENTICATED" and res["reason"] is None
     assert res["liveness"] == "PASSED"
-    assert [s["status"] for s in res["stages"]] == ["PASSED", "PASSED", "PASSED"]
+    assert list(stages(res).values()) == ["PASSED"] * 4
     ident = res["identity"]
     assert ident["verified"] and ident["name"] == "Asha Rao" and ident["frames_evaluated"] == cfg.AUTH_BASELINE_FRAMES
     # scores and distances are internal: the response carries the outcome only, the audit log keeps the numbers
@@ -176,7 +182,7 @@ def test_low_confidence_is_rejected(client, trained, monkeypatch, db):
     monkeypatch.setattr(cfg, "AUTH_MIN_CONFIDENCE", 1.01)  # no classifier output can reach this
     res = attempt(client, a, 0)
     assert res["result"] == "REJECTED" and res["reason"] == "LOW_CONFIDENCE"
-    assert db.get(AuthenticationLog, res["authentication_id"]).confidence < 1.01 and res["stages"][2]["status"] == "FAILED"
+    assert db.get(AuthenticationLog, res["authentication_id"]).confidence < 1.01 and stages(res)["IDENTITY"] == "FAILED"
 
 
 def test_excessive_distance_is_rejected(client, trained, db):
@@ -216,7 +222,7 @@ def test_failed_liveness_challenge_is_rejected_even_for_the_right_face(client, t
     res = attempt(client, a, 0, moves=moves)
     assert res["result"] == "REJECTED" and res["reason"] == "LIVENESS_FAILED" and res["detail"] == detail
     assert res["liveness"] == "FAILED" and res["identity"] is None  # identity result is not disclosed
-    assert [s["status"] for s in res["stages"]] == ["PASSED", "FAILED", "SKIPPED"]
+    assert [stages(res)[k] for k in ("FACE_DETECTION", "LIVENESS", "IDENTITY")] == ["PASSED", "FAILED", "SKIPPED"]
     log = db.get(AuthenticationLog, res["authentication_id"])
     assert log.liveness_result == "FAILED" and log.failure_detail == detail
     assert log.confidence is not None  # the identity numbers are still logged for audit
@@ -232,7 +238,7 @@ def test_multiple_faces_in_baseline_are_rejected(client, trained, db):
     frames[0] = scene(0, 300, extra=[(1, 5, 20, 70, 80)])
     res = verify(client, a, ch["challenge_id"], frames).json()
     assert res["result"] == "REJECTED" and res["reason"] == "MULTIPLE_FACES_DETECTED"
-    assert res["liveness"] == "NOT_EVALUATED" and [s["status"] for s in res["stages"]] == ["FAILED", "SKIPPED", "SKIPPED"]
+    assert res["liveness"] == "NOT_EVALUATED" and [stages(res)[k] for k in ("FACE_DETECTION", "LIVENESS", "IDENTITY")] == ["FAILED", "SKIPPED", "SKIPPED"]
 
 
 def test_second_face_appearing_during_the_challenge_is_rejected(client, trained):
@@ -332,20 +338,34 @@ def test_disabled_account_is_rejected_and_logged(client, trained, db):
     db.commit()
     res = verify(client, a, ch["challenge_id"], sequence(0, ch["challenge"], GOOD_TURN)).json()
     assert res["result"] == "REJECTED" and res["reason"] == "ACCOUNT_DISABLED"
-    assert [s["status"] for s in res["stages"]] == ["SKIPPED"] * 3
+    assert set(stages(res).values()) == {"SKIPPED"}
     assert db.get(AuthenticationLog, res["authentication_id"]).failure_reason == "ACCOUNT_DISABLED"
     assert client.post("/face-auth/challenge", headers=a["headers"]).status_code == 403  # cannot start a new one
 
 
-def test_missing_model_is_model_unavailable(client, db):
+def test_no_challenge_is_issued_when_there_is_no_model_and_the_reason_is_specific(client):
     a = new_customer(client)
+    r = client.post("/face-auth/challenge", headers=a["headers"])
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "ENROLLMENT_INSUFFICIENT"
+    assert r.json()["detail"]["next_action"] == "ENROLL"
+
+
+def test_a_model_that_disappears_after_the_challenge_is_reported_as_not_trained_not_as_a_mismatch(client, trained, db):
+    a, _ = trained
     ch = get_challenge(client, a)
+    db.execute(update(ModelVersion).values(status="retired"))
+    db.commit()
+    from app.ml import registry
+
+    registry.invalidate()
     res = verify(client, a, ch["challenge_id"], sequence(0, ch["challenge"], GOOD_TURN)).json()
-    assert res["result"] == "REJECTED" and res["reason"] == "MODEL_UNAVAILABLE" and res["model_version"] is None
-    assert db.scalar(select(AuthenticationLog.failure_reason)) == "MODEL_UNAVAILABLE"
+    assert res["result"] == "REJECTED" and res["reason"] != "IDENTITY_MISMATCH"
+    assert res["reason"] in ("MODEL_NOT_FOUND", "MODEL_NOT_TRAINED", "INSUFFICIENT_IDENTITIES")
+    assert stages(res)["MODEL"] == "FAILED" and stages(res)["IDENTITY"] == "SKIPPED" and res["identity"] is None
+    assert db.scalar(select(AuthenticationLog.failure_reason).order_by(AuthenticationLog.id.desc())) == res["reason"]
 
 
-def test_corrupted_model_is_model_unavailable(client, trained, db):
+def test_corrupted_model_is_reported_as_a_load_failure_and_no_challenge_is_issued(client, trained, db):
     a, _ = trained
     from app.ml import registry
 
@@ -355,13 +375,16 @@ def test_corrupted_model_is_model_unavailable(client, trained, db):
     row.artifact = bytes(blob)
     db.commit()
     registry.invalidate()
-    assert attempt(client, a, 0)["reason"] == "MODEL_UNAVAILABLE"
+    r = client.post("/face-auth/challenge", headers=a["headers"])
+    assert r.status_code == 503 and r.json()["detail"]["code"] == "BIOMETRIC_DECRYPTION_FAILED"
+    assert "decrypt" not in r.json()["detail"]["message"].lower() and "AES" not in r.text  # no crypto detail for customers
 
 
-def test_user_not_in_the_model_is_not_enrolled(client, trained):
+def test_user_enrolled_after_training_is_told_the_model_is_stale(client, trained):
     c = new_customer(client)
-    res = attempt(client, c, 2)
-    assert res["result"] == "REJECTED" and res["reason"] == "NOT_ENROLLED"
+    enroll(client, c, 2)
+    r = client.post("/face-auth/challenge", headers=c["headers"])
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "MODEL_STALE" and r.json()["detail"]["next_action"] == "TRAIN"
 
 
 # ------------------------------------------------------------ malformed requests

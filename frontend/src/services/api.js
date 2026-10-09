@@ -1,5 +1,9 @@
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '')
 
+const SAFE_SERVER_CODES = new Set([
+  'MODEL_VERSION_INCOMPATIBLE', 'MODEL_LOAD_FAILED', 'BIOMETRIC_DECRYPTION_FAILED', 'TRAINING_FAILED',
+])
+
 export class ApiError extends Error {
   constructor(message, status, fieldErrors = {}, code = null) {
     super(message)
@@ -40,8 +44,10 @@ async function parseError(response) {
   } catch {
     // non-JSON error body
   }
-  // A 5xx body is never shown (it could be a framework message); 4xx messages come from our own API.
-  const server = response.status < 500
+  // A 5xx body is never shown (it could be a framework message); 4xx messages come from our own API. The exception is
+  // a short list of codes the API itself raises with customer-safe wording (the recognition model is not ready).
+  const knownCode = detail && typeof detail === 'object' && !Array.isArray(detail) && SAFE_SERVER_CODES.has(detail.code)
+  const server = response.status < 500 || knownCode
   if (server && typeof detail === 'string') {
     return new ApiError(detail, response.status)
   }

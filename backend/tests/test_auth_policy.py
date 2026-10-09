@@ -24,6 +24,9 @@ def test_all_checks_pass():
         (dict(challenge="EXPIRED"), "CHALLENGE_EXPIRED"),
         (dict(model_available=False), "MODEL_UNAVAILABLE"),
         (dict(enrolled=False), "NOT_ENROLLED"),
+        (dict(model_issue="MODEL_NOT_TRAINED"), "MODEL_NOT_TRAINED"),
+        (dict(model_issue="INSUFFICIENT_IDENTITIES"), "INSUFFICIENT_IDENTITIES"),
+        (dict(model_issue="MODEL_LOAD_FAILED", liveness_passed=True, frames=(GOOD,)), "MODEL_LOAD_FAILED"),  # never reaches identity
         (dict(image_reason=IMAGE_ERROR_REASON["NO_FACE"]), "FACE_NOT_DETECTED"),
         (dict(image_reason=IMAGE_ERROR_REASON["MULTIPLE_FACES"]), "MULTIPLE_FACES_DETECTED"),
         (dict(image_reason=IMAGE_ERROR_REASON["TOO_BLURRY"]), "POOR_IMAGE_QUALITY"),
@@ -79,3 +82,12 @@ def test_distance_boundary_is_inclusive():
 
 def test_decision_value_object():
     assert Decision(True).result == "AUTHENTICATED" and Decision(False, "X").result == "REJECTED"
+
+
+def test_every_model_issue_code_is_a_documented_reason_and_never_an_identity_decision():
+    from app.services.face_service import MODEL_ISSUES
+
+    for code in MODEL_ISSUES:
+        assert code in REASONS
+        d = decide(ev(model_issue=code))
+        assert d.reason == code and code not in ("IDENTITY_MISMATCH", "LOW_CONFIDENCE", "DISTANCE_TOO_HIGH")

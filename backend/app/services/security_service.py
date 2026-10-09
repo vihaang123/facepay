@@ -44,6 +44,14 @@ REASON_CATEGORY = {
     "ACCOUNT_DISABLED": "Account",
     "NOT_ENROLLED": "Enrolment",
     "MODEL_UNAVAILABLE": "System",
+    "ENROLLMENT_INSUFFICIENT": "Enrolment",
+    "INSUFFICIENT_IDENTITIES": "Enrolment",
+    "MODEL_NOT_TRAINED": "System",
+    "MODEL_NOT_FOUND": "System",
+    "MODEL_STALE": "Enrolment",
+    "MODEL_VERSION_INCOMPATIBLE": "System",
+    "MODEL_LOAD_FAILED": "System",
+    "BIOMETRIC_DECRYPTION_FAILED": "System",
     "INTERNAL_ERROR": "System",
 }
 

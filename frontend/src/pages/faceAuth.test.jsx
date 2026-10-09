@@ -15,6 +15,7 @@ const challenge = {
   max_frames: 10,
 }
 const stages = (a, b, c) => [
+  { stage: 'MODEL', status: 'PASSED' },
   { stage: 'FACE_DETECTION', status: a },
   { stage: 'LIVENESS', status: b },
   { stage: 'IDENTITY', status: c },
@@ -115,7 +116,7 @@ describe('FacePay authentication screen', () => {
     // the customer never sees scores, distances or thresholds
     expect(document.body.textContent).not.toMatch(/confidence|distance|threshold|calibrated|\d+\.\d%/i)
     const steps = screen.getByRole('list', { name: 'Face check steps' })
-    for (const label of ['Camera ready', 'Face detected', 'Image quality checked', 'Basic liveness passed', 'Identity matched', 'Authorization']) {
+    for (const label of ['Camera ready', 'Face detected', 'Image quality checked', 'Model ready', 'Liveness challenge passed', 'Identity recognized', 'Match accepted', 'Authorization']) {
       expect(within(steps).getByText(label)).toBeInTheDocument()
     }
   })
@@ -136,7 +137,6 @@ describe('FacePay authentication screen', () => {
     [rejected('LIVENESS_FAILED', { detail: 'NO_MOVEMENT', stages: stages('PASSED', 'FAILED', 'SKIPPED'), liveness: 'FAILED' }), /Liveness check failed\. We did not see you turn your head/],
     [rejected('LIVENESS_FAILED', { detail: 'WRONG_DIRECTION', stages: stages('PASSED', 'FAILED', 'SKIPPED'), liveness: 'FAILED' }), /turned the wrong way/],
     [rejected('POOR_IMAGE_QUALITY', { detail: 'TOO_BLURRY', stages: stages('FAILED', 'SKIPPED', 'SKIPPED'), liveness: 'NOT_EVALUATED' }), /not clear enough/],
-    [rejected('MODEL_UNAVAILABLE', { stages: stages('SKIPPED', 'SKIPPED', 'SKIPPED'), liveness: 'NOT_EVALUATED' }), /unavailable or needs to be retrained/],
     [rejected('CHALLENGE_EXPIRED', { stages: stages('SKIPPED', 'SKIPPED', 'SKIPPED'), liveness: 'NOT_EVALUATED' }), /challenge expired/],
     [rejected('ACCOUNT_DISABLED', { stages: stages('SKIPPED', 'SKIPPED', 'SKIPPED'), liveness: 'NOT_EVALUATED' }), /account is disabled/],
   ])('explains rejection %#', async (body, text) => {
@@ -148,7 +148,7 @@ describe('FacePay authentication screen', () => {
   })
 
   it.each([
-    ['IDENTITY_MISMATCH', /could not verify that this is you/],
+    ['IDENTITY_MISMATCH', /couldn't match this face to the enrolled account/],
     ['LOW_CONFIDENCE', /not confident enough/],
     ['DISTANCE_TOO_HIGH', /not close enough to your enrolled profile/],
   ])('recognition failure %s is a mismatch, shows no scores and never the name', async (reason, text) => {
@@ -159,14 +159,12 @@ describe('FacePay authentication screen', () => {
     expect(document.body.textContent).not.toMatch(/confidence:|distance|threshold|\d+\.\d%/i)
     expect(screen.queryByText(/Verified as/)).not.toBeInTheDocument()
     expect(within(screen.getByRole('list', { name: 'Authentication stages' })).getByText('Identity not recognized')).toBeInTheDocument()
-    expect(within(screen.getByRole('list', { name: 'Face check steps' })).getByText('Identity did not match')).toBeInTheDocument()
+    expect(within(screen.getByRole('list', { name: 'Face check steps' })).getByText('Match rejected')).toBeInTheDocument()
   })
 
   it.each([
     [rejected('POOR_IMAGE_QUALITY', { stages: stages('FAILED', 'SKIPPED', 'SKIPPED'), liveness: 'NOT_EVALUATED' }), 'Picture not clear enough'],
     [rejected('LIVENESS_FAILED', { detail: 'NO_MOVEMENT', stages: stages('PASSED', 'FAILED', 'SKIPPED'), liveness: 'FAILED' }), 'Liveness check not passed'],
-    [rejected('NOT_ENROLLED', { stages: stages('SKIPPED', 'SKIPPED', 'SKIPPED'), liveness: 'NOT_EVALUATED' }), 'Face setup needed'],
-    [rejected('MODEL_UNAVAILABLE', { stages: stages('SKIPPED', 'SKIPPED', 'SKIPPED'), liveness: 'NOT_EVALUATED' }), 'Recognition is unavailable'],
   ])('names the kind of problem %#', async (body, title) => {
     await openAndStart({ body })
     expect(await screen.findByRole('heading', { name: title })).toBeInTheDocument()
@@ -200,9 +198,65 @@ describe('FacePay authentication screen', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/Nothing was decided about your face/)
   })
 
-  it('points users who are not in the model to face setup', async () => {
-    await openAndStart({ body: rejected('NOT_ENROLLED', { stages: stages('SKIPPED', 'SKIPPED', 'SKIPPED'), liveness: 'NOT_EVALUATED' }) })
-    expect(await screen.findByRole('link', { name: 'Set up your face' })).toHaveAttribute('href', '/face')
+  describe('when recognition cannot run', () => {
+    const notReadyBody = (code, next, message = 'Face recognition is temporarily unavailable because the recognition model is not ready.') =>
+      ({ ready: false, code, message, next_action: next, stale: false, model_version: null })
+    const open = async (readiness, extra = {}) => {
+      const user = userEvent.setup()
+      const api = mockApi({ ...routes({ body: success }, extra), 'GET /faces/readiness': { body: readiness } })
+      renderApp('/authenticate')
+      await screen.findByRole('heading', { name: 'FacePay Authentication' })
+      return { user, api }
+    }
+
+    it('says so before the camera opens, sends no frames and never calls it a mismatch', async () => {
+      const { api } = await open(notReadyBody('MODEL_NOT_TRAINED', 'TRAIN'))
+      expect(await screen.findByRole('heading', { name: 'Recognition model not ready' })).toBeInTheDocument()
+      expect(within(screen.getByRole('region', { name: 'Recognition status' })).getByRole('status')).toHaveTextContent('Face recognition is temporarily unavailable because the recognition model is not ready.')
+      expect(screen.getByText('Nothing was decided about your face.')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Start face check' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Turn camera on' })).not.toBeInTheDocument()
+      expect(screen.queryByText(/couldn't match/i)).not.toBeInTheDocument()
+      expect(api.callsTo('POST /face-auth/challenge')).toHaveLength(0)
+      expect(api.callsTo('POST /face-auth/verify')).toHaveLength(0)
+      const model = within(screen.getByRole('list', { name: 'Face check steps' })).getByText('Model not ready')
+      expect(model).toBeInTheDocument()
+    })
+
+    it('offers to prepare the model, then opens the camera once the server says it is ready', async () => {
+      let ready = false
+      const trained = []
+      const user = userEvent.setup()
+      mockApi({
+        ...routes({ body: success }),
+        'GET /faces/readiness': () => ({ body: ready ? { ready: true } : notReadyBody('MODEL_NOT_TRAINED', 'TRAIN') }),
+        'POST /faces/train': () => { trained.push(1); ready = true; return { body: { ok: true } } },
+      })
+      renderApp('/authenticate')
+      await user.click(await screen.findByRole('button', { name: 'Prepare recognition model' }))
+      expect(await screen.findByRole('button', { name: 'Turn camera on' })).toBeInTheDocument()
+      expect(trained).toHaveLength(1)
+    })
+
+    it('needs a second person: explains it and offers no training button', async () => {
+      await open(notReadyBody('INSUFFICIENT_IDENTITIES', 'WAIT_FOR_SECOND_PERSON', 'The recognition model needs at least two people with a finished face setup.'))
+      expect(await screen.findByRole('heading', { name: 'Recognition needs a second person' })).toBeInTheDocument()
+      expect(screen.getByText(/never creates a second person/)).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Prepare recognition model' })).not.toBeInTheDocument()
+    })
+
+    it('points users with an unfinished setup to face setup', async () => {
+      await open(notReadyBody('ENROLLMENT_INSUFFICIENT', 'ENROLL', 'Your face setup is not finished.'))
+      expect(await screen.findByRole('link', { name: 'Finish face setup' })).toHaveAttribute('href', '/face')
+    })
+
+    it('shows the model panel, not a retry loop, when the server reports the model problem at verify time', async () => {
+      const { api } = await openAndStart({ status: 409, body: { detail: { code: 'MODEL_STALE', message: 'The recognition model needs updating.', next_action: 'TRAIN' } } })
+      expect(await screen.findByRole('heading', { name: 'Recognition model needs updating' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+      expect(screen.queryByText(/couldn't match/i)).not.toBeInTheDocument()
+      expect(api.callsTo('POST /face-auth/verify')).toHaveLength(1)
+    })
   })
 
   it.each([

@@ -94,6 +94,23 @@ async function openPage(extra) {
   await screen.findByRole('button', { name: /(Start|Continue) face setup|Finish setup/ })
   return api
 }
+
+describe('recognition status on the setup page', () => {
+  const checks = (o = {}) => ({ samples: { have: 15, need: 12 }, poses: { have: 5, need: 3 }, people_with_finished_setup: { enough: false }, model_active: false, you_are_in_model: false, ...o })
+  it('says exactly why recognition cannot run and never offers to invent a second person', async () => {
+    await openPage({ 'GET /faces/readiness': { body: { ready: false, code: 'INSUFFICIENT_IDENTITIES', message: 'The recognition model needs at least two people with a finished face setup.', next_action: 'WAIT_FOR_SECOND_PERSON', stale: false, model_version: null, checks: checks() } } })
+    const panel = await screen.findByRole('region', { name: 'Recognition status' })
+    expect(panel).toHaveTextContent('needs at least two people')
+    expect(panel).toHaveTextContent('Usable samples: 15 of 12 needed')
+    expect(panel).toHaveTextContent('No trained model yet.')
+    expect(panel).toHaveTextContent('never creates a second person')
+  })
+  it('reports ready when the server says so', async () => {
+    await openPage({ 'GET /faces/readiness': { body: { ready: true, code: null, message: '', next_action: null, stale: false, model_version: 3, checks: checks({ people_with_finished_setup: { enough: true }, model_active: true, you_are_in_model: true }) } } })
+    expect(await screen.findByText('Face recognition is ready for your account.')).toBeInTheDocument()
+  })
+})
+
 const phase = () => screen.getByTestId('enroll-stage').dataset.phase
 const startSetup = async (user) => user.click(screen.getByRole('button', { name: /(Start|Continue) face setup/ }))
 const until = (fn, timeout = 4000) => waitFor(fn, { timeout })

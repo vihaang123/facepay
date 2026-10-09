@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import FaceAuthFlow from '../components/FaceAuthFlow'
 import { Card, PageHeader, TableWrap, Th } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
+import { assessFrame } from '../services/faces'
 import { getAttempts, requestChallenge, verifyFace } from '../services/faceAuth'
 
 export default function FaceAuthentication() {
@@ -27,6 +28,7 @@ export default function FaceAuthentication() {
         requestChallenge={() => requestChallenge(token)}
         verify={(payload, opts) => verifyFace(token, payload, opts)}
         onOutcome={loadAttempts}
+        assess={(frame) => assessFrame(token, frame)}
       />
 
       {attempts.length > 0 && (

@@ -314,7 +314,7 @@ def test_user_enrolled_after_training_is_not_in_model(client, trained):
     c = new_customer(client)
     enroll(client, c, 2)
     r = client.post("/faces/recognize", json={"image_base64": b64(sample_image(2, 100))}, headers=c["headers"])
-    assert r.status_code == 409 and r.json()["detail"]["code"] == "NOT_IN_MODEL"
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "MODEL_STALE"
 
 
 def test_deleting_face_data_removes_samples_profile_and_retires_model(client, trained, db):
@@ -325,7 +325,7 @@ def test_deleting_face_data_removes_samples_profile_and_retires_model(client, tr
     assert db.scalars(select(FaceProfile).where(FaceProfile.status == "active")).all() == []
     assert db.scalar(select(FaceProfile.feature_data).where(FaceProfile.user_id == a["id"])) is None
     r = client.post("/faces/recognize", json={"image_base64": b64(sample_image(1, 100))}, headers=b["headers"])
-    assert r.json()["detail"]["code"] == "MODEL_NOT_TRAINED"
+    assert r.json()["detail"]["code"] == "INSUFFICIENT_IDENTITIES"
     assert client.get("/faces/enrollment", headers=b["headers"]).json()["total_samples"] == 12  # others untouched
 
 
@@ -340,7 +340,7 @@ def test_corrupted_model_artifact_fails_safely(client, trained, db):
     db.commit()
     registry.invalidate()
     r = client.post("/faces/recognize", json={"image_base64": b64(sample_image(0, 100))}, headers=a["headers"])
-    assert r.status_code == 503 and r.json()["detail"]["code"] == "MODEL_UNAVAILABLE"
+    assert r.status_code == 503 and r.json()["detail"]["code"] == "BIOMETRIC_DECRYPTION_FAILED"
 
 
 def test_real_haar_detector_is_wired_into_the_api(client, customer):

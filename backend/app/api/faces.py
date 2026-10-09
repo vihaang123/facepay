@@ -13,6 +13,7 @@ from app.schemas.faces import (
     EnrollmentStatus,
     ModelStatus,
     ModelSummary,
+    Readiness,
     RecognitionResult,
     RecognizeRequest,
     SampleResult,
@@ -96,6 +97,12 @@ def train(user: User = Depends(get_current_customer), db: Session = Depends(get_
         return svc.train(db, user)
     except svc.FaceServiceError as exc:
         raise _http(exc) from None
+
+
+@router.get("/readiness", response_model=Readiness)
+def readiness(user: User = Depends(get_current_customer), db: Session = Depends(get_db)):
+    """Why a face check can or cannot run right now. Cheap: no image is involved."""
+    return svc.readiness(db, user)
 
 
 @router.get("/model", response_model=ModelStatus)

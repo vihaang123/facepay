@@ -21,6 +21,15 @@ REASONS = (
     "CHALLENGE_EXPIRED",
     "MODEL_UNAVAILABLE",
     "NOT_ENROLLED",
+    # Why recognition could not run (the face itself was never judged). See face_service.MODEL_ISSUES.
+    "ENROLLMENT_INSUFFICIENT",
+    "INSUFFICIENT_IDENTITIES",
+    "MODEL_NOT_TRAINED",
+    "MODEL_NOT_FOUND",
+    "MODEL_STALE",
+    "MODEL_VERSION_INCOMPATIBLE",
+    "MODEL_LOAD_FAILED",
+    "BIOMETRIC_DECRYPTION_FAILED",
     "INVALID_IMAGE",
     "FACE_NOT_DETECTED",
     "MULTIPLE_FACES_DETECTED",
@@ -60,6 +69,7 @@ class Evidence:
     challenge: str = "OK"  # OK | INVALID | EXPIRED
     model_available: bool = True
     enrolled: bool = True
+    model_issue: str | None = None  # a specific reason from face_service.MODEL_ISSUES; takes precedence over the two flags
     image_reason: tuple[str, str | None] | None = None  # (reason, detail) from IMAGE_ERROR_REASON
     liveness_passed: bool | None = None
     liveness_detail: str | None = None
@@ -90,6 +100,8 @@ def decide(e: Evidence, min_confidence: float | None = None) -> Decision:
         return _no("CHALLENGE_INVALID")
     if e.challenge == "EXPIRED":
         return _no("CHALLENGE_EXPIRED")
+    if e.model_issue is not None:
+        return _no(e.model_issue)
     if not e.model_available:
         return _no("MODEL_UNAVAILABLE")
     if not e.enrolled:
@@ -108,3 +120,10 @@ def decide(e: Evidence, min_confidence: float | None = None) -> Decision:
     if any(f.distance > e.distance_threshold for f in e.frames):
         return _no("DISTANCE_TOO_HIGH")
     return Decision(True)
+
+
+# Reasons that mean "recognition could not run", as opposed to a decision about the face. Used for stages, logs and UI.
+MODEL_NOT_READY_REASONS = frozenset({
+    "MODEL_UNAVAILABLE", "NOT_ENROLLED", "ENROLLMENT_INSUFFICIENT", "INSUFFICIENT_IDENTITIES", "MODEL_NOT_TRAINED",
+    "MODEL_NOT_FOUND", "MODEL_STALE", "MODEL_VERSION_INCOMPATIBLE", "MODEL_LOAD_FAILED", "BIOMETRIC_DECRYPTION_FAILED",
+})
