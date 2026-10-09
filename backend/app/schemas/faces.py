@@ -89,25 +89,12 @@ class AssessResult(BaseModel):
     faces: int
     face: FrameGeometry | None
 
-class VariantMetrics(BaseModel):
-    accuracy: float
-    macro_precision: float
-    macro_recall: float
-    macro_f1: float
-    predict_ms_per_sample: float
-
-
 class ModelSummary(BaseModel):
+    """What a customer may know about the recognition model: whether it is ready and includes them. Classifier
+    settings, validation results and scores are administrator-only (see /admin/ml)."""
+
     version: str
     trained_at: datetime
-    n_users: int
-    n_samples: int
-    classifier: str
-    pca: dict
-    lda: dict | None
-    validation: str
-    comparison: dict[str, VariantMetrics]
-    distance_threshold: float
     includes_you: bool
     stale: bool  # enrolment data changed since this model was trained
 
@@ -117,12 +104,10 @@ class ModelStatus(BaseModel):
 
 
 class RecognitionResult(BaseModel):
+    """A test recognition for the signed-in customer. No scores, distances or thresholds: those are internal."""
+
     matched: bool
     reason: str  # MATCH | WRONG_IDENTITY | TOO_FAR_FROM_PROFILE
     predicted_is_you: bool
-    user_id: int | None  # only set when the prediction is the caller
-    confidence: float
-    distance_to_you: float | None
-    distance_threshold: float | None
     model_version: str
     quality: QualityOut

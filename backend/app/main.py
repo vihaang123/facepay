@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import auth, face_auth, faces, health, merchant_payments, payments, profile, security
+from app.api import admin, auth, face_auth, faces, health, merchant_payments, payments, profile, security, transfers
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 
@@ -11,7 +11,7 @@ settings = get_settings()
 app = FastAPI(
     title="FacePay API",
     description="PCA-LDA facial authentication for simulated payments. Academic prototype.",
-    version="0.6.0",
+    version="0.7.0",
     # The interactive docs list every endpoint; keep them for development only.
     docs_url=None if settings.is_production else "/docs",
     redoc_url=None if settings.is_production else "/redoc",
@@ -39,7 +39,7 @@ app.add_middleware(
     allow_origins=settings.cors_origin_list,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
 )
 
 register_exception_handlers(app)
@@ -52,3 +52,5 @@ app.include_router(face_auth.router)
 app.include_router(payments.router)
 app.include_router(security.router)
 app.include_router(merchant_payments.router)
+app.include_router(transfers.router)
+app.include_router(admin.router)

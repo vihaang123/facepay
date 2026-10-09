@@ -7,7 +7,7 @@ from app.api.deps import get_current_merchant
 from app.database.session import get_db
 from app.models import Merchant
 from app.api.payments import TX_SORT, TX_STATUS
-from app.schemas.payments import MerchantSessionOut, MerchantSummary, MerchantTransactionOut, ReceiptOut, SessionCreate
+from app.schemas.payments import MerchantSecuritySummary, MerchantSessionOut, MerchantSummary, MerchantTransactionOut, ReceiptOut, SessionCreate
 from app.services import payment_service as svc
 
 router = APIRouter(prefix="/merchant", tags=["merchant-payments"])
@@ -66,3 +66,9 @@ def receipt(transaction_id: str, merchant: Merchant = Depends(get_current_mercha
 @router.get("/summary", response_model=MerchantSummary)
 def summary(merchant: Merchant = Depends(get_current_merchant), db: Session = Depends(get_db)):
     return svc.merchant_summary(db, merchant)
+
+
+@router.get("/security-summary", response_model=MerchantSecuritySummary)
+def security_summary(merchant: Merchant = Depends(get_current_merchant), db: Session = Depends(get_db)):
+    """Aggregate authentication outcomes for this merchant's own payments. No customer or biometric detail."""
+    return svc.merchant_security_summary(db, merchant)

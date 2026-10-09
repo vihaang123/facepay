@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AuthDetails, PaymentStages } from '../components/AuthStages'
 import Icon from '../components/Icon'
 import FaceAuthFlow from '../components/FaceAuthFlow'
@@ -8,16 +8,20 @@ import { Alert, Button, ButtonLink, Card, ErrorState, Skeleton } from '../compon
 import { useAuth } from '../hooks/useAuth'
 import { ApiError } from '../services/api'
 import { authenticateForPayment, confirmPayment, getCheckout, startPaymentAuth } from '../services/payments'
+import { cancelTransfer } from '../services/transfers'
 import { DASHBOARD_PATH, RECEIPT_PATH, SECURITY_PATH } from '../utils/roles'
 import { formatDateTime, formatMoney, isPayable } from '../utils/format'
 import { customerTimeline } from '../utils/timeline'
 
-const TERMINAL_MESSAGES = {
+const terminalMessage = (status, transfer) => ({
   PAID: 'This payment has already been completed.',
-  EXPIRED: 'This payment request has expired. Ask the merchant for a new one.',
-  CANCELLED: 'The merchant cancelled this payment request.',
-  FAILED: 'Too many failed face checks. Ask the merchant for a new payment request.',
-}
+  EXPIRED: transfer ? 'This payment expired before it was confirmed. Start a new one from Send money.' : 'This payment request has expired. Ask the merchant for a new one.',
+  CANCELLED: transfer ? 'This payment was cancelled. No money moved.' : 'The merchant cancelled this payment request.',
+  FAILED: transfer ? 'Too many failed face checks. Start a new payment from Send money.' : 'Too many failed face checks. Ask the merchant for a new payment request.',
+}[status] ?? 'This payment cannot be paid.')
+
+// Who the money goes to, whichever kind of payment this is.
+const payeeName = (x) => x.recipient_name ?? x.merchant_name
 
 // Customer-friendly wording. The server's error code stays available under "Technical details".
 const CONFIRM_ERRORS = {
@@ -28,6 +32,11 @@ const CONFIRM_ERRORS = {
   MERCHANT_MISMATCH: 'The merchant for this payment changed. Please review it and verify your face again.',
   ORDER_MISMATCH: 'The order for this payment changed. Please review it and verify your face again.',
   SESSION_ALREADY_PAID: 'This payment was already completed. Check your payment history before paying again.',
+  RECIPIENT_MISMATCH: 'The person you are paying changed. Please review the payment and verify your face again.',
+  EXPECTATION_MISSING: 'We could not match what you reviewed with this payment. Please start again.',
+  INSUFFICIENT_BALANCE: 'Your balance is too low for this payment. No money moved.',
+  REQUEST_NOT_PENDING: 'The request behind this payment is no longer open. No money moved.',
+  RECIPIENT_UNAVAILABLE: 'This person cannot receive payments right now. No money moved.',
 }
 
 function describeLoadError(err) {
@@ -79,8 +88,11 @@ function Authorized({ session, auth, outcome, error, pinError, busy, onConfirm, 
         <h2 className="text-sm font-semibold text-slate-600">Confirm payment</h2>
         <Amount value={session.amount} currency={session.currency} className="mt-2 text-5xl" data-testid="confirm-amount" />
         <dl className="mt-5 text-left">
-          <Row label="To">{session.merchant_name}</Row>
-          <Row label="Order">{session.order_reference ?? '—'}</Row>
+          <Row label="To">
+            {payeeName(session)}
+            {session.recipient_masked_id && <span className="block font-mono text-xs font-normal text-slate-600">{session.recipient_masked_id}</span>}
+          </Row>
+          {session.kind === 'TRANSFER' ? (session.note && <Row label="Note">{session.note}</Row>) : <Row label="Order">{session.order_reference ?? '—'}</Row>}
           <Row label="Authenticated"><span className="text-emerald-800">Face + basic liveness check</span></Row>
         </dl>
         <SimulatedTag className="mt-3" />
@@ -151,7 +163,7 @@ function Success({ receipt, session, outcome }) {
         </span>
         <h1 className="mt-5 text-2xl font-extrabold">Payment successful</h1>
         <Amount value={receipt.amount} currency={receipt.currency} className="mt-2 text-5xl" data-testid="paid-amount" />
-        <p className="mt-2 text-lg font-bold">{receipt.merchant_name ?? session.merchant_name}</p>
+        <p className="mt-2 text-lg font-bold">{receipt.recipient_name ?? receipt.merchant_name ?? payeeName(session)}</p>
         <p className="mt-3 text-xs text-slate-600">Transaction</p>
         <p className="font-mono text-sm font-semibold">{receipt.transaction_id}</p>
         <p className="mt-3 text-sm font-semibold text-emerald-800">Authenticated: {receipt.authentication ?? 'Face + basic liveness check'}</p>
@@ -167,18 +179,30 @@ function Success({ receipt, session, outcome }) {
   )
 }
 
-function Summary({ session, payable, attempts, onPay }) {
+function Summary({ session, payable, attempts, onPay, onCancel, cancelling }) {
+  const transfer = session.kind === 'TRANSFER'
   return (
     <section aria-label="Payment summary" className="rounded-[1.5rem] border border-slate-200/80 bg-white p-6 shadow-card">
-      <MerchantHeader name={session.merchant_name} />
+      <MerchantHeader name={payeeName(session)} caption={transfer ? 'Sending to' : 'Pay to'} />
+      {session.recipient_masked_id && <p className="mt-1 pl-[3.75rem] font-mono text-xs text-slate-600">{session.recipient_masked_id}</p>}
       <div className="mt-6 text-center">
         <p className="text-sm text-slate-600">Amount to pay</p>
         <Amount value={session.amount} currency={session.currency} className="mt-1 text-6xl" data-testid="checkout-amount" />
         <SimulatedTag className="mt-3" />
       </div>
       <dl className="mt-5">
-        <Row label="Order">{session.order_reference ?? '—'}</Row>
-        {session.description && <Row label="Details">{session.description}</Row>}
+        {transfer ? (
+          <>
+            {session.note && <Row label="Note">{session.note}</Row>}
+            {session.balance != null && <Row label="Your balance">{formatMoney(session.balance, session.currency)}</Row>}
+            {session.request_id && <Row label="Answers request"><span className="font-mono text-[0.8rem]">{session.request_id}</span></Row>}
+          </>
+        ) : (
+          <>
+            <Row label="Order">{session.order_reference ?? '—'}</Row>
+            {session.description && <Row label="Details">{session.description}</Row>}
+          </>
+        )}
         <Row label="Status"><StatusBadge status={session.status} /></Row>
       </dl>
       {payable && (
@@ -187,6 +211,7 @@ function Summary({ session, payable, attempts, onPay }) {
           <Button size="lg" onClick={onPay}><Icon name="face" className="h-5 w-5" />Pay with Face</Button>
           <Secured />
           <p className="text-center text-xs text-slate-600">{attempts}</p>
+          {transfer && <Button variant="ghost" onClick={onCancel} loading={cancelling}>Cancel payment</Button>}
         </div>
       )}
     </section>
@@ -196,6 +221,8 @@ function Summary({ session, payable, attempts, onPay }) {
 export default function Checkout() {
   const { sessionId } = useParams()
   const { token, role } = useAuth()
+  const navigate = useNavigate()
+  const [cancelling, setCancelling] = useState(false)
   const [session, setSession] = useState(null)
   const [loadError, setLoadError] = useState(null) // { message, notFound }
   const [step, setStep] = useState('summary') // summary | authenticating | authorized | processing | paid
@@ -252,8 +279,9 @@ export default function Checkout() {
         authorizationToken: auth.token,
         // Exactly what the customer was shown. The server compares each one with the session and the authorization.
         expectedAmount: session.amount,
-        expectedMerchant: session.merchant_name,
-        expectedOrderReference: session.order_reference ?? '',
+        ...(session.kind === 'TRANSFER'
+          ? { expectedRecipient: session.recipient_facepay_id }
+          : { expectedMerchant: session.merchant_name, expectedOrderReference: session.order_reference ?? '' }),
         pin,
       })
       setReceipt(done)
@@ -282,6 +310,18 @@ export default function Checkout() {
     }
   }
 
+  const cancelPayment = async () => {
+    setCancelling(true)
+    try {
+      await cancelTransfer(token, sessionId)
+      navigate(DASHBOARD_PATH.customer, { replace: true })
+    } catch (err) {
+      setNotice(err.message)
+      setCancelling(false)
+      load()
+    }
+  }
+
   if (loadError) {
     return (
       <div className="mx-auto flex max-w-md flex-col gap-4">
@@ -301,9 +341,10 @@ export default function Checkout() {
   }
 
   const payable = isPayable(session.status)
-  const timeline = customerTimeline({ session, outcome, authorized: step === 'authorized' || step === 'processing' || step === 'paid', receipt })
+  const timeline = customerTimeline({ transfer: session.kind === 'TRANSFER', session, outcome, authorized: step === 'authorized' || step === 'processing' || step === 'paid', receipt })
   const attempts = `${session.attempts_remaining} of ${session.max_auth_attempts} face checks left for this payment.`
-  const heading = step === 'authenticating' ? 'Verify your face' : step === 'paid' ? null : 'Checkout'
+  const transfer = session.kind === 'TRANSFER'
+  const heading = step === 'authenticating' ? 'Verify your face' : step === 'paid' ? null : transfer ? 'Review payment' : 'Checkout'
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-5">
@@ -312,12 +353,12 @@ export default function Checkout() {
       {notice && <Alert tone="error">{notice}</Alert>}
 
       {step !== 'paid' && (step === 'summary' || !payable) && (
-        <Summary session={session} payable={payable && step === 'summary'} attempts={attempts} onPay={() => { setNotice(null); setStep('authenticating') }} />
+        <Summary session={session} payable={payable && step === 'summary'} attempts={attempts} onPay={() => { setNotice(null); setStep('authenticating') }} onCancel={cancelPayment} cancelling={cancelling} />
       )}
 
       {!payable && step !== 'paid' && (
         <>
-          <Alert tone={session.status === 'PAID' ? 'info' : 'error'}>{TERMINAL_MESSAGES[session.status] ?? 'This payment cannot be paid.'}</Alert>
+          <Alert tone={session.status === 'PAID' ? 'info' : 'error'}>{terminalMessage(session.status, transfer)}</Alert>
           <ButtonLink to={DASHBOARD_PATH.customer} variant="secondary" size="lg">Back to home</ButtonLink>
         </>
       )}
@@ -342,7 +383,7 @@ export default function Checkout() {
 
       {step === 'paid' && receipt && <Success receipt={receipt} session={session} outcome={outcome} />}
 
-      <SecurityNote />
+      <SecurityNote transfer={transfer} />
 
       <Card title="Payment timeline" className="!p-5">
         <Timeline steps={timeline} />

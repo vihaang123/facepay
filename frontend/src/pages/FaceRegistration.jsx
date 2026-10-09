@@ -12,14 +12,12 @@ import { CAMERA_MESSAGES, useCamera } from '../hooks/useCamera'
 import { deleteSamples, getEnrollment, getModel, recognize, trainModel } from '../services/faces'
 import { captureFrame } from '../utils/capture'
 import { faceStatus } from '../utils/faceStatus'
-import { pct } from '../utils/format'
 
 const REASONS = {
   MATCH: 'Recognised as you.',
   WRONG_IDENTITY: 'The model thinks this is someone else.',
   TOO_FAR_FROM_PROFILE: 'It looks like you, but not close enough to your stored profile.',
 }
-const NAMES = { pca_knn: 'PCA + KNN', pca_lda_knn: 'PCA + LDA + KNN', pca_lda_svm: 'PCA + LDA + SVM' }
 
 /** A progress bar that is also a proper meter for screen readers. */
 function Progress({ value, max, label }) {
@@ -37,50 +35,20 @@ function Progress({ value, max, label }) {
   )
 }
 
+/** What a customer needs to know about the model: whether it is ready and includes them. Settings and scores are admin-only. */
 function ModelPanel({ model }) {
   return (
-    <Card title="Trained model" aria-label="Model">
+    <Card title="Face model" aria-label="Model">
       <p className="text-sm text-slate-700">
         {model.includes_you && !model.stale
-          ? 'The model includes your face and is up to date.'
+          ? 'Your face is part of the current model and it is up to date.'
           : model.includes_you
             ? 'The model includes an older version of your samples.'
             : 'You are not part of this model yet.'}
-        {' '}It was trained on {model.n_users} {model.n_users === 1 ? 'person' : 'people'} and {model.n_samples} samples.
       </p>
       {model.stale && <div className="mt-3"><Alert tone="warning">Your samples changed since this model was trained. Retrain to include them.</Alert></div>}
       {!model.includes_you && <div className="mt-3"><Alert tone="warning">Train the model to add yourself.</Alert></div>}
-      <details className="mt-3 text-sm">
-        <summary className="cursor-pointer font-medium text-slate-800">Technical details</summary>
-        <dl className="mt-3 grid gap-x-6 gap-y-1 sm:grid-cols-2">
-          <div><dt className="inline text-slate-600">Version: </dt><dd className="inline font-mono text-xs">{model.version}</dd></div>
-          <div><dt className="inline text-slate-600">Deployed: </dt><dd className="inline">{NAMES[model.classifier]}</dd></div>
-          <div><dt className="inline text-slate-600">PCA components: </dt><dd className="inline">{model.pca.n_components}</dd></div>
-          <div><dt className="inline text-slate-600">LDA components: </dt><dd className="inline">{model.lda?.n_components ?? '—'}</dd></div>
-          <div><dt className="inline text-slate-600">Validation: </dt><dd className="inline">{model.validation}</dd></div>
-        </dl>
-        <table className="mt-4 w-full text-left text-sm">
-          <caption className="mb-1 text-left text-xs text-slate-600">
-            Out-of-fold results on the enrolled users’ own samples (small data: treat as indicative, not a security guarantee).
-          </caption>
-          <thead>
-            <tr className="border-b border-slate-200 text-slate-600">
-              <th scope="col" className="py-1 pr-3 font-medium">Pipeline</th>
-              <th scope="col" className="py-1 pr-3 font-medium">Accuracy</th>
-              <th scope="col" className="py-1 font-medium">Macro F1</th>
-            </tr>
-          </thead>
-          <tbody>
-            {Object.entries(model.comparison).map(([key, m]) => (
-              <tr key={key} className="border-b border-slate-100">
-                <td className="py-1 pr-3">{NAMES[key] || key}</td>
-                <td className="py-1 pr-3">{pct(m.accuracy)}</td>
-                <td className="py-1">{pct(m.macro_f1)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </details>
+      <p className="mt-3 text-xs text-slate-600">Trained {new Date(model.trained_at).toLocaleDateString()}.</p>
     </Card>
   )
 }
@@ -356,12 +324,6 @@ export default function FaceRegistration() {
         {result && (
           <div className="mt-4" aria-live="polite">
             <Alert tone={result.matched ? 'success' : 'error'}>{REASONS[result.reason]}</Alert>
-            <p className="mt-3 text-sm"><span className="text-slate-600">Match confidence: </span>{pct(result.confidence)}</p>
-            <details className="mt-1 text-xs text-slate-700">
-              <summary className="cursor-pointer font-medium">Technical details</summary>
-              <p className="mt-2">Distance to your profile: {result.distance_to_you} (limit {result.distance_threshold}).</p>
-              <p className="mt-1">The confidence score is the classifier’s vote share, not a calibrated probability.</p>
-            </details>
           </div>
         )}
       </Card>

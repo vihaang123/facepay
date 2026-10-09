@@ -17,13 +17,13 @@ const stages = (a, b, c) => [{ stage: 'FACE_DETECTION', status: a }, { stage: 'L
 const authOk = (over = {}) => ({
   result: 'AUTHENTICATED', reason: null, detail: null, authentication_id: 7, stages: stages('PASSED', 'PASSED', 'PASSED'), liveness: 'PASSED',
   challenge: 'turn_right', model_version: 'v1',
-  identity: { verified: true, confidence: 0.8704, distance: 1.2345, distance_threshold: 2.5, frames_evaluated: 2, name: 'Asha Rao' },
+  identity: { verified: true, frames_evaluated: 2, name: 'Asha Rao' },
   session_status: 'AUTHENTICATED', attempts_remaining: 5,
   authorization: { authorization_token: 'T'.repeat(43), expires_in_seconds: 120, expires_at: inSeconds(120), step_up_required: false, step_up_reasons: [], pin_set: false }, ...over,
 })
 const authRejected = (reason, over = {}) => ({
   result: 'REJECTED', reason, detail: null, authentication_id: 8, stages: stages('PASSED', 'PASSED', 'FAILED'), liveness: 'PASSED', challenge: 'turn_right',
-  identity: { verified: false, confidence: 0.31, distance: 9.9, distance_threshold: 2.5, frames_evaluated: 2, name: null }, model_version: 'v1',
+  identity: { verified: false, frames_evaluated: 2, name: null }, model_version: 'v1',
   session_status: 'CREATED', attempts_remaining: 4, authorization: null, ...over,
 })
 const receipt = {
@@ -172,7 +172,7 @@ describe('paying with FacePay', () => {
     expect(within(stagesList).getByText('Payment processed').closest('li')).toHaveTextContent('not yet')
     expect(within(section).getByText('Face + basic liveness check')).toBeInTheDocument()
     expect(within(section).getByText('Asha Rao')).toBeInTheDocument()
-    expect(within(section).getByText('87.0%')).toBeInTheDocument() // 0.8704 from the API
+    expect(section.textContent).not.toMatch(/\d+\.\d%|distance|threshold/i) // no scores for customers
     expect(within(section).getByText('₹950.00')).toBeInTheDocument()
     expect(within(section).getByText(/stays valid for/)).toBeInTheDocument()
     expect(stopTrack).toHaveBeenCalled() // the camera is released once authentication is over
@@ -267,7 +267,7 @@ describe('paying with FacePay', () => {
 
   it('model unavailable is reported without blaming the customer', async () => {
     await payWithFace({ [`POST /payments/sessions/${SID}/authenticate`]: { body: authRejected('MODEL_UNAVAILABLE', { identity: null, stages: stages('SKIPPED', 'SKIPPED', 'SKIPPED'), liveness: 'NOT_EVALUATED', attempts_remaining: 5 }) } })
-    expect(await screen.findByRole('alert')).toHaveTextContent(/not available right now/)
+    expect(await screen.findByRole('alert')).toHaveTextContent(/unavailable or needs to be retrained/)
   })
 
   it('backend error while authenticating', async () => {
@@ -398,7 +398,7 @@ describe('receipts and history', () => {
     expect(within(rec).getByText('Payment successful')).toBeInTheDocument()
     expect(within(rec).getByText('FP-7K3M9Q2XA4')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Transaction details' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Done' })).toHaveAttribute('href', '/transactions')
+    expect(screen.getByRole('link', { name: 'Done' })).toHaveAttribute('href', '/activity')
   })
 
   it('a receipt that is not yours is "not found"', async () => {
@@ -408,34 +408,39 @@ describe('receipts and history', () => {
     expect(screen.queryByRole('article')).not.toBeInTheDocument()
   })
 
-  it('the customer dashboard lists payment history from the server', async () => {
+  it('the customer home lists recent activity from the server', async () => {
+    const base = { kind: 'MERCHANT_PAYMENT', direction: 'SENT', status: 'SUCCESS', counterparty_masked_id: null, currency: 'INR', note: null }
     mockApi({
-      'GET /users/me': { body: customerProfile },
-      'GET /payments/transactions': { body: [
-        { transaction_id: 'FP-AAAAAAAAAA', status: 'SUCCESS', amount: '950.00', currency: 'INR', payment_method: 'FACE_PAY', timestamp: '2026-10-07T12:30:00Z', merchant_name: 'SuperGrocery', order_reference: 'SG-10492' },
-        { transaction_id: 'FP-BBBBBBBBBB', status: 'SUCCESS', amount: '120.50', currency: 'INR', payment_method: 'FACE_PAY', timestamp: '2026-10-06T08:00:00Z', merchant_name: 'Cafe Chai', order_reference: null },
+      'GET /users/me': { body: { ...customerProfile, facepay_id: 'asha.rao@facepay' } },
+      'GET /wallet': { body: { balance: '8929.50', currency: 'INR', simulated: true, entries: [] } },
+      'GET /activity/counts': { body: { pending_incoming_requests: 0 } },
+      'GET /faces/enrollment': { status: 500, body: {} }, 'GET /faces/model': { body: { model: null } }, 'GET /face-auth/attempts': { body: [] },
+      'GET /activity': { body: [
+        { ...base, ref: 'FP-AAAAAAAAAA', amount: '950.00', timestamp: '2026-10-07T12:30:00Z', counterparty_name: 'SuperGrocery', order_reference: 'SG-10492' },
+        { ...base, ref: 'FP-BBBBBBBBBB', amount: '120.50', timestamp: '2026-10-06T08:00:00Z', counterparty_name: 'Cafe Chai', order_reference: null },
       ] },
     })
     renderApp('/dashboard')
-    const table = await screen.findByRole('list', { name: 'Recent payments' })
+    const table = await screen.findByRole('list', { name: 'Recent activity' })
     const rows = within(table).getAllByRole('listitem')
     expect(rows).toHaveLength(2)
-    expect(within(rows[0]).getByText('SuperGrocery')).toBeInTheDocument()
-    expect(within(rows[0]).getByText('₹950.00')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('Paid SuperGrocery')).toBeInTheDocument()
+    expect(within(rows[0]).getByText(/950\.00/)).toBeInTheDocument()
     expect(within(rows[0]).getByText('Successful')).toBeInTheDocument()
-    expect(within(rows[0]).getByRole('link')).toHaveAttribute('href', '/receipts/FP-AAAAAAAAAA')
-    expect(within(rows[1]).getByText('Cafe Chai')).toBeInTheDocument()
-    expect(within(rows[1]).getByText('₹120.50')).toBeInTheDocument()
+    expect(within(rows[0]).getByRole('link')).toHaveAttribute('href', '/activity/FP-AAAAAAAAAA')
+    expect(within(rows[1]).getByText('Paid Cafe Chai')).toBeInTheDocument()
+    expect(within(rows[1]).getByText(/120\.50/)).toBeInTheDocument()
   })
 
-  it('shows an empty state and an error state for history', async () => {
-    mockApi({ 'GET /users/me': { body: customerProfile }, 'GET /payments/transactions': { body: [] } })
+  it('shows an empty state and an error state for activity', async () => {
+    const quiet = { 'GET /wallet': { body: { balance: '1.00', currency: 'INR', simulated: true, entries: [] } }, 'GET /activity/counts': { body: { pending_incoming_requests: 0 } }, 'GET /faces/enrollment': { status: 500, body: {} }, 'GET /faces/model': { body: { model: null } }, 'GET /face-auth/attempts': { body: [] } }
+    mockApi({ 'GET /users/me': { body: customerProfile }, 'GET /activity': { body: [] }, ...quiet })
     const { unmount } = renderApp('/dashboard')
-    expect(await screen.findByText(/No payments yet/)).toBeInTheDocument()
+    expect(await screen.findByText('No activity yet')).toBeInTheDocument()
     unmount()
-    mockApi({ 'GET /users/me': { body: customerProfile }, 'GET /payments/transactions': { status: 500, body: { detail: 'boom' } } })
+    mockApi({ 'GET /users/me': { body: customerProfile }, 'GET /activity': { status: 500, body: { detail: 'boom' } }, ...quiet })
     renderApp('/dashboard')
-    expect(await screen.findByText(/Something went wrong on our side/)).toBeInTheDocument()
+    expect((await screen.findAllByText(/Something went wrong on our side/)).length).toBeGreaterThan(0)
   })
 })
 

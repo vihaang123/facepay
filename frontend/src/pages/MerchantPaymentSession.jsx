@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import Icon from '../components/Icon'
 import { Amount, Row, SimulatedTag, StatusBadge, Timeline } from '../components/payUi'
+import QrCode from '../components/QrCode'
 import { Alert, Button, ButtonLink, Card, ConfirmPanel, Skeleton } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
 import { useToast } from '../hooks/useToast'
@@ -111,6 +112,12 @@ export default function MerchantPaymentSession() {
         <Card aria-label="Checkout link">
           <p className="text-sm text-slate-700">Send this link to the customer. They sign in to a FacePay customer account and pay with their face.</p>
           <code className="mt-2 block break-all rounded-xl bg-slate-100 px-3 py-2 text-xs">{link}</code>
+          {isPayable(session.status) && (
+            <div className="mt-4 flex flex-col items-center gap-2">
+              <QrCode value={link} size={176} label="QR code for this payment link" />
+              <p className="text-center text-xs text-slate-600">Or let the customer scan this code from FacePay. It points to this one payment only and stops working when it is paid or expires.</p>
+            </div>
+          )}
           <div className="mt-3 flex flex-wrap gap-2">
             <Button onClick={copy}><Icon name="link" className="h-4 w-4" />Copy link</Button>
             <Button variant="secondary" onClick={() => setConfirmCancel(true)} loading={busy} disabled={confirmCancel}>Cancel request</Button>

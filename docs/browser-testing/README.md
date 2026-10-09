@@ -24,11 +24,14 @@ not part of the unit-test suites (it needs the whole stack running) and is kept 
 # 1. PostgreSQL up, migrations applied, backend/.env set (CORS_ORIGINS=http://localhost:5173)
 # 2. API (from backend/): relaxed limits and 8-sample minimum, for the test only
 AUTH_RATE_LIMIT_PER_MINUTE=1000 FACE_RATE_LIMIT_PER_MINUTE=1000 FACE_AUTH_RATE_LIMIT_PER_MINUTE=1000 \
-TRAIN_RATE_LIMIT_PER_MINUTE=100 PAYMENT_RATE_LIMIT_PER_MINUTE=1000 PYTHONPATH=. \
+TRAIN_RATE_LIMIT_PER_MINUTE=100 PAYMENT_RATE_LIMIT_PER_MINUTE=1000 RESOLVE_RATE_LIMIT_PER_MINUTE=1000 \
+TRANSFER_RATE_LIMIT_PER_MINUTE=1000 OPENING_BALANCE=100000 PYTHONPATH=. \
 python -c "from app.ml import config as c; c.MIN_SAMPLES_PER_USER = 8; import uvicorn; from app.main import app; uvicorn.run(app, host='127.0.0.1', port=8000)"
 # 3. frontend: npm run build && npx vite preview --port 5173 --host localhost
 # 4. seed + run (needs `playwright` and `axe-core` installed where run.mjs lives, and the ORL .npz with arrays X, y)
-ORL_NPZ=/path/to/orl.npz python seed.py && node run.mjs
+ORL_NPZ=/path/to/orl.npz python seed.py && BACKEND_DIR=/path/to/backend node run.mjs
+# BACKEND_DIR must hold a .venv (or set BACKEND_PY): the admin step promotes an account with `python -m app.cli create-admin`.
+# OPENING_BALANCE=100000 lets the large-payment step (12,000) and the transfers run on one account; use a scratch database.
 # add BLUR_CAMERA=1 to blur the camera preview in screenshots (used for the pictures in docs/final/screenshots)
 ```
 
@@ -101,3 +104,20 @@ camera permission denied during guided setup ends in a clear message and a retry
 and moves the face for each pose). This proves the page, state machine, upload path and server checks work together in a real
 browser. It says nothing about a physical webcam, real lighting, real head turns or the untuned thresholds in
 `enrollConfig.js`. Run it with `PW_CHROMIUM=/path/to/chromium` to use a preinstalled browser.
+
+
+## UPI-style flows (added with migration 0007)
+
+The same script now also covers, through the real UI, API and database (camera still simulated): the redesigned customer
+home (FacePay ID with Copy/Share, simulated balance, four actions, no model internals), a second customer registering,
+My QR (image + download), Scan QR (the QR image of one customer is shown to the simulated camera, jsQR decodes it, the
+server resolves it, and Send opens with the person chosen; a web address in the manual field is refused), Send (unknown ID,
+masked recipient, invalid amounts, the client ceiling and the server's per-payment limit before any face check, then the
+full review -> face check -> confirm -> receipt flow and both balances), Request (no debit on creation, Decline, Pay through
+the face flow, Cancel), Activity (filters and search), the merchant payment-link QR scanned by a customer, the merchant
+security summary, merchant and customer role guards, an administrator promoted with the CLI and the ML Lab tabs, the API
+refusing `/admin/ml/*` to a customer token, mobile layouts of the new pages, reduced motion and keyboard focus.
+
+It found one real defect that the unit tests could not: the API's CORS rules did not allow the `Idempotency-Key` header
+that the browser sends when creating a transfer, so every Send and Request would have been blocked from the Vercel origin.
+That is fixed (`allow_headers`) and has a regression test.

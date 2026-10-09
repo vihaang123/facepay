@@ -5,11 +5,9 @@ import { StatusBadge, TransactionFeed } from '../components/payUi'
 import { Avatar, ButtonLink, Card, EmptyState, ErrorState, FeedSkeleton, PageHeader, Skeleton, StatTile } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
 import { useLoad } from '../hooks/useLoad'
-import { getEnrollment, getModel } from '../services/faces'
-import { getMerchantSummary, getMerchantTransactions, getMyTransactions, getMySummary, listPaymentSessions } from '../services/payments'
-import { faceStatus } from '../utils/faceStatus'
+import { getMerchantSecuritySummary, getMerchantSummary, getMerchantTransactions, listPaymentSessions } from '../services/payments'
 import { formatFeedTime, formatMoney, greeting, isPayable } from '../utils/format'
-import { AUTHENTICATE_PATH, FACE_PATH, MERCHANT_SESSION_PATH, NEW_PAYMENT_PATH, PAY_PATH, RECEIPT_PATH, TRANSACTIONS_PATH } from '../utils/roles'
+import { MERCHANT_SESSION_PATH, NEW_PAYMENT_PATH, RECEIPT_PATH, TRANSACTIONS_PATH } from '../utils/roles'
 
 // The chart library is the heaviest dependency; it loads only when a merchant opens their dashboard.
 const RevenueChart = lazy(() => import('../components/RevenueChart'))
@@ -25,116 +23,6 @@ function Loaded({ state, label, shape = 'feed', children }) {
   }
   if (state.error) return <ErrorState message={state.error} onRetry={state.reload} />
   return children(state.data)
-}
-
-// ---------------------------------------------------------------- customer
-
-function FaceStatusCard() {
-  const { token } = useAuth()
-  const state = useLoad(async () => {
-    const [enrollment, m] = await Promise.all([getEnrollment(token), getModel(token)])
-    return faceStatus(enrollment, m.model)
-  }, [token])
-  return (
-    <Card aria-label="FacePay status" className="!p-4">
-      <Loaded state={state} label="face status" shape="line">
-        {(s) => {
-          const ready = s.badge === 'SUCCESS'
-          return (
-            <div className="flex items-center gap-3">
-              <span aria-hidden="true" className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${ready ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}>
-                <Icon name={ready ? 'shield' : 'face'} className="h-6 w-6" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-slate-600">FacePay status</p>
-                <p className="font-bold leading-tight">{ready ? 'Face authentication ready' : s.label}</p>
-                <p className="mt-0.5 text-xs text-slate-600">{ready ? 'Your face profile is set up.' : s.text}</p>
-              </div>
-              <Link className={`${linkClass} shrink-0`} to={FACE_PATH}>{s.cta}</Link>
-            </div>
-          )
-        }}
-      </Loaded>
-    </Card>
-  )
-}
-
-const ACTIONS = [
-  ['Pay a request', 'Open a payment link', PAY_PATH, 'link'],
-  ['Transactions', 'Your payment history', TRANSACTIONS_PATH.customer, 'receipt'],
-  ['Face profile', 'Set up or retrain', FACE_PATH, 'face'],
-]
-
-function QuickActions() {
-  return (
-    <nav aria-label="Quick actions" className="grid grid-cols-3 gap-3">
-      {ACTIONS.map(([label, hint, to, icon]) => (
-        <Link key={to} to={to} className="flex min-h-[7.5rem] flex-col items-start justify-between rounded-[1.25rem] border border-slate-200/80 bg-white p-3.5 shadow-card transition hover:border-brand-200 active:scale-[0.98]">
-          <span aria-hidden="true" className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-700"><Icon name={icon} className="h-5 w-5" /></span>
-          <span>
-            <span className="block text-sm font-bold leading-tight">{label}</span>
-            <span className="mt-0.5 hidden text-xs text-slate-600 sm:block">{hint}</span>
-          </span>
-        </Link>
-      ))}
-    </nav>
-  )
-}
-
-function RecentPayments() {
-  const { token } = useAuth()
-  const state = useLoad(() => getMyTransactions(token, { limit: 5 }), [token])
-  return (
-    <Card title="Recent payments" action={<Link className={linkClass} to={TRANSACTIONS_PATH.customer}>See all</Link>}>
-      <Loaded state={state} label="recent payments">
-        {(rows) =>
-          rows.length === 0 ? (
-            <EmptyState title="No payments yet" action={<ButtonLink to={PAY_PATH} variant="secondary">Pay a request</ButtonLink>}>
-              When a merchant sends you a payment link, you can pay it with your face.
-            </EmptyState>
-          ) : (
-            <TransactionFeed rows={rows} role="customer" receiptPath={RECEIPT_PATH.customer} label="Recent payments" />
-          )
-        }
-      </Loaded>
-    </Card>
-  )
-}
-
-function SpendingSummary() {
-  const { token } = useAuth()
-  const state = useLoad(() => getMySummary(token), [token])
-  return (
-    <Loaded state={state} label="spending summary" shape="line">
-      {(s) => (
-        <div className="grid grid-cols-2 gap-3">
-          <StatTile label="Spent in the last 30 days" value={formatMoney(s.spent_last_30_days, s.currency)} hint="Successful simulated payments" />
-          <StatTile label="Payments made" value={s.payments} hint={s.last_payment_at ? `Last: ${formatFeedTime(s.last_payment_at)}` : 'Nothing paid so far'} />
-        </div>
-      )}
-    </Loaded>
-  )
-}
-
-export function CustomerDashboard() {
-  const { profile } = useAuth()
-  const first = String(profile.name).trim().split(/\s+/)[0]
-  return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-5">
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight">{greeting()}, {first}</h1>
-        <p className="mt-1 text-sm text-slate-600">Pay merchants with your face. All payments are simulated.</p>
-      </div>
-      <FaceStatusCard />
-      <QuickActions />
-      <RecentPayments />
-      <SpendingSummary />
-      <p className="text-center text-sm">
-        <Link className={linkClass} to={AUTHENTICATE_PATH}>Try a test face check</Link>
-        <span className="text-slate-600"> without making a payment</span>
-      </p>
-    </div>
-  )
 }
 
 // ---------------------------------------------------------------- merchant
@@ -165,6 +53,32 @@ function TodayOverview() {
         }}
       </Loaded>
     </section>
+  )
+}
+
+function SecuritySummary() {
+  const { token } = useAuth()
+  const state = useLoad(() => getMerchantSecuritySummary(token), [token])
+  return (
+    <Card title="Payment security" aria-label="Payment security">
+      <Loaded state={state} label="security summary" shape="line">
+        {(x) => (
+          <>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
+              {[
+                ['Payment requests', x.sessions],
+                ['Paid', x.paid],
+                ['Verified by face', x.face_verified_sessions],
+                ['Closed after failed checks', x.closed_after_failed_face_checks],
+                ['Paid with PIN step-up', x.paid_with_pin_step_up],
+                ['Cancelled or expired', x.cancelled + x.expired],
+              ].map(([k, v]) => <div key={k} className="flex justify-between gap-2 border-b border-slate-100 py-1.5"><dt className="text-slate-600">{k}</dt><dd className="font-semibold">{v}</dd></div>)}
+            </dl>
+            <p className="mt-3 text-xs text-slate-600">{x.note}</p>
+          </>
+        )}
+      </Loaded>
+    </Card>
   )
 }
 
@@ -240,6 +154,7 @@ export function MerchantDashboard() {
         <RecentTransactions />
         <PaymentSessions />
       </div>
+      <SecuritySummary />
     </div>
   )
 }

@@ -71,7 +71,8 @@ describe('roles', () => {
   it('treats anything but merchant as customer', () => {
     expect(normalizeRole('merchant')).toBe('merchant')
     expect(normalizeRole('customer')).toBe('customer')
-    expect(normalizeRole('admin')).toBe('customer')
+    expect(normalizeRole('admin')).toBe('admin')
+    expect(normalizeRole('superuser')).toBe('customer')
     expect(normalizeRole(undefined)).toBe('customer')
   })
 })

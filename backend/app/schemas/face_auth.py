@@ -43,10 +43,9 @@ class StageOut(BaseModel):
 
 
 class IdentityOut(BaseModel):
+    """The outcome only. Scores and distances stay in the audit log for administrators; they are not sent to clients."""
+
     verified: bool
-    confidence: float  # classifier score for YOUR class (minimum over the frames used), not a calibrated probability
-    distance: float  # distance to your stored profile (maximum over the frames used)
-    distance_threshold: float
     frames_evaluated: int
     name: str | None = None  # your own name, only when authenticated
 
@@ -69,8 +68,6 @@ class AttemptOut(BaseModel):
     result: str
     failure_reason: str | None
     failure_detail: str | None
-    confidence: float | None
-    distance: float | None
     liveness_result: str | None
     challenge: str | None
     model_version: str | None

@@ -107,3 +107,7 @@ def merchant(client):
         "id": r.json()["id"],
         "headers": {"Authorization": f"Bearer {token['access_token']}"},
     }
+
+# Fixtures shared by the transfer, request, activity and role tests live in transfer_helpers.py; registering them here
+# makes them available without re-importing them (and shadowing them) in every test module.
+from tests.transfer_helpers import scene_detector, shop, world  # noqa: E402, F401

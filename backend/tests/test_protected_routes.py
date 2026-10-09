@@ -99,7 +99,7 @@ def test_customer_profile_read(client, customer):
     assert r.status_code == 200
     body = r.json()
     assert body["email"] == customer["email"] and body["name"] == "Test Customer"
-    assert set(body) == {"id", "name", "email", "phone", "role", "status", "created_at"}
+    assert set(body) == {"id", "name", "email", "facepay_id", "phone", "role", "status", "created_at"}
 
 
 def test_customer_profile_update(client, customer):

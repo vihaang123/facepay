@@ -1,6 +1,9 @@
 """Simulated FacePay payments. The database is authoritative; nothing here trusts the client for identity,
 authentication, amount, merchant, session ownership or status.
 
+Two kinds of payment session share this flow: a MERCHANT bill (below) and a customer-to-customer TRANSFER prepared by
+transfer_service for exactly one payer and one recipient. After preparation they are handled identically.
+
 Flow: merchant creates a session -> customer opens checkout -> customer passes face authentication FOR THAT
 session (the Phase 4 decision, unchanged) -> the backend issues a short-lived single-use authorization bound to
 (customer, session) -> the customer confirms -> the backend consumes the authorization and writes the
@@ -20,8 +23,9 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.ml import registry
 from app.ml.preprocessing import FaceDetector
-from app.models import AuthenticationLog, Merchant, PaymentAuthorization, PaymentSession, Transaction, User
-from app.services import face_auth_service
+from app.core import facepay_id as fid
+from app.models import AuthenticationLog, Merchant, PaymentAuthorization, PaymentRequest, PaymentSession, Transaction, User
+from app.services import face_auth_service, ledger_service, request_service
 from app.services import security_service as sec
 from app.services.security_service import COUNTED_REASONS  # rejections that count against the session (and the account)
 
@@ -114,6 +118,13 @@ def _locked_session(db: Session, session_id: str) -> PaymentSession:
     _sweep(db, session_pk=pk)
     ps = db.scalar(select(PaymentSession).where(PaymentSession.id == pk).with_for_update().execution_options(populate_existing=True))
     return ps
+
+
+def _check_participant(db: Session, ps: PaymentSession, user: User) -> None:
+    """A customer-to-customer payment belongs to its payer alone: for anyone else it does not exist."""
+    if ps.payer_user_id is not None and ps.payer_user_id != user.id:
+        db.commit()
+        raise _err(404, "SESSION_NOT_FOUND", "Payment session not found.")
 
 
 def max_auth_failures() -> int:
@@ -212,19 +223,27 @@ def cancel_session(db: Session, merchant: Merchant, session_id: str) -> dict:
 # ------------------------------------------------------------------ customer checkout
 
 
-def checkout_view(db: Session, session_id: str) -> dict:
-    pk = db.scalar(select(PaymentSession.id).where(PaymentSession.session_id == session_id))
-    if pk is None:
+def checkout_view(db: Session, user: User, session_id: str) -> dict:
+    ps0 = db.scalar(select(PaymentSession).where(PaymentSession.session_id == session_id))
+    if ps0 is None or (ps0.payer_user_id is not None and ps0.payer_user_id != user.id):
         raise _err(404, "SESSION_NOT_FOUND", "Payment session not found.")
-    _sweep(db, session_pk=pk)
+    _sweep(db, session_pk=ps0.id)
     db.commit()
-    ps = db.scalar(select(PaymentSession).where(PaymentSession.id == pk).execution_options(populate_existing=True))
-    merchant = db.get(Merchant, ps.merchant_id)
+    ps = db.scalar(select(PaymentSession).where(PaymentSession.id == ps0.id).execution_options(populate_existing=True))
+    merchant = db.get(Merchant, ps.merchant_id) if ps.merchant_id else None
+    payee = db.get(User, ps.payee_user_id) if ps.payee_user_id else None
+    request_ref = db.scalar(select(PaymentRequest.request_id).where(PaymentRequest.id == ps.payment_request_id)) if ps.payment_request_id else None
     return {
         "session_id": ps.session_id,
-        "merchant_name": merchant.business_name,
+        "kind": ps.kind,
+        "merchant_name": merchant.business_name if merchant else None,
+        "recipient_name": payee.name if payee else None,
+        "recipient_facepay_id": payee.facepay_id if payee else None,
+        "recipient_masked_id": fid.mask(payee.facepay_id) if payee else None,
+        "note": ps.description if ps.kind == "TRANSFER" else None,
+        "request_id": request_ref,
         "order_reference": ps.order_reference,
-        "description": ps.description,
+        "description": ps.description if ps.kind == "MERCHANT" else None,
         "amount": ps.amount,
         "currency": ps.currency,
         "status": ps.status,
@@ -232,12 +251,14 @@ def checkout_view(db: Session, session_id: str) -> dict:
         "max_auth_attempts": max_auth_failures(),
         "authorization_seconds": get_settings().payment_authorization_ttl_seconds,
         "attempts_remaining": _attempts_remaining(ps),
+        "balance": user.balance,  # the payer's own simulated balance, shown on the review screen
     }
 
 
 def start_authentication(db: Session, user: User, session_id: str) -> dict:
     sec.require_biometric_allowed(db, user)  # switched off, or too many rejected attempts: before any camera work
     ps = _locked_session(db, session_id)
+    _check_participant(db, ps, user)
     _require_payable(db, ps)
     sec.check_amount_limits(db, user, ps.amount, ps.session_id)
     db.commit()
@@ -247,6 +268,7 @@ def start_authentication(db: Session, user: User, session_id: str) -> dict:
 def authenticate_for_payment(db: Session, user: User, session_id: str, challenge_id: str, frames: list[str], detector: FaceDetector) -> dict:
     sec.require_biometric_allowed(db, user)
     ps = _locked_session(db, session_id)
+    _check_participant(db, ps, user)
     _require_payable(db, ps)
     sec.check_amount_limits(db, user, ps.amount, ps.session_id)
     pk = ps.id
@@ -280,6 +302,7 @@ def authenticate_for_payment(db: Session, user: User, session_id: str, challenge
                 expires_at=expires_at,
                 # Snapshot of exactly what this authorization is for. Confirmation re-checks every field.
                 merchant_id=ps.merchant_id,
+                payee_user_id=ps.payee_user_id,
                 amount=ps.amount,
                 currency=ps.currency,
                 order_reference=ps.order_reference,
@@ -324,17 +347,27 @@ def _authentication_label(db: Session, ps: PaymentSession | None) -> str:
 
 def _receipt(db: Session, txn: Transaction) -> dict:
     ps = db.get(PaymentSession, txn.payment_session_id) if txn.payment_session_id else None
+    payer = db.get(User, txn.payer_id)
+    recipient = db.get(User, txn.recipient_id) if txn.recipient_id else None
+    merchant = db.get(Merchant, txn.merchant_id) if txn.merchant_id else None
+    request_ref = db.scalar(select(PaymentRequest.request_id).where(PaymentRequest.transaction_id == txn.id))
     return {
         "transaction_id": txn.transaction_id,
+        "kind": txn.kind,
         "status": txn.status,
         "amount": txn.amount,
-        "currency": ps.currency if ps else "INR",
+        "currency": txn.currency,
         "payment_method": txn.payment_method,
         "timestamp": txn.timestamp,
-        "payer_name": db.get(User, txn.payer_id).name,
-        "merchant_name": db.get(Merchant, txn.merchant_id).business_name,
+        "payer_name": payer.name,
+        "payer_masked_id": fid.mask(payer.facepay_id),
+        "merchant_name": merchant.business_name if merchant else None,
+        "recipient_name": recipient.name if recipient else None,
+        "recipient_masked_id": fid.mask(recipient.facepay_id) if recipient else None,
         "order_reference": ps.order_reference if ps else None,
-        "description": ps.description if ps else None,
+        "description": ps.description if ps and txn.kind == "MERCHANT_PAYMENT" else None,
+        "note": txn.note,
+        "request_id": request_ref,
         "session_id": ps.session_id if ps else None,
         "authentication": _authentication_label(db, ps),
     }
@@ -347,23 +380,41 @@ def confirm_payment(
     token: str,
     *,
     expected_amount: Decimal,
-    expected_merchant: str,
-    expected_order_reference: str,
+    expected_merchant: str | None = None,
+    expected_order_reference: str | None = None,
+    expected_recipient: str | None = None,
     pin: str | None = None,
 ) -> dict:
     """The explicit customer confirmation. Face recognition alone never gets here: the caller must hold a live,
-    single-use authorization issued for exactly this customer, session, merchant, amount, currency and order, and
-    must state the amount, merchant and order they were shown. Higher-risk payments also need the payment PIN."""
+    single-use authorization issued for exactly this customer and payment (session, payee, amount, currency, order,
+    model version), and must state what they were shown - the amount and, for a merchant bill, the merchant and order,
+    or, for a transfer, the recipient's FacePay ID. Higher-risk payments also need the payment PIN. On success the
+    transaction row, the debit and the credit are one database commit."""
     sec.require_biometric_enabled(user)  # switched off after authenticating: the ticket is no longer honoured
     ps = _locked_session(db, session_id)  # row lock: two confirmations of one session are serialized
+    _check_participant(db, ps, user)
     _require_payable(db, ps)
-    merchant = db.get(Merchant, ps.merchant_id)
+    merchant = db.get(Merchant, ps.merchant_id) if ps.merchant_id else None
+    payee = db.get(User, ps.payee_user_id) if ps.payee_user_id else None
+
     if expected_amount != ps.amount:
         _reject(db, 409, "AMOUNT_MISMATCH", "The amount shown does not match this payment session. Reload the checkout.")
-    if expected_merchant.strip() != merchant.business_name:
-        _reject(db, 409, "MERCHANT_MISMATCH", "The merchant shown does not match this payment session. Reload the checkout.")
-    if expected_order_reference.strip() != (ps.order_reference or ""):
-        _reject(db, 409, "ORDER_MISMATCH", "The order shown does not match this payment session. Reload the checkout.")
+    if ps.kind == "MERCHANT":
+        if expected_merchant is None or expected_order_reference is None:
+            _reject(db, 422, "EXPECTATION_MISSING", "Confirm the merchant and order you were shown.")
+        if expected_merchant.strip() != merchant.business_name:
+            _reject(db, 409, "MERCHANT_MISMATCH", "The merchant shown does not match this payment session. Reload the checkout.")
+        if expected_order_reference.strip() != (ps.order_reference or ""):
+            _reject(db, 409, "ORDER_MISMATCH", "The order shown does not match this payment session. Reload the checkout.")
+    else:
+        if expected_recipient is None:
+            _reject(db, 422, "EXPECTATION_MISSING", "Confirm the recipient you were shown.")
+        try:
+            shown = fid.normalize(expected_recipient)
+        except fid.InvalidFacePayId:
+            shown = None
+        if payee is None or shown != payee.facepay_id:
+            _reject(db, 409, "RECIPIENT_MISMATCH", "The recipient shown does not match this payment. Reload and review it again.")
 
     auth = db.scalar(select(PaymentAuthorization).where(PaymentAuthorization.token_hash == _hash(token)).with_for_update())
     invalid = _err(403, "AUTHORIZATION_INVALID", "Face authorization is not valid for this payment. Authenticate again.")
@@ -388,6 +439,7 @@ def confirm_payment(
     active = registry.active_model_row(db)
     snapshot_ok = (
         auth.merchant_id == ps.merchant_id
+        and auth.payee_user_id == ps.payee_user_id
         and auth.amount is not None
         and auth.amount == ps.amount
         and auth.currency == ps.currency
@@ -401,25 +453,57 @@ def confirm_payment(
         db.commit()
         raise invalid
 
+    if payee is not None and payee.status != "active":
+        _reject(db, 409, "RECIPIENT_UNAVAILABLE", "The recipient cannot receive payments right now.")
     sec.check_amount_limits(db, user, ps.amount, ps.session_id)
+    if user.balance < ps.amount:  # early, so nobody is asked for a PIN on a payment that cannot go through
+        _reject(db, 409, "INSUFFICIENT_BALANCE", f"Not enough simulated balance. You have ₹{user.balance:,.2f}.")
     if auth.step_up_required:
         sec.verify_pin(db, user, pin, ps.session_id)  # raises (and commits the failure count) unless the PIN is right
         auth.step_up_verified_at = _now()
 
+    request = None
+    if ps.payment_request_id is not None:  # lock order everywhere: session, then request, then accounts
+        request = request_service.lock(db, ps.payment_request_id)
+        if request.status == "PENDING" and request.expires_at <= _now():  # ran out of time while the customer was verifying
+            request_service.transition(request, "EXPIRED")
+        if request.status != "PENDING":
+            ps.status = "CANCELLED"
+            auth.status = "REVOKED"
+            message = request_service._NOT_PENDING.get(request.status, "This request can no longer be paid.")
+            _reject(db, 409, "REQUEST_NOT_PENDING", message)
+
     now = _now()
-    auth.status, auth.consumed_at = "CONSUMED", now
-    ps.status = "PAID"
     txn = Transaction(
         transaction_id=new_transaction_id(),
+        kind="MERCHANT_PAYMENT" if ps.kind == "MERCHANT" else "TRANSFER",
         payer_id=user.id,
         merchant_id=ps.merchant_id,
+        recipient_id=ps.payee_user_id,
         payment_session_id=ps.id,
         amount=ps.amount,  # authoritative: the session, never the request
+        currency=ps.currency,
+        note=ps.description if ps.kind == "TRANSFER" else None,
         payment_method="FACE_PAY",
         status="SUCCESS",
         timestamp=now,
     )
     db.add(txn)
+    try:
+        db.flush()
+        ledger_service.post_payment(db, txn, payer_id=user.id, recipient_user_id=ps.payee_user_id, merchant_id=ps.merchant_id)
+    except HTTPException:
+        db.rollback()  # nothing was debited, nothing consumed: the customer can fix the cause and try again
+        raise
+    except IntegrityError:
+        db.rollback()
+        raise _err(409, "SESSION_ALREADY_PAID", "This payment has already been completed.") from None
+
+    auth.status, auth.consumed_at = "CONSUMED", now
+    ps.status = "PAID"
+    if request is not None:
+        request_service.transition(request, "PAID")
+        request.transaction_id = txn.id
     log.transaction_ref = txn.transaction_id
     sec.record_event(db, user, "PAYMENT_CONFIRMED", ps.session_id)
     try:
@@ -486,7 +570,9 @@ def customer_summary(db: Session, user: User) -> dict:
 
 
 def customer_receipt(db: Session, user: User, transaction_id: str) -> dict:
-    txn = db.scalar(select(Transaction).where(Transaction.transaction_id == transaction_id, Transaction.payer_id == user.id))
+    txn = db.scalar(
+        select(Transaction).where(Transaction.transaction_id == transaction_id, or_(Transaction.payer_id == user.id, Transaction.recipient_id == user.id))
+    )
     if txn is None:
         raise _err(404, "TRANSACTION_NOT_FOUND", "Transaction not found.")
     return _receipt(db, txn)
@@ -564,4 +650,33 @@ def merchant_summary(db: Session, merchant: Merchant, days: int = 14) -> dict:
         "expired_sessions": by_status.get("EXPIRED", 0),
         "cancelled_sessions": by_status.get("CANCELLED", 0),
         "revenue_by_day": series,
+    }
+
+
+def merchant_security_summary(db: Session, merchant: Merchant) -> dict:
+    """Aggregate, merchant-scoped authentication outcomes: how this merchant's own sessions ended. No customer is
+    named and no biometric score is exposed."""
+    _sweep(db, merchant_id=merchant.id)
+    db.commit()
+    by_status = dict(db.execute(select(PaymentSession.status, func.count()).where(PaymentSession.merchant_id == merchant.id).group_by(PaymentSession.status)).all())
+    verified = db.scalar(
+        select(func.count(func.distinct(PaymentAuthorization.payment_session_id)))
+        .join(PaymentSession, PaymentSession.id == PaymentAuthorization.payment_session_id)
+        .where(PaymentSession.merchant_id == merchant.id)
+    )
+    stepped = db.scalar(
+        select(func.count())
+        .select_from(PaymentAuthorization)
+        .join(PaymentSession, PaymentSession.id == PaymentAuthorization.payment_session_id)
+        .where(PaymentSession.merchant_id == merchant.id, PaymentAuthorization.status == "CONSUMED", PaymentAuthorization.step_up_verified_at.is_not(None))
+    )
+    return {
+        "sessions": sum(by_status.values()),
+        "paid": by_status.get("PAID", 0),
+        "closed_after_failed_face_checks": by_status.get("FAILED", 0),
+        "cancelled": by_status.get("CANCELLED", 0),
+        "expired": by_status.get("EXPIRED", 0),
+        "face_verified_sessions": verified or 0,
+        "paid_with_pin_step_up": stepped or 0,
+        "note": "Customers are verified with a basic face and movement check, plus a confirmation step. FacePay is a simulation and gives no protection against advanced spoofing.",
     }

@@ -1,9 +1,70 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Alert, Button, FormField } from '../components/ui'
+import { IdChip } from '../components/money'
+import { Alert, Button, Card, FormField } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
-import { SECURITY_PATH } from '../utils/roles'
+import { useLoad } from '../hooks/useLoad'
+import { changeFacePayId, getMyFacePay } from '../services/transfers'
+import { formatDateTime } from '../utils/format'
+import { FACE_PATH, MY_QR_PATH, SECURITY_PATH } from '../utils/roles'
 import { runValidators, validatePhone, validateRequired } from '../utils/validation'
+
+/** The FacePay ID: shown, shareable, and changeable now and then. The server checks it is free and well formed. */
+function FacePayIdCard() {
+  const { token, profile, refreshProfile } = useAuth()
+  const state = useLoad(() => getMyFacePay(token), [token, profile.facepay_id])
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState('')
+  const [error, setError] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState(null)
+
+  const save = async (e) => {
+    e.preventDefault()
+    if (!value.trim()) {
+      setError('Enter the new ID.')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      await changeFacePayId(token, value.trim())
+      await refreshProfile()
+      setEditing(false)
+      setValue('')
+      setNotice('FacePay ID updated. Your old ID stops working for new payments.')
+    } catch (err) {
+      setError(err.fieldErrors?.facepay_id ?? err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const info = state.data
+  return (
+    <Card title="FacePay ID" className="mt-6" aria-label="FacePay ID">
+      <IdChip id={profile.facepay_id} name={profile.name} onNotice={setNotice} size="lg" />
+      <p className="mt-2 text-xs text-slate-600">Share this so people can pay or ask you for money. It never shows your email or phone number.</p>
+      {notice && <Alert tone="success" className="mt-3">{notice}</Alert>}
+      {info && !editing && (
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Button variant="secondary" onClick={() => { setEditing(true); setNotice(null) }} disabled={!info.can_change}>Change ID</Button>
+          <Link className="text-sm font-semibold text-brand-800 underline" to={MY_QR_PATH}>Show my QR</Link>
+          {!info.can_change && info.next_change_at && <p className="w-full text-xs text-slate-600">You can change it again after {formatDateTime(info.next_change_at)}.</p>}
+        </div>
+      )}
+      {editing && (
+        <form onSubmit={save} noValidate className="mt-3 flex flex-col gap-3">
+          <FormField label="New FacePay ID" id="new-facepay-id" value={value} onChange={(e) => { setValue(e.target.value); setError(null) }} error={error} hint="3 to 24 letters or numbers, with . or _ between them. We add @facepay." autoComplete="off" autoCapitalize="none" spellCheck={false} />
+          <div className="flex gap-2">
+            <Button type="submit" loading={busy}>Save ID</Button>
+            <Button variant="ghost" onClick={() => { setEditing(false); setError(null) }} disabled={busy}>Cancel</Button>
+          </div>
+        </form>
+      )}
+    </Card>
+  )
+}
 
 export default function Profile() {
   const { role, profile, updateProfile } = useAuth()
@@ -76,9 +137,10 @@ export default function Profile() {
           Save changes
         </Button>
       </form>
+      {!isMerchant && role === 'customer' && <FacePayIdCard />}
       {!isMerchant && (
         <p className="mt-4 text-sm text-slate-700">
-          Looking for face payment controls, your payment PIN or recent activity? Open <Link className="font-semibold text-brand-800 underline" to={SECURITY_PATH}>Security</Link>.
+          Looking for face payment controls, your payment PIN or recent activity? Open <Link className="font-semibold text-brand-800 underline" to={SECURITY_PATH}>Security</Link>, or set up your face in <Link className="font-semibold text-brand-800 underline" to={FACE_PATH}>Face profile</Link>.
         </p>
       )}
     </div>

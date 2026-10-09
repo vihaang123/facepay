@@ -86,6 +86,8 @@ def shown(client, cust, sid):
     if r.status_code != 200:  # e.g. a disabled account cannot open checkout: the confirm call under test must still be refused
         return {"expected_amount": "1.00", "expected_merchant": "-", "expected_order_reference": ""}
     c = r.json()
+    if c.get("kind") == "TRANSFER":
+        return {"expected_amount": c["amount"], "expected_recipient": c["recipient_facepay_id"]}
     return {"expected_amount": c["amount"], "expected_merchant": c["merchant_name"], "expected_order_reference": c["order_reference"] or ""}
 
 

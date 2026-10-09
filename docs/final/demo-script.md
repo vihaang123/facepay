@@ -17,7 +17,7 @@ a model trained, and one merchant account. Have `docs/final/screenshots/13-ml-ev
 | 3:00 | "Now the merchant creates a bill." | Merchant dashboard, Create payment | Register or sign in as a merchant, create a payment of 950.00, copy the link | Payment session; the amount lives on the server |
 | 3:45 | "The customer opens the link. The amount, merchant and order are shown before anything happens." | Checkout | Sign in as the customer, open the link | Server-side amount, session binding |
 | 4:15 | "Start face authentication. First a short look at the camera, then one random instruction." | Checkout, camera | Start; follow "turn your head to your left/right" | Challenge-response liveness (face-box movement), single-use 60 s challenge |
-| 5:00 | "Stages pass one by one: face detected, identity recognized, basic liveness check passed, authorization created. Behind 'Technical details' you can see the raw distance, which most users should not need." | Result panel | Open Technical details | Decision policy: one face, liveness passed, predicted identity equals the signed-in user, confidence and distance within limits |
+| 5:00 | "Stages pass one by one: camera, face detected, quality, identity, basic liveness, authorization. Customers see plain stage feedback and categorised errors, never scores. The numbers are in the admin ML Lab." | Result panel | Point at the stage list | Decision policy: one face, liveness passed, predicted identity equals the signed-in user, confidence and distance within limits (server side only) |
 | 5:30 | "That produced a one-time ticket, valid for two minutes, tied to this customer, this merchant, this amount and this order. Now the customer reviews and confirms it. A large payment would also ask for a PIN." | Confirm payment | Review merchant and amount, press Confirm | Hashed single-use authorization, row-locked atomic confirmation |
 | 6:00 | "Receipt, and the same payment shows on both sides." | Receipt, customer transactions, merchant dashboard | Open the receipt; switch to the merchant, show the paid session, revenue and transactions | History, filters, revenue summary |
 | 6:45 | "What if it is the wrong person?" | Checkout (new bill) | Try with someone else's face, or a still photo; show the rejection and the remaining attempts | Identity mismatch, liveness failure, 5-failure session lockout |
@@ -51,3 +51,18 @@ a model trained, and one merchant account. Have `docs/final/screenshots/13-ml-ev
 | "Not enough users" on training | Enrol a second customer first (shared model) |
 | Identity fails for the right person | That is the model's genuine-rejection rate (about 20% in the ORL test); retry in similar light, and say so |
 | 429 | The rate limit working; wait a minute |
+
+## Optional extension (about 4 minutes): UPI-style flows and the ML Lab
+
+Say again that the money, the FacePay ID and the QR are simulated; none of it is UPI or a bank transfer.
+
+1. **Home** (customer): FacePay ID with Copy and Share, simulated balance, Send / Request / Scan QR / My QR. Point out that
+   no model numbers appear here.
+2. **Send:** enter a second customer's FacePay ID -> name and masked ID only -> amount and note -> review -> face
+   check -> review again -> confirm -> receipt. Show both balances changed by exactly the amount.
+3. **Request:** the second customer asks for money; nothing is debited; the first customer declines one and pays one.
+4. **QR:** My QR, then Scan QR from a second device (or the simulated camera) -> Send opens with the person chosen.
+5. **Activity:** filters (Sent, Received, Successful, Pending), search, a detail page.
+6. **Admin ML Lab** (sign in as the CLI-created admin): PCA variance, LDA separation, classifier comparison, confusion
+   matrices, genuine-rejection and impostor-acceptance rates. Say which numbers are the offline ORL benchmark and which
+   are live outcome counts.

@@ -76,9 +76,16 @@ export function AuthProvider({ children }) {
     [state.role, state.token],
   )
 
+  // Re-reads the signed-in account, for changes made outside the profile form (such as a new FacePay ID).
+  const refreshProfile = useCallback(async () => {
+    const profile = await fetchProfile(state.role, state.token)
+    setState((s) => ({ ...s, profile }))
+    return profile
+  }, [state.role, state.token])
+
   const value = useMemo(
-    () => ({ ...state, isAuthenticated: state.status === 'authenticated', login, register, logout, updateProfile }),
-    [state, login, register, logout, updateProfile],
+    () => ({ ...state, isAuthenticated: state.status === 'authenticated', login, register, logout, updateProfile, refreshProfile }),
+    [state, login, register, logout, updateProfile, refreshProfile],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

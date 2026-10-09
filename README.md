@@ -4,7 +4,14 @@
 
 FacePay is an academic prototype. A merchant creates a payment request, a customer opens the checkout link, shows their
 face to the camera, follows one short head-movement instruction, and, if the system accepts them, confirms a **simulated**
-payment. There is no UPI, bank, wallet or real money anywhere in it; a "transaction" is a row in PostgreSQL.
+payment. There is no UPI, bank or real money anywhere in it; the wallet balance, the transfers and a "transaction" are
+rows in PostgreSQL.
+
+Beyond merchant checkout it now behaves like a small **UPI-style app with simulated money**: every customer has a
+FacePay ID (`name@facepay`, not a real UPI ID), a simulated balance, **Send** (recipient -> amount -> review -> face
+check -> confirm -> receipt), **Request**, **My QR / Scan QR**, and a filterable **Activity** history. Merchants see
+their own payments and an aggregate security summary. An **admin-only ML Lab** shows the PCA/LDA/classifier results;
+customers never see model internals. Details: [`docs/final/upi-style-payments.md`](docs/final/upi-style-payments.md).
 
 Face recognition is classical on purpose: images go through **PCA, then LDA, then a KNN or linear-SVM classifier**
 (no pretrained embeddings). Around it sit a challenge-response liveness check, an explicit authentication policy,
@@ -70,6 +77,7 @@ needs the configured minimum of samples across several poses. A merchant account
 | `CORS_ORIGINS` | backend | Exact frontend origin(s), comma separated |
 | `APP_ENV` | backend | `production` enables the startup checks and turns off `/docs` |
 | `*_RATE_LIMIT_PER_MINUTE`, `JWT_*` | backend | Rate limits and token settings (defaults in `.env.example`) |
+| `OPENING_BALANCE`, `TRANSFER_SESSION_MINUTES`, `REQUEST_TTL_DAYS`, `FACEPAY_ID_CHANGE_COOLDOWN_DAYS` | backend | Optional simulated-wallet settings (defaults 10000, 10, 7, 30) |
 | `TEST_DATABASE_URL` | backend, tests only | Must name a database ending in `_test` |
 | `VITE_API_BASE_URL` | frontend | Backend URL, compiled into the bundle |
 
@@ -78,15 +86,17 @@ needs the configured minimum of samples across several poses. A merchant account
 ## Testing
 
 ```bash
-cd backend && python -m pytest -q                        # 341 tests, real PostgreSQL
+cd backend && python -m pytest -q                        # 592 tests, real PostgreSQL
 cd backend && ruff check app tests alembic --select F,E9,B --ignore E501,B008 && alembic check
-cd frontend && npm test && npm run lint && npm run build  # 178 tests; oxlint; production build
+cd frontend && npm test && npm run lint && npm run build  # 337 tests; oxlint; production build
 ```
 
-Last full run (Phase 7): backend 341 passed, frontend 178 passed, lint and Ruff clean, Alembic reports no drift, production
-build succeeds. A real-browser run (Playwright, headless Chromium, production build, real API and database) passed 44 of 44
-steps with axe-core reporting no violations on 10 pages. **Its camera is simulated** with ORL photos; no physical webcam
-was used, and automated accessibility checks do not establish WCAG conformance. See [`docs/browser-testing/`](docs/browser-testing/README.md).
+Last full run (UPI-style release): backend 592 passed, frontend 337 passed, Ruff and oxlint clean, Alembic reports no
+drift, production build succeeds. A real-browser run (Playwright, headless Chromium, production build, real API and
+database) passed 79 of 79 steps with axe-core reporting no violations on the pages it checks; an earlier run of the same
+script failed one step (the 12,000 PIN step) once for a reason the logs did not show, and it passed on the next two runs.
+**Its camera is simulated** with ORL photos; no physical webcam was used, and automated accessibility checks do not
+establish WCAG conformance. See [`docs/browser-testing/`](docs/browser-testing/README.md).
 
 ## ML evaluation (public ORL dataset, not webcam data)
 
@@ -124,7 +134,7 @@ Render's free tier sleeps, so the first request after idle can be slow.
 * One shared model for everyone, trained on demand; per-process rate limits and caches (run one backend instance).
 * Tokens are kept in `localStorage`; no refresh tokens, revocation, email verification, password reset or Content-Security-Policy.
 * One encryption key, no rotation. No consent records or retention policy.
-* No refunds, balances, payouts or idempotency keys.
+* Simulated money only: no refunds or payouts, and nothing connects to UPI, a bank or a card network. The ledger is a prototype, not a bank-grade one. Historical simulated merchant payments made before the wallet existed were not subtracted from the opening balance.
 * Guided face setup was exercised with a simulated camera only; its brightness, sharpness, motion and head-position thresholds are untuned, pose labels are client-asserted, and the duplicate-frame threshold is provisional.
 * The payment PIN and risk rules are a prototype sketch, not a fraud system.
 
@@ -137,6 +147,7 @@ Render's free tier sleeps, so the first request after idle can be slow.
 | [`docs/final/reproducibility.md`](docs/final/reproducibility.md) | Environment, dataset, seeds, commands |
 | [`docs/final/security-assessment.md`](docs/final/security-assessment.md) | Threats, mitigations, residual risks |
 | [`docs/final/guided-enrollment-and-payment-hardening.md`](docs/final/guided-enrollment-and-payment-hardening.md) | Guided auto-capture enrollment, authorization binding, PIN step-up, limits, Security page |
+| [`docs/final/upi-style-payments.md`](docs/final/upi-style-payments.md) | FacePay IDs, wallet and ledger, send, request, QR, activity, roles, admin ML Lab, migration 0007, creating an admin |
 | [`docs/final/deployment-guide.md`](docs/final/deployment-guide.md) | Deployment preparation and checks |
 | [`docs/final/demo-script.md`](docs/final/demo-script.md) | Eight-minute demo walkthrough |
 | [`docs/ml-architecture.md`](docs/ml-architecture.md), [`docs/ml-feasibility.md`](docs/ml-feasibility.md) | Pipeline design and feasibility experiments |

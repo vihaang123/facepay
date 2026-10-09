@@ -1,4 +1,3 @@
-import { pct } from '../utils/format'
 import { paymentStageList } from '../utils/paymentStages'
 
 const STAGE_LABELS = {
@@ -22,8 +21,8 @@ export function Stages({ stages }) {
 }
 
 /**
- * What the person sees after a decision: the stage list, who they were verified as, and the match confidence.
- * Raw model numbers (distance to profile and its limit) are tucked behind "Technical details" for the curious.
+ * What the person sees after a decision: the stage list and who they were verified as. Scores, distances and thresholds
+ * are never sent to customers; they belong to the administrator ML Lab.
  */
 export function AuthDetails({ result }) {
   const authenticated = result.result === 'AUTHENTICATED'
@@ -31,23 +30,10 @@ export function AuthDetails({ result }) {
   return (
     <>
       <Stages stages={result.stages} />
-      {id && (
+      {authenticated && id?.name && (
         <dl className="text-sm">
-          {authenticated && id.name && (
-            <div><dt className="inline text-slate-600">Verified as: </dt><dd className="inline font-semibold">{id.name}</dd></div>
-          )}
-          <div><dt className="inline text-slate-600">Match confidence: </dt><dd className="inline">{pct(id.confidence)}</dd></div>
+          <div><dt className="inline text-slate-600">Verified as: </dt><dd className="inline font-semibold">{id.name}</dd></div>
         </dl>
-      )}
-      {id && (
-        <details className="text-xs text-slate-700">
-          <summary className="cursor-pointer font-medium">Technical details</summary>
-          <p className="mt-2">Distance to your profile: {id.distance} (limit {id.distance_threshold}).</p>
-          <p className="mt-1">
-            Confidence is the classifier’s score for your class (the lowest of {id.frames_evaluated} frames), not a calibrated
-            probability. This is a classroom-scale model and not a guarantee of identity.
-          </p>
-        </details>
       )}
     </>
   )

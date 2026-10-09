@@ -36,10 +36,18 @@ class MerchantSessionOut(BaseModel):
 
 
 class CheckoutOut(BaseModel):
-    """What the paying customer may see about a session: no merchant contact details."""
+    """What the paying customer may see about a payment: no merchant contact details, and for a customer-to-customer
+    payment only the recipient's name and FacePay ID (their public payment handle)."""
 
     session_id: str
-    merchant_name: str
+    kind: str = "MERCHANT"  # MERCHANT | TRANSFER
+    merchant_name: str | None = None
+    recipient_name: str | None = None
+    recipient_facepay_id: str | None = None
+    recipient_masked_id: str | None = None
+    note: str | None = None
+    request_id: str | None = None  # set when this payment answers a money request
+    balance: Decimal | None = None  # the payer's own simulated balance
     order_reference: str | None
     description: str | None
     amount: Decimal
@@ -74,30 +82,38 @@ class PaymentVerifyRequest(VerifyRequest):
 
 
 class ConfirmRequest(BaseModel):
-    """The customer's explicit confirmation: the authorization ticket plus the amount, merchant and order they were
-    shown. All three must match the payment session, which alone decides what is charged. A payment PIN is needed
-    only when the authorization says step-up is required."""
+    """The customer's explicit confirmation: the authorization ticket plus what they were shown. A merchant bill needs
+    the amount, merchant and order; a customer-to-customer payment needs the amount and the recipient's FacePay ID.
+    All must match the payment, which alone decides what is charged. A payment PIN is needed only when the
+    authorization says step-up is required."""
 
     model_config = ConfigDict(extra="forbid")
 
     authorization_token: str = Field(min_length=20, max_length=128)
     expected_amount: Decimal = Field(max_digits=14, decimal_places=2)
-    expected_merchant: str = Field(max_length=160)
-    expected_order_reference: str = Field(max_length=80)
+    expected_merchant: str | None = Field(default=None, max_length=160)
+    expected_order_reference: str | None = Field(default=None, max_length=80)
+    expected_recipient: str | None = Field(default=None, max_length=60)
     pin: str | None = Field(default=None, max_length=12)
 
 
 class ReceiptOut(BaseModel):
     transaction_id: str
+    kind: str = "MERCHANT_PAYMENT"  # MERCHANT_PAYMENT | TRANSFER
     status: str
     amount: Decimal
     currency: str
     payment_method: str
     timestamp: datetime
     payer_name: str
-    merchant_name: str
+    payer_masked_id: str | None = None
+    merchant_name: str | None = None
+    recipient_name: str | None = None  # for a transfer
+    recipient_masked_id: str | None = None
     order_reference: str | None
     description: str | None
+    note: str | None = None
+    request_id: str | None = None
     session_id: str | None
     authentication: str  # e.g. "Face + basic liveness check"
 
@@ -149,3 +165,17 @@ class CustomerSummary(BaseModel):
     payments: int
     spent_last_30_days: Decimal
     last_payment_at: datetime | None
+
+
+class MerchantSecuritySummary(BaseModel):
+    """Aggregate authentication outcomes for ONE merchant's own payment sessions. No customer is identified and no
+    biometric detail is included."""
+
+    sessions: int
+    paid: int
+    closed_after_failed_face_checks: int
+    cancelled: int
+    expired: int
+    face_verified_sessions: int
+    paid_with_pin_step_up: int
+    note: str

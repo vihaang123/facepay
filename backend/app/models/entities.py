@@ -17,6 +17,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.facepay_id import fallback_id
 from app.database.session import Base
 
 
@@ -25,11 +26,19 @@ class User(Base):
     __table_args__ = (
         CheckConstraint("role IN ('customer', 'admin')", name="ck_users_role"),
         CheckConstraint("status IN ('active', 'disabled')", name="ck_users_status"),
+        CheckConstraint("balance >= 0", name="ck_users_balance_non_negative"),
+        CheckConstraint("facepay_id ~ '^[a-z0-9]+([._][a-z0-9]+)*@facepay$'", name="ck_users_facepay_id_format"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(120))
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    # The customer's public payment handle (canonical `handle@facepay`, lowercase). Unique in the database.
+    # The service generates a readable one at registration; the default only covers rows created without it.
+    facepay_id: Mapped[str] = mapped_column(String(40), unique=True, index=True, default=fallback_id)
+    facepay_id_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Simulated wallet balance. The backend is authoritative: it only changes inside a ledger posting (ledger_service).
+    balance: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0"), server_default="0")
     phone: Mapped[str | None] = mapped_column(String(20))
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(20), default="customer", server_default="customer")
@@ -52,11 +61,12 @@ class User(Base):
     authentication_logs: Mapped[list["AuthenticationLog"]] = relationship(
         back_populates="user", passive_deletes=True
     )
-    transactions: Mapped[list["Transaction"]] = relationship(back_populates="payer")
+    transactions: Mapped[list["Transaction"]] = relationship(back_populates="payer", foreign_keys="Transaction.payer_id")
 
 
 class Merchant(Base):
     __tablename__ = "merchants"
+    __table_args__ = (CheckConstraint("balance >= 0", name="ck_merchants_balance_non_negative"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(120))
@@ -64,9 +74,23 @@ class Merchant(Base):
     business_name: Mapped[str] = mapped_column(String(160))
     password_hash: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Simulated settled balance: credited by merchant payments inside the same ledger posting that debits the customer.
+    balance: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0"), server_default="0")
 
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="merchant")
     payment_sessions: Mapped[list["PaymentSession"]] = relationship(back_populates="merchant")
+
+
+class FacePayIdHistory(Base):
+    """A FacePay ID a customer used to have. It stays reserved for that customer so nobody else can take over a
+    handle that others may still have saved or printed."""
+
+    __tablename__ = "facepay_id_history"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    facepay_id: Mapped[str] = mapped_column(String(40), unique=True)
+    retired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class ModelVersion(Base):
@@ -147,7 +171,11 @@ class FaceAuthChallenge(Base):
 
 
 class PaymentSession(Base):
-    """A bill created by a merchant (simulated payments only).
+    """A payment waiting to be authorized and confirmed (simulated payments only). Two kinds:
+
+    MERCHANT  a bill created by a merchant; any signed-in customer may pay it.
+    TRANSFER  a customer-to-customer payment prepared by ONE payer (payer_user_id) for ONE recipient (payee_user_id),
+              either sent directly or in answer to a money request. Nobody else can open, authenticate or confirm it.
 
     Lifecycle: CREATED -> AUTHENTICATED -> PAID, or CREATED/AUTHENTICATED -> FAILED | EXPIRED | CANCELLED.
     (The brief's PENDING is stored as CREATED and SUCCESS as PAID; PROCESSING is the instant inside the single
@@ -160,23 +188,49 @@ class PaymentSession(Base):
             "status IN ('CREATED', 'AUTHENTICATED', 'PAID', 'FAILED', 'EXPIRED', 'CANCELLED')",
             name="ck_payment_sessions_status",
         ),
+        CheckConstraint(
+            "(kind = 'MERCHANT' AND merchant_id IS NOT NULL AND payee_user_id IS NULL AND payment_request_id IS NULL)"
+            " OR (kind = 'TRANSFER' AND merchant_id IS NULL AND payee_user_id IS NOT NULL AND payer_user_id IS NOT NULL"
+            " AND payee_user_id <> payer_user_id)",
+            name="ck_payment_sessions_shape",
+        ),
         Index("ix_payment_sessions_merchant_created", "merchant_id", "created_at"),
+        Index("ix_payment_sessions_payer", "payer_user_id", "created_at"),
+        # One open payment per money request, and one session per (payer, idempotency key).
+        Index(
+            "uq_payment_sessions_one_open_per_request",
+            "payment_request_id",
+            unique=True,
+            postgresql_where=text("payment_request_id IS NOT NULL AND status IN ('CREATED', 'AUTHENTICATED')"),
+        ),
+        Index(
+            "uq_payment_sessions_idempotency",
+            "payer_user_id",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     session_id: Mapped[str] = mapped_column(String(40), unique=True, index=True)
-    merchant_id: Mapped[int] = mapped_column(ForeignKey("merchants.id"))
+    kind: Mapped[str] = mapped_column(String(20), default="MERCHANT", server_default="MERCHANT")
+    merchant_id: Mapped[int | None] = mapped_column(ForeignKey("merchants.id"))
+    payer_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    payee_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    payment_request_id: Mapped[int | None] = mapped_column(ForeignKey("payment_requests.id"))
+    idempotency_key: Mapped[str | None] = mapped_column(String(64))
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     currency: Mapped[str] = mapped_column(String(3), default="INR", server_default="INR")
     order_reference: Mapped[str | None] = mapped_column(String(80))
-    description: Mapped[str | None] = mapped_column(String(255))
+    description: Mapped[str | None] = mapped_column(String(255))  # for a TRANSFER this is the payer's note
     status: Mapped[str] = mapped_column(String(20), default="CREATED", server_default="CREATED")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Rejected face-authentication attempts that counted against this session (see payment_service).
     failed_auth_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
-    merchant: Mapped[Merchant] = relationship(back_populates="payment_sessions")
+    merchant: Mapped[Merchant | None] = relationship(back_populates="payment_sessions")
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="payment_session")
 
 
@@ -185,8 +239,15 @@ class Transaction(Base):
     __table_args__ = (
         CheckConstraint("amount > 0", name="ck_transactions_amount_positive"),
         CheckConstraint("status IN ('PENDING', 'SUCCESS', 'FAILED')", name="ck_transactions_status"),
+        # A merchant payment has a merchant and no recipient; a transfer has a recipient (never the payer) and no merchant.
+        CheckConstraint(
+            "(kind = 'MERCHANT_PAYMENT' AND merchant_id IS NOT NULL AND recipient_id IS NULL)"
+            " OR (kind = 'TRANSFER' AND merchant_id IS NULL AND recipient_id IS NOT NULL AND recipient_id <> payer_id)",
+            name="ck_transactions_shape",
+        ),
         Index("ix_transactions_merchant_ts", "merchant_id", "timestamp"),
         Index("ix_transactions_payer_ts", "payer_id", "timestamp"),
+        Index("ix_transactions_recipient_ts", "recipient_id", "timestamp"),
         # A payment session can be paid once, even if application logic were bypassed.
         Index(
             "uq_transactions_one_success_per_session",
@@ -198,18 +259,22 @@ class Transaction(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     transaction_id: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    kind: Mapped[str] = mapped_column(String(20), default="MERCHANT_PAYMENT", server_default="MERCHANT_PAYMENT")
     payer_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    merchant_id: Mapped[int] = mapped_column(ForeignKey("merchants.id"))
+    merchant_id: Mapped[int | None] = mapped_column(ForeignKey("merchants.id"))
+    recipient_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     payment_session_id: Mapped[int | None] = mapped_column(
         ForeignKey("payment_sessions.id", name="fk_transactions_payment_session"), index=True
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    currency: Mapped[str] = mapped_column(String(3), default="INR", server_default="INR")
+    note: Mapped[str | None] = mapped_column(String(255))
     payment_method: Mapped[str] = mapped_column(String(20), default="FACE_PAY", server_default="FACE_PAY")
     status: Mapped[str] = mapped_column(String(20), default="PENDING", server_default="PENDING")
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    merchant: Mapped[Merchant] = relationship(back_populates="transactions")
-    payer: Mapped[User] = relationship(back_populates="transactions")
+    merchant: Mapped[Merchant | None] = relationship(back_populates="transactions")
+    payer: Mapped[User] = relationship(back_populates="transactions", foreign_keys=[payer_id])
     payment_session: Mapped[PaymentSession | None] = relationship(back_populates="transactions")
 
 
@@ -240,6 +305,7 @@ class PaymentAuthorization(Base):
     # What this authorization was issued for, copied from the session at issue time and re-checked at confirmation.
     # Nothing biometric is stored here.
     merchant_id: Mapped[int | None] = mapped_column(ForeignKey("merchants.id"))
+    payee_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))  # recipient of a TRANSFER
     amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     currency: Mapped[str | None] = mapped_column(String(3))
     order_reference: Mapped[str | None] = mapped_column(String(80))
@@ -291,4 +357,61 @@ class SecurityEvent(Base):
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     kind: Mapped[str] = mapped_column(String(40))
     session_ref: Mapped[str | None] = mapped_column(String(40))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PaymentRequest(Base):
+    """A request for money from one customer to another. Creating it moves nothing: the payer must open it, review it
+    and authorize the payment themselves. Lifecycle: PENDING -> PAID | DECLINED | CANCELLED | EXPIRED (all final)."""
+
+    __tablename__ = "payment_requests"
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_payment_requests_amount_positive"),
+        CheckConstraint("requester_id <> payer_id", name="ck_payment_requests_not_self"),
+        CheckConstraint(
+            "status IN ('PENDING', 'PAID', 'DECLINED', 'CANCELLED', 'EXPIRED')", name="ck_payment_requests_status"
+        ),
+        Index("ix_payment_requests_payer_status", "payer_id", "status"),
+        Index("ix_payment_requests_requester_created", "requester_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    request_id: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    requester_id: Mapped[int] = mapped_column(ForeignKey("users.id"))  # who gets the money
+    payer_id: Mapped[int] = mapped_column(ForeignKey("users.id"))  # who is asked to pay
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    currency: Mapped[str] = mapped_column(String(3), default="INR", server_default="INR")
+    note: Mapped[str | None] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(20), default="PENDING", server_default="PENDING")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    transaction_id: Mapped[int | None] = mapped_column(
+        ForeignKey("transactions.id", use_alter=True, name="fk_payment_requests_transaction")  # breaks the table-creation cycle
+    )
+
+
+class LedgerEntry(Base):
+    """One side of a simulated money movement. Every transfer or merchant payment writes a DEBIT and a CREDIT of the
+    same amount in the same database transaction; an OPENING_GRANT is a single CREDIT from the simulation itself.
+    An account's balance always equals its credits minus its debits (checked by ledger_service.reconcile)."""
+
+    __tablename__ = "ledger_entries"
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_ledger_entries_amount_positive"),
+        CheckConstraint("account_type IN ('USER', 'MERCHANT')", name="ck_ledger_entries_account_type"),
+        CheckConstraint("direction IN ('DEBIT', 'CREDIT')", name="ck_ledger_entries_direction"),
+        CheckConstraint("kind IN ('TRANSFER', 'MERCHANT_PAYMENT', 'OPENING_GRANT')", name="ck_ledger_entries_kind"),
+        Index("ix_ledger_entries_account", "account_type", "account_id", "id"),
+        Index("ix_ledger_entries_transaction", "transaction_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    transaction_id: Mapped[int | None] = mapped_column(ForeignKey("transactions.id"))
+    account_type: Mapped[str] = mapped_column(String(10))
+    account_id: Mapped[int] = mapped_column(Integer)
+    direction: Mapped[str] = mapped_column(String(6))
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    balance_after: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    kind: Mapped[str] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -106,6 +106,7 @@ class UserOut(BaseModel):
     id: int
     name: str
     email: str
+    facepay_id: str
     phone: str | None
     role: str
     status: str

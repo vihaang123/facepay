@@ -47,3 +47,50 @@ export function errorMessage(err) {
   return err.message
 }
 
+
+// ---- what kind of problem was it?
+// A rejected face and a broken service are different things. Only a real decision by the server about the face is ever
+// presented as "did not match"; connection and server trouble say so and tell the person nothing was decided about them.
+const REASON_CATEGORY = {
+  FACE_NOT_DETECTED: 'quality', MULTIPLE_FACES_DETECTED: 'quality', FACE_TOO_SMALL: 'quality', POOR_IMAGE_QUALITY: 'quality', INVALID_IMAGE: 'quality',
+  LIVENESS_FAILED: 'liveness',
+  IDENTITY_MISMATCH: 'mismatch', LOW_CONFIDENCE: 'mismatch', DISTANCE_TOO_HIGH: 'mismatch',
+  NOT_ENROLLED: 'enrollment', MODEL_UNAVAILABLE: 'model',
+  CHALLENGE_EXPIRED: 'challenge', CHALLENGE_INVALID: 'challenge', ACCOUNT_DISABLED: 'account',
+}
+export const CATEGORY_TITLES = {
+  quality: 'Picture not clear enough',
+  liveness: 'Liveness check not passed',
+  mismatch: 'Face did not match',
+  enrollment: 'Face setup needed',
+  model: 'Recognition is unavailable',
+  challenge: 'The check timed out',
+  account: 'Account unavailable',
+  camera: 'Camera problem',
+  network: 'Connection problem',
+  server: 'FacePay is having trouble',
+  limit: 'Too many attempts',
+  other: 'Face check stopped',
+}
+
+/** A decision about the face: { category, title, message }. */
+export function classifyRejection(result) {
+  const category = REASON_CATEGORY[result.reason] ?? 'other'
+  const message = result.reason === 'MODEL_UNAVAILABLE'
+    ? 'Face recognition is unavailable or needs to be retrained. This is not about your face. Set up your face again or try later.'
+    : failureMessage(result)
+  return { category, title: CATEGORY_TITLES[category], message }
+}
+
+/** A request that failed before any decision: { category, title, message }. Never reported as a mismatch. */
+export function classifyError(err) {
+  if (err?.code && SERVER_WORDED.has(err.code)) return { category: 'other', title: CATEGORY_TITLES.other, message: err.message }
+  if (err?.code === 'TIMEOUT' || err?.status === 0) {
+    return { category: 'network', title: CATEGORY_TITLES.network, message: `${errorMessage(err)} Nothing was decided about your face, so you can try again.` }
+  }
+  if (err?.status === 429) return { category: 'limit', title: CATEGORY_TITLES.limit, message: errorMessage(err) }
+  if (err?.status >= 500) {
+    return { category: 'server', title: CATEGORY_TITLES.server, message: 'Something went wrong on our side while checking your face. This is not a mismatch. Please try again in a moment.' }
+  }
+  return { category: 'other', title: CATEGORY_TITLES.other, message: errorMessage(err ?? {}) }
+}

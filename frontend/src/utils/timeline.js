@@ -1,12 +1,12 @@
 /** Steps and states for the whole payment, from the data the page really has. */
-export function customerTimeline({ session, outcome, authorized = false, receipt = null }) {
+export function customerTimeline({ transfer = false, session, outcome, authorized = false, receipt = null }) {
   const stage = (n) => outcome?.stages?.find((s) => s.stage === n)?.status
   const failedAt = outcome && outcome.result !== 'AUTHENTICATED'
   const paid = Boolean(receipt)
   const ended = ['FAILED', 'EXPIRED', 'CANCELLED'].includes(session?.status)
   const flow = [
-    ['Merchant creates payment', true],
-    ['Customer opens checkout', true],
+    [transfer ? 'Payment prepared' : 'Merchant creates payment', true],
+    [transfer ? 'You review the payment' : 'Customer opens checkout', true],
     ['Face detected', stage('FACE_DETECTION') === 'PASSED'],
     ['Identity recognized', stage('IDENTITY') === 'PASSED'],
     ['Basic liveness check passed', stage('LIVENESS') === 'PASSED'],

@@ -84,6 +84,20 @@ tested on real webcams or against any standard attack protocol.
 | Several instances | Documented: one instance, one worker | Rate limits, model cache and training lock are per process. |
 | Hosted provider | Not deployed in Phase 7 (see [`deployment-guide.md`](deployment-guide.md)) | Provider-level controls, TLS and backups are unreviewed. |
 
+## Simulated wallet, transfers, requests, roles (added with the UPI-style release)
+
+| Threat | Existing mitigation | Residual risk |
+|---|---|---|
+| Double spend, lost update, replay of a confirmation | `NUMERIC(12,2)` ledger; payer and payee rows locked in a fixed order; debit and credit entries in one transaction; `Idempotency-Key` on creating a transfer; single-use hashed authorization; `reconcile-ledger` CLI | Simulated money only. A real rail would need a bank-grade ledger, reconciliation with an external party and audit retention. |
+| Paying the wrong person or amount | Recipient and amount are fixed server-side when the transfer is prepared; review is shown before and after face verification; the authorization is bound to payer, payee, amount, currency, reference, session and model version; the client cannot change them | Display names are chosen by users; the masked ID helps but impersonation by name is possible. |
+| Harvesting FacePay IDs or people's names | Resolve returns name and masked ID only, is rate limited per customer, and unknown and disabled IDs look alike; email is never returned to other customers | Rate limits are in memory per process. |
+| QR abuse | QR holds only a validated ID or a short-lived payment link; the server resolves it; a web address or free text is refused | A printed QR of someone else's ID can be shown; that only starts a reviewed payment. |
+| Reading other customers' activity | Every activity query is scoped to the signed-in user; foreign IDs return 404; merchants get 404 for person-to-person receipts | None known; covered by isolation tests. |
+| Privilege escalation to admin | Role is not settable through any endpoint; admin routes check the token role **and** the database role and status on every call; promotion is a CLI action by whoever has shell access to the service | Whoever controls the Render shell or database is an administrator. |
+| Biometric details leaking into the customer app | Customer responses are trimmed to ready/not ready and an outcome category; scores, thresholds, vectors and model internals exist only in the admin payload | Admin sees aggregate model data (no raw face images or vectors). |
+| Server fault reported as a face mismatch | Failures carry a category; a 5xx or network error is shown as such and never counted against the user | Categories rely on what the server and camera report. |
+| Presentation attacks | Basic challenge-response liveness only | Photos, replayed video, masks and deepfakes are **not** defended against. |
+
 ## Summary
 
 The payment-authorization and data-protection design is careful for a prototype: server-side amounts, single-use hashed

@@ -13,7 +13,9 @@ from app.core.security import (
     password_needs_rehash,
     verify_password,
 )
+from app.core.config import get_settings
 from app.models import Merchant, User
+from app.services import facepay_service, ledger_service
 from app.schemas.auth import (
     CustomerRegister,
     MerchantRegister,
@@ -35,22 +37,31 @@ class AccountDisabled(Exception):
 
 
 def register_customer(db: Session, data: CustomerRegister) -> User:
+    """Creates the customer with a unique FacePay ID and the simulated opening balance, in one commit."""
     if db.scalar(select(User.id).where(User.email == data.email)) is not None:
         raise EmailAlreadyRegistered
-    user = User(
-        name=data.name,
-        email=data.email,
-        phone=data.phone,
-        password_hash=hash_password(data.password),
-    )
-    db.add(user)
-    try:
-        db.commit()
-    except IntegrityError as exc:  # lost a race with a concurrent signup
-        db.rollback()
-        raise EmailAlreadyRegistered from exc
-    db.refresh(user)
-    return user
+    password_hash = hash_password(data.password)
+    for _ in range(6):
+        user = User(
+            name=data.name,
+            email=data.email,
+            phone=data.phone,
+            password_hash=password_hash,
+            facepay_id=facepay_service.generate_unique(db, data.name),
+        )
+        db.add(user)
+        try:
+            db.flush()
+            ledger_service.grant_opening_balance(db, user, get_settings().opening_balance)
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            if db.scalar(select(User.id).where(User.email == data.email)) is not None:  # lost a race with a concurrent signup
+                raise EmailAlreadyRegistered from exc
+            continue  # the generated FacePay ID was taken in the meantime: generate another
+        db.refresh(user)
+        return user
+    raise RuntimeError("could not allocate a unique FacePay ID")
 
 
 def register_merchant(db: Session, data: MerchantRegister) -> Merchant:

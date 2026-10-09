@@ -2,6 +2,7 @@ import { apiFetch } from './api'
 
 const ENDPOINTS = {
   customer: { login: '/auth/login', register: '/auth/register', me: '/users/me' },
+  admin: { login: '/auth/login', register: '/auth/register', me: '/users/me' }, // an administrator is a customer account with the admin role
   merchant: { login: '/auth/merchant/login', register: '/auth/merchant/register', me: '/merchants/me' },
 }
 

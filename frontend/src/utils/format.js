@@ -35,6 +35,7 @@ export const STATUS_LABELS = {
   EXPIRED: 'Expired',
   CANCELLED: 'Cancelled',
   PENDING: 'Pending',
+  DECLINED: 'Declined',
 }
 export const PAYABLE_STATUSES = ['CREATED', 'AUTHENTICATED']
 

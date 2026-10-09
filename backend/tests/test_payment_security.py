@@ -18,7 +18,7 @@ from app.core.config import get_settings
 from app.main import app
 from app.models import AuthenticationLog, PaymentAuthorization, PaymentSession, SecurityEvent, Transaction, User
 from tests.conftest import STRONG_PASSWORD
-from tests.payment_helpers import authenticate, authorize, b64, confirm, create_session, enroll, new_customer, new_merchant, set_threshold, shown, start
+from tests.payment_helpers import authenticate, authorize, b64, confirm, create_session, enroll, new_customer, new_merchant, set_threshold, shown
 from tests.synthetic_scenes import BackgroundBoxDetector, empty_scene, scene
 
 

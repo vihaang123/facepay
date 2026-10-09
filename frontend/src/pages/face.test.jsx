@@ -25,21 +25,10 @@ const enrollmentOf = (counts = {}, over = {}) => {
     max_samples: 60, min_samples_to_train: 12, min_poses_to_train: 3, eligible: g.captured >= 12, has_profile: false, ...over,
   }
 }
+// What a customer's model endpoint returns: readiness only. Settings and scores are administrator-only.
 const modelBody = (over = {}) => ({
   version: '20261007-101010-abc123-ef01',
   trained_at: '2026-10-07T10:10:10Z',
-  n_users: 2,
-  n_samples: 24,
-  classifier: 'pca_lda_knn',
-  pca: { n_components: 9 },
-  lda: { n_components: 1 },
-  validation: 'group_kfold_by_pose(k=4)',
-  comparison: {
-    pca_knn: { accuracy: 0.9, macro_precision: 0.9, macro_recall: 0.9, macro_f1: 0.9, predict_ms_per_sample: 1 },
-    pca_lda_knn: { accuracy: 0.95, macro_precision: 0.95, macro_recall: 0.95, macro_f1: 0.94, predict_ms_per_sample: 1 },
-    pca_lda_svm: { accuracy: 0.93, macro_precision: 0.93, macro_recall: 0.93, macro_f1: 0.92, predict_ms_per_sample: 1 },
-  },
-  distance_threshold: 8.5,
   includes_you: true,
   stale: false,
   ...over,
@@ -417,12 +406,11 @@ describe('face data controls and recognition test', () => {
     expect(await screen.findByRole('button', { name: 'Start face setup' })).toBeInTheDocument()
   })
 
-  it('shows the trained model with the real comparison returned by the server', async () => {
+  it('shows whether the model includes the customer and nothing about how it works', async () => {
     await openPage({ 'GET /faces/model': { body: { model: modelBody() } } })
     const panel = await screen.findByRole('region', { name: 'Model' })
-    const rows = within(panel).getAllByRole('row').map((r) => r.textContent)
-    expect(rows.some((t) => t.includes('PCA + LDA + KNN') && t.includes('95.0%'))).toBe(true)
-    expect(within(panel).getByText('group_kfold_by_pose(k=4)')).toBeInTheDocument()
+    expect(within(panel).getByText(/part of the current model/)).toBeInTheDocument()
+    expect(panel.textContent).not.toMatch(/PCA|LDA|KNN|SVM|accuracy|F1|threshold|validation|classifier/i)
   })
 
   it('does not allow recognition before the user is in a model', async () => {
@@ -431,9 +419,9 @@ describe('face data controls and recognition test', () => {
   })
 
   it.each([
-    [{ matched: true, reason: 'MATCH', predicted_is_you: true, user_id: 1, confidence: 0.87, distance_to_you: 3.2, distance_threshold: 8.5 }, 'Recognised as you.', 'status'],
-    [{ matched: false, reason: 'WRONG_IDENTITY', predicted_is_you: false, user_id: null, confidence: 0.71, distance_to_you: 14.1, distance_threshold: 8.5 }, 'The model thinks this is someone else.', 'alert'],
-    [{ matched: false, reason: 'TOO_FAR_FROM_PROFILE', predicted_is_you: true, user_id: 1, confidence: 0.63, distance_to_you: 12, distance_threshold: 8.5 }, 'not close enough', 'alert'],
+    [{ matched: true, reason: 'MATCH', predicted_is_you: true }, 'Recognised as you.', 'status'],
+    [{ matched: false, reason: 'WRONG_IDENTITY', predicted_is_you: false }, 'The model thinks this is someone else.', 'alert'],
+    [{ matched: false, reason: 'TOO_FAR_FROM_PROFILE', predicted_is_you: true }, 'not close enough', 'alert'],
   ])('shows the recognition outcome %#', async (body, text, role) => {
     const user = userEvent.setup()
     const api = await openPage({
@@ -444,7 +432,7 @@ describe('face data controls and recognition test', () => {
     await user.click(await screen.findByRole('button', { name: 'Recognise me' }))
     const alert = await screen.findAllByRole(role)
     expect(alert.some((a) => a.textContent.includes(text))).toBe(true)
-    expect(screen.getByText(`${(body.confidence * 100).toFixed(1)}%`)).toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/confidence|distance|\d+\.\d%/i) // no scores for customers
     expect(api.callsTo('POST /faces/recognize')[0].body).toEqual({ image_base64: 'QUJDRA==' })
   })
 })

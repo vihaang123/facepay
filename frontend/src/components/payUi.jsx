@@ -13,7 +13,7 @@ const STATUS = {
 }
 const KIND = {
   SUCCESS: 'success', PAID: 'success', FAILED: 'failed', EXPIRED: 'expired', CANCELLED: 'cancelled',
-  CREATED: 'pending', AUTHENTICATED: 'pending', PENDING: 'pending',
+  CREATED: 'pending', AUTHENTICATED: 'pending', PENDING: 'pending', DECLINED: 'cancelled',
 }
 
 export function StatusBadge({ status, label }) {
@@ -154,8 +154,15 @@ export function Receipt({ receipt, children }) {
         <span className="absolute -right-3 -top-3 h-6 w-6 rounded-full bg-canvas" />
       </div>
       <dl className="px-6 py-2">
-        <Row label="To">{receipt.merchant_name}</Row>
-        <Row label="From">{receipt.payer_name}</Row>
+        <Row label="To">
+          {receipt.recipient_name ?? receipt.merchant_name}
+          {receipt.recipient_masked_id && <span className="block font-mono text-xs font-normal text-slate-600">{receipt.recipient_masked_id}</span>}
+        </Row>
+        <Row label="From">
+          {receipt.payer_name}
+          {receipt.payer_masked_id && <span className="block font-mono text-xs font-normal text-slate-600">{receipt.payer_masked_id}</span>}
+        </Row>
+        {receipt.note && <Row label="Note">{receipt.note}</Row>}
         {receipt.order_reference && <Row label="Order">{receipt.order_reference}</Row>}
         {receipt.description && <Row label="Details">{receipt.description}</Row>}
         <Row label="Transaction ID"><span className="font-mono text-[0.8rem]">{receipt.transaction_id}</span></Row>
@@ -170,12 +177,12 @@ export function Receipt({ receipt, children }) {
 }
 
 /** The one honest description of the protection, used wherever the customer is asked to trust the flow. */
-export function SecurityNote({ className = '' }) {
+export function SecurityNote({ className = '', transfer = false }) {
   return (
     <details className={`rounded-xl bg-white/70 px-4 py-3 text-sm ring-1 ring-slate-200 ${className}`}>
       <summary className="cursor-pointer font-semibold">How this payment is protected</summary>
       <div className="mt-3 flex flex-col gap-2 text-slate-700">
-        <p>Your face is recognised, then a basic movement-based liveness check runs. Only then is a short-lived authorization created for this exact payment: this merchant, this amount, this order. It works once and expires in minutes.</p>
+        <p>Your face is recognised, then a basic movement-based liveness check runs. Only then is a short-lived authorization created for this exact payment: {transfer ? 'this person, this amount.' : 'this merchant, this amount, this order.'} It works once and expires in minutes.</p>
         <p>You then review the payment and confirm it yourself. Large or unusual payments can also ask for your payment PIN.</p>
         <p>FacePay is an academic prototype. The liveness check is basic and does not protect against deepfakes, replayed video, masks or other advanced attacks. Every payment is simulated and no real money moves.</p>
       </div>

@@ -243,14 +243,15 @@ def overview(db: Session, user: User) -> dict:
         db.scalars(select(AuthenticationLog).where(AuthenticationLog.user_id == user.id).order_by(AuthenticationLog.id.desc()).limit(10))
     )
     txns = db.execute(
-        select(Transaction.transaction_id, Transaction.amount, Transaction.timestamp, Transaction.merchant_id)
+        select(Transaction.transaction_id, Transaction.amount, Transaction.timestamp, Transaction.merchant_id, Transaction.recipient_id)
         .where(Transaction.payer_id == user.id)
         .order_by(Transaction.id.desc())
         .limit(5)
     ).all()
     from app.models import Merchant
 
-    names = {m.id: m.business_name for m in db.scalars(select(Merchant).where(Merchant.id.in_({t.merchant_id for t in txns})))} if txns else {}
+    names = {m.id: m.business_name for m in db.scalars(select(Merchant).where(Merchant.id.in_({t.merchant_id for t in txns if t.merchant_id})))} if txns else {}
+    people = {u.id: u.name for u in db.scalars(select(User).where(User.id.in_({t.recipient_id for t in txns if t.recipient_id})))} if txns else {}
     events = list(db.scalars(select(SecurityEvent).where(SecurityEvent.user_id == user.id).order_by(SecurityEvent.id.desc()).limit(10)))
     enrolment = enrollment_status(db, user)
     return {
@@ -272,7 +273,12 @@ def overview(db: Session, user: User) -> dict:
             for a in attempts
         ],
         "recent_transactions": [
-            {"transaction_id": t.transaction_id, "merchant_name": names.get(t.merchant_id, ""), "amount": t.amount, "timestamp": t.timestamp}
+            {
+                "transaction_id": t.transaction_id,
+                "merchant_name": names.get(t.merchant_id) or (f"To {people[t.recipient_id]}" if t.recipient_id in people else ""),
+                "amount": t.amount,
+                "timestamp": t.timestamp,
+            }
             for t in txns
         ],
         "recent_events": [{"kind": e.kind, "timestamp": e.created_at, "session_ref": e.session_ref} for e in events],

@@ -199,15 +199,17 @@ def test_train_requires_two_users(client, customer):
 
 def test_train_reports_real_cross_validated_comparison(client, trained, db):
     a, b, m = trained
-    assert m["n_users"] == 2 and m["n_samples"] == 24 and m["includes_you"] and not m["stale"]
-    assert m["classifier"] in ("pca_lda_knn", "pca_lda_svm")
-    assert m["validation"].startswith("group_kfold_by_pose")
-    assert set(m["comparison"]) == {"pca_knn", "pca_lda_knn", "pca_lda_svm"}
-    assert m["lda"]["n_components"] == 1  # C - 1
-    assert m["pca"]["n_components"] <= m["pca"]["cap_n_minus_c"]
+    # Customers learn whether the model is ready and includes them. Classifier internals are administrator-only.
+    assert set(m) == {"version", "trained_at", "includes_you", "stale"} and m["includes_you"] and not m["stale"]
+    for hidden in ("comparison", "pca", "lda", "classifier", "validation", "n_users", "n_samples", "distance_threshold"):
+        assert hidden not in m
     # metrics are stored from the same run (not hand written), and no user ids leak in the API
     row = db.scalar(select(ModelVersion))
-    assert row.evaluation_metrics["variants"]["pca_lda_knn"]["accuracy"] == m["comparison"]["pca_lda_knn"]["accuracy"]
+    assert row.n_classes == 2 and row.n_samples == 24 and row.classifier in ("pca_lda_knn", "pca_lda_svm")
+    assert row.evaluation_metrics["validation"].startswith("group_kfold_by_pose")
+    assert set(row.evaluation_metrics["variants"]) == {"pca_knn", "pca_lda_knn", "pca_lda_svm"}
+    assert row.lda_config["n_components"] == 1  # C - 1
+    assert row.pca_config["n_components"] <= row.pca_config["cap_n_minus_c"]
     assert "confusion_matrix" not in json.dumps(m) and "labels" not in json.dumps(m)
     assert "scatter" in row.evaluation_metrics
 
@@ -283,9 +285,7 @@ def test_recognizes_the_registered_customer_with_a_new_sample(client, trained):
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["matched"] and body["reason"] == "MATCH" and body["predicted_is_you"]
-        assert body["user_id"] == who["id"]
-        assert 0 < body["confidence"] <= 1
-        assert body["distance_to_you"] <= body["distance_threshold"]
+        assert set(body) == {"matched", "reason", "predicted_is_you", "model_version", "quality"}  # no scores or ids
 
 
 def test_someone_elses_face_is_not_accepted_and_their_identity_is_not_revealed(client, trained):
@@ -293,8 +293,8 @@ def test_someone_elses_face_is_not_accepted_and_their_identity_is_not_revealed(c
     r = client.post("/faces/recognize", json={"image_base64": b64(sample_image(1, 101))}, headers=a["headers"])
     body = r.json()
     assert r.status_code == 200 and body["matched"] is False
-    assert body["reason"] == "WRONG_IDENTITY" and body["predicted_is_you"] is False and body["user_id"] is None
-    assert body["user_id"] != b["id"]
+    assert body["reason"] == "WRONG_IDENTITY" and body["predicted_is_you"] is False
+    assert "user_id" not in body and "confidence" not in body and "distance_to_you" not in body
 
 
 def test_unknown_face_far_from_profile_is_rejected(client, trained):

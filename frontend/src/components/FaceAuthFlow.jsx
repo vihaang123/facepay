@@ -6,7 +6,8 @@ import Icon from './Icon'
 import { Alert, Button, Spinner } from './ui'
 import { useCamera } from '../hooks/useCamera'
 import { TIMING } from '../utils/authTiming'
-import { errorMessage, failureMessage } from '../utils/authMessages'
+import { classifyError, classifyRejection } from '../utils/authMessages'
+import { liveStages } from '../utils/faceStages'
 import { captureFrame } from '../utils/capture'
 import { FACE_PATH, SECURITY_PATH } from '../utils/roles'
 
@@ -21,7 +22,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
  *   onOutcome(outcome) / onError(err)           -> called when an attempt ends
  *   Actions (component, optional)               -> replaces the default "Done" / "Try again" button; gets { result, authenticated, onRetry }
  */
-export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onError, Actions }) {
+export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onError, Actions, authorized = false }) {
   const camera = useCamera()
   const { videoRef, status: cameraStatus } = camera
   const [phase, setPhase] = useState('idle') // idle | challenge | baseline | turn | verifying | done | error
@@ -30,6 +31,7 @@ export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onEr
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
   const [errorCode, setErrorCode] = useState(null)
+  const [problem, setProblem] = useState(null) // { category, title, message } for a failed request
   const run = useRef(0) // id of the active run; changing it cancels the capture loop
   const callbacks = useRef({})
   useEffect(() => {
@@ -43,6 +45,7 @@ export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onEr
     const alive = () => run.current === id
     setResult(null)
     setError(null)
+    setProblem(null)
     setErrorCode(null)
     setCaptured(0)
     setPhase('challenge')
@@ -86,7 +89,9 @@ export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onEr
       callbacks.current.onOutcome?.(outcome)
     } catch (err) {
       if (!alive()) return
-      setError(err instanceof Error && err.name === 'ApiError' ? errorMessage(err) : err.message || 'Something went wrong.')
+      const found = err?.name === 'ApiError' ? classifyError(err) : { category: 'other', title: 'Face check stopped', message: err?.message || 'Something went wrong.' }
+      setProblem(found)
+      setError(found.message)
       setErrorCode(err?.code ?? null)
       setPhase('error')
       callbacks.current.onError?.(err)
@@ -105,6 +110,8 @@ export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onEr
   const authenticated = result?.result === 'AUTHENTICATED'
   const overlay = phase === 'baseline' ? 'Look at the camera and hold still' : phase === 'turn' ? instruction : phase === 'verifying' ? 'Analyzing your face…' : null
   const tone = phase === 'done' ? (authenticated ? 'ok' : 'bad') : 'neutral'
+  const rejection = result && !authenticated ? classifyRejection(result) : null
+  const stages = liveStages({ cameraStatus, phase, result, authorized: authorized || (authenticated && Boolean(result?.authorization)) })
   const firstName = String(result?.identity?.name ?? '').trim().split(/\s+/)[0]
 
   return (
@@ -162,8 +169,8 @@ export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onEr
                 <Icon name={authenticated ? 'check' : 'x'} className="h-6 w-6" strokeWidth="2.4" />
               </span>
               <div>
-                <h2 className="text-xl font-extrabold">{authenticated ? 'Identity verified' : 'We could not verify you'}</h2>
-                <p role={authenticated ? undefined : 'alert'} className="mt-0.5 text-sm text-slate-700">{authenticated ? `Welcome back${firstName ? `, ${firstName}` : ''}` : failureMessage(result)}</p>
+                <h2 className="text-xl font-extrabold">{authenticated ? 'Identity verified' : rejection.title}</h2>
+                <p role={authenticated ? undefined : 'alert'} className="mt-0.5 text-sm text-slate-700">{authenticated ? `Welcome back${firstName ? `, ${firstName}` : ''}` : rejection.message}</p>
               </div>
             </div>
             <AuthDetails result={result} />
@@ -180,14 +187,35 @@ export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onEr
 
         {phase === 'error' && (
           <div className="flex flex-col gap-3">
-            <h2 className="text-xl font-extrabold">Something went wrong</h2>
+            <h2 className="text-xl font-extrabold">{problem?.title ?? 'Face check stopped'}</h2>
             <Alert tone="error">{error}</Alert>
             {errorCode === 'BIOMETRIC_DISABLED' && <Link className="text-sm font-semibold text-brand-700 underline" to={SECURITY_PATH}>Open security settings</Link>}
             <Button size="lg" onClick={reset} variant={errorCode === 'BIOMETRIC_LOCKED' ? 'secondary' : 'primary'}>Try again</Button>
           </div>
         )}
       </section>
+
+      {phase !== 'idle' && <FaceStages rows={stages} />}
     </div>
+  )
+}
+
+/** Every step of the check in order, each with its real state. State is shown in words and a symbol, never by colour alone. */
+function FaceStages({ rows }) {
+  const mark = { done: '✓', failed: '✕', current: '•', todo: '–' }
+  const tone = { done: 'text-emerald-800 font-semibold', failed: 'text-rose-800 font-semibold', current: 'text-slate-900 font-semibold', todo: 'text-slate-600' }
+  const chip = { done: 'bg-emerald-600 text-white', failed: 'bg-rose-600 text-white', current: 'bg-brand-700 text-white', todo: 'bg-slate-200 text-slate-600' }
+  const word = { done: 'done', failed: 'failed', current: 'in progress', todo: 'not yet' }
+  return (
+    <ol aria-label="Face check steps" className="flex flex-col gap-2 rounded-[1.25rem] border border-slate-200/80 bg-white p-4 text-sm shadow-card">
+      {rows.map((r) => (
+        <li key={r.key} className={`flex items-center gap-2.5 ${tone[r.state]}`} aria-current={r.state === 'current' ? 'step' : undefined}>
+          <span aria-hidden="true" className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[0.7rem] font-bold ${chip[r.state]}`}>{mark[r.state]}</span>
+          <span>{r.label}</span>
+          <span className="sr-only">: {word[r.state]}</span>
+        </li>
+      ))}
+    </ol>
   )
 }
 

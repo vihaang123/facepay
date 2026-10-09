@@ -3,17 +3,21 @@ import Icon from '../components/Icon'
 import { Avatar, Button, Logo } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
 import {
-  DASHBOARD_PATH, FACE_PATH, LOGIN_PATH, NEW_PAYMENT_PATH, PAY_PATH, PROFILE_PATH, SECURITY_PATH, TRANSACTIONS_PATH,
+  ACTIVITY_PATH, ADMIN_PATH, DASHBOARD_PATH, FACE_PATH, LOGIN_PATH, MY_QR_PATH, NEW_PAYMENT_PATH, PROFILE_PATH, REQUESTS_PATH,
+  SCAN_PATH, SECURITY_PATH, SEND_PATH, TRANSACTIONS_PATH,
 } from '../utils/roles'
 
 // [label, path, icon, end]. The same list drives the desktop bar and the phone's bottom navigation.
 const NAV = {
   customer: [
     ['Home', DASHBOARD_PATH.customer, 'home', true],
-    ['Pay', PAY_PATH, 'link'],
-    ['Activity', TRANSACTIONS_PATH.customer, 'receipt'],
-    ['Face profile', FACE_PATH, 'face'],
-    ['Security', SECURITY_PATH, 'shield', false, 'desktop'], // phones reach it from Profile; five items is the most a thumb bar holds
+    ['Send', SEND_PATH, 'send'],
+    ['Scan', SCAN_PATH, 'scan'],
+    ['Activity', ACTIVITY_PATH, 'receipt'],
+    ['Requests', REQUESTS_PATH, 'request', false, 'desktop'], // phones reach these from Home and Profile; five items is the most a thumb bar holds
+    ['My QR', MY_QR_PATH, 'qr', false, 'desktop'],
+    ['Face profile', FACE_PATH, 'face', false, 'desktop'],
+    ['Security', SECURITY_PATH, 'shield', false, 'desktop'],
     ['Profile', PROFILE_PATH.customer, 'user'],
   ],
   merchant: [
@@ -21,6 +25,9 @@ const NAV = {
     ['New payment', NEW_PAYMENT_PATH, 'plus'],
     ['Transactions', TRANSACTIONS_PATH.merchant, 'receipt'],
     ['Profile', PROFILE_PATH.merchant, 'user'],
+  ],
+  admin: [
+    ['ML Lab', ADMIN_PATH, 'cpu', true],
   ],
 }
 
@@ -47,7 +54,7 @@ export default function DashboardLayout() {
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 px-4 sm:px-6 md:h-16">
           <div className="flex items-center gap-8">
             <Logo className="text-lg" />
-            <nav aria-label="Main" className="hidden gap-1 md:flex">
+            <nav aria-label="Main" className="hidden gap-1 lg:flex">
               {NAV[role].map(([label, to, , end]) => (
                 <NavLink
                   key={to}
@@ -71,7 +78,7 @@ export default function DashboardLayout() {
         </div>
       </header>
 
-      <main id="main" className={`mx-auto w-full max-w-5xl flex-1 px-4 py-5 sm:px-6 sm:py-8 ${focused ? 'pb-10' : 'pb-28 md:pb-8'}`}>
+      <main id="main" className={`mx-auto w-full max-w-5xl flex-1 px-4 py-5 sm:px-6 sm:py-8 ${focused ? 'pb-10' : 'pb-28 lg:pb-8'}`}>
         <div key={location.pathname} className="animate-rise">
           <Outlet />
         </div>
@@ -82,7 +89,7 @@ export default function DashboardLayout() {
       </footer>
 
       {!focused && (
-        <nav aria-label="Mobile" className="no-print fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+        <nav aria-label="Mobile" className="no-print fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
           <ul className="mx-auto flex max-w-md justify-around px-1">
             {NAV[role].filter((item) => item[4] !== 'desktop').map(([label, to, icon, end]) => (
               <li key={to} className="flex-1">

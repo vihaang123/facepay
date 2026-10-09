@@ -66,3 +66,21 @@ def get_current_merchant(
     if merchant is None:
         raise _UNAUTHORIZED
     return merchant
+
+
+def get_current_admin(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    db: Session = Depends(get_db),
+) -> User:
+    """Administrators only. Neither a customer nor a merchant account is ever promoted by anything in the request:
+    the role must be 'admin' in the signed token AND in the database right now (so a demotion takes effect at once).
+    Admin accounts are created out of band with `python -m app.cli create-admin`; there is no endpoint for it."""
+    claims = _claims(credentials)
+    if claims["role"] != "admin":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Administrator access required")
+    user = db.get(User, _subject_id(claims))
+    if user is None:
+        raise _UNAUTHORIZED
+    if user.role != "admin" or user.status != "active":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Administrator access required")
+    return user

@@ -128,10 +128,11 @@ def test_correct_user_with_completed_challenge_is_authenticated_and_logged(clien
     assert [s["status"] for s in res["stages"]] == ["PASSED", "PASSED", "PASSED"]
     ident = res["identity"]
     assert ident["verified"] and ident["name"] == "Asha Rao" and ident["frames_evaluated"] == cfg.AUTH_BASELINE_FRAMES
-    assert 0.5 <= ident["confidence"] <= 1 and ident["distance"] <= ident["distance_threshold"]
+    # scores and distances are internal: the response carries the outcome only, the audit log keeps the numbers
+    assert set(ident) == {"verified", "frames_evaluated", "name"}
     log = db.get(AuthenticationLog, res["authentication_id"])
     assert (log.user_id, log.result, log.liveness_result, log.failure_reason) == (a["id"], "SUCCESS", "PASSED", None)
-    assert log.confidence == pytest.approx(ident["confidence"], abs=1e-4) and log.distance == pytest.approx(ident["distance"], abs=1e-4)
+    assert 0.5 <= log.confidence <= 1 and log.distance is not None
     assert log.challenge == res["challenge"] and log.model_version == res["model_version"] and log.timestamp is not None
 
 
@@ -145,8 +146,8 @@ def test_response_never_contains_biometric_data_or_other_users(client, trained):
     a, b = trained
     res = attempt(client, a, 0)
     text = json.dumps(res).lower()
-    for word in ("centroid", "feature", "vector", "crop", "image", "base64", "ravi", str(b["id"]) + '"'):
-        assert word not in text
+    for word in ("centroid", "feature", "vector", "crop", "image", "base64", "ravi", '"user_id"', f'"id": {b["id"]},'):
+        assert word not in text  # (a bare id check would collide with the random hex tail of the model version)
 
 
 # ------------------------------------------------------------ identity failures
@@ -170,12 +171,12 @@ def test_unenrolled_stranger_is_rejected(client, trained_calibrated):
     assert res["result"] == "REJECTED" and res["reason"] in ("IDENTITY_MISMATCH", "LOW_CONFIDENCE", "DISTANCE_TOO_HIGH")
 
 
-def test_low_confidence_is_rejected(client, trained, monkeypatch):
+def test_low_confidence_is_rejected(client, trained, monkeypatch, db):
     a, _ = trained
     monkeypatch.setattr(cfg, "AUTH_MIN_CONFIDENCE", 1.01)  # no classifier output can reach this
     res = attempt(client, a, 0)
     assert res["result"] == "REJECTED" and res["reason"] == "LOW_CONFIDENCE"
-    assert res["identity"]["confidence"] < 1.01 and res["stages"][2]["status"] == "FAILED"
+    assert db.get(AuthenticationLog, res["authentication_id"]).confidence < 1.01 and res["stages"][2]["status"] == "FAILED"
 
 
 def test_excessive_distance_is_rejected(client, trained, db):
@@ -184,7 +185,8 @@ def test_excessive_distance_is_rejected(client, trained, db):
     set_threshold(db, [a["id"]], 1e-6)
     res = attempt(client, a, 0)
     assert res["result"] == "REJECTED" and res["reason"] == "DISTANCE_TOO_HIGH"
-    assert res["identity"]["distance"] > res["identity"]["distance_threshold"]
+    assert "distance" not in res["identity"] and "distance_threshold" not in res["identity"]  # internal numbers stay server-side
+    assert db.get(AuthenticationLog, res["authentication_id"]).distance > 1e-6
 
 
 def test_calibrated_threshold_on_synthetic_data_accepts_some_genuine_and_no_strangers(client, trained_calibrated, monkeypatch):
@@ -407,7 +409,7 @@ def test_every_attempt_is_logged_and_users_see_only_their_own(client, trained, d
     mine = client.get("/face-auth/attempts", headers=a["headers"]).json()
     assert [m["result"] for m in mine] == ["FAILED", "FAILED", "SUCCESS"]  # newest first, only Asha's
     assert mine[0]["failure_reason"] == "LIVENESS_FAILED" and mine[1]["failure_reason"] == "IDENTITY_MISMATCH"
-    assert set(mine[0]) == {"id", "timestamp", "result", "failure_reason", "failure_detail", "confidence", "distance",
+    assert set(mine[0]) == {"id", "timestamp", "result", "failure_reason", "failure_detail",
                             "liveness_result", "challenge", "model_version", "payment_session_ref", "transaction_ref"}
     assert client.get("/face-auth/attempts?limit=1", headers=a["headers"]).json()[0]["id"] == mine[0]["id"]
     assert client.get("/face-auth/attempts?limit=0", headers=a["headers"]).status_code == 422

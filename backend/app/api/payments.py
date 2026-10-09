@@ -52,7 +52,7 @@ def _pay_limit(request: Request, user: User = Depends(get_customer_any_status)) 
 
 @router.get("/sessions/{session_id}", response_model=CheckoutOut, dependencies=[Depends(_pay_limit)])
 def checkout(session_id: str, user: User = Depends(get_current_customer), db: Session = Depends(get_db)):
-    return svc.checkout_view(db, session_id)
+    return svc.checkout_view(db, user, session_id)
 
 
 @router.post("/sessions/{session_id}/authenticate/start", response_model=ChallengeOut, dependencies=[Depends(_auth_limit)])
@@ -84,6 +84,7 @@ def confirm(session_id: str, data: ConfirmRequest, user: User = Depends(get_curr
         expected_amount=data.expected_amount,
         expected_merchant=data.expected_merchant,
         expected_order_reference=data.expected_order_reference,
+        expected_recipient=data.expected_recipient,
         pin=data.pin,
     )
 

@@ -12,14 +12,15 @@ export const authenticateForPayment = (token, sessionId, { challengeId, frames }
   })
 // The one-time ticket plus everything the customer was shown. The server compares each of them with the session and the
 // ticket's own snapshot, and charges the session's own amount, never a value supplied here.
-export const confirmPayment = (token, sessionId, { authorizationToken, expectedAmount, expectedMerchant, expectedOrderReference, pin }) =>
+export const confirmPayment = (token, sessionId, { authorizationToken, expectedAmount, expectedMerchant, expectedOrderReference, expectedRecipient, pin }) =>
   apiFetch(`/payments/sessions/${enc(sessionId)}/confirm`, {
     method: 'POST', token,
     json: {
       authorization_token: authorizationToken,
       expected_amount: expectedAmount,
-      expected_merchant: expectedMerchant,
-      expected_order_reference: expectedOrderReference,
+      ...(expectedMerchant !== undefined ? { expected_merchant: expectedMerchant } : {}),
+      ...(expectedOrderReference !== undefined ? { expected_order_reference: expectedOrderReference } : {}),
+      ...(expectedRecipient ? { expected_recipient: expectedRecipient } : {}),
       ...(pin ? { pin } : {}),
     },
   })
@@ -47,3 +48,4 @@ export const cancelPaymentSession = (token, sessionId) =>
 export const getMerchantTransactions = (token, params = { limit: 10 }) => apiFetch(`/merchant/transactions${query(params)}`, { token })
 export const getMerchantReceipt = (token, transactionId) => apiFetch(`/merchant/transactions/${enc(transactionId)}`, { token })
 export const getMerchantSummary = (token) => apiFetch('/merchant/summary', { token })
+export const getMerchantSecuritySummary = (token) => apiFetch('/merchant/security-summary', { token })
