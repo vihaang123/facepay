@@ -81,3 +81,10 @@ Genuine user, another enrolled customer, and never-enrolled people claiming an a
 PCA -> LDA -> classifier, per-model distance threshold and `auth_policy.decide`. 2, 5 and 10 enrolled people, 20 random
 trials each, 6 training and 4 held-out ORL images per enrolled person. Liveness is assumed passed. Summarised in
 `docs/final/evaluation-results.md` section 9.
+
+
+## auth_policy_v4.json
+
+Recognition decision before/after the v4 recipe (genuine, other-enrolled and never-enrolled acceptance, with and without a
+simulated session shift). Script `ml/experiments/auth_policy_v4.py`; interpretation and caveats in `docs/final/recognition-policy.md`.
+ORL, 2 and 5 enrolled people; **not real webcam data**.

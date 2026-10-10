@@ -58,16 +58,47 @@ MIN_USERS_TO_TRAIN = 2  # LDA needs at least 2 classes (and yields C-1 component
 # Model defaults
 PCA_VARIANCE = 0.95
 KNN_NEIGHBORS = 3
-# Percentile of out-of-fold genuine distances used as the accept threshold. ORL open-set benchmark
-# (ml/results/orl_benchmark.json): p95 accepted ~every impostor that claimed the predicted identity;
-# p70 gave FRR ~0.20, FAR ~0.02 (random claim) / ~0.45 (worst case). A trade-off knob, not a calibrated
-# security level: not recalibrated on real webcam data (see docs/final/evaluation-results.md).
-DISTANCE_THRESHOLD_PERCENTILE = 70.0
+# Percentile of out-of-fold genuine distances used as the accept threshold. It is a trade-off knob, not a calibrated
+# security level. Measured offline (ORL faces, simulated session shift; ml/results/auth_policy_v4.json and
+# docs/final/recognition-policy.md): at 70 with "every frame must pass" a genuine user was accepted only 49-61% of the time
+# (2 enrolled people), which is what made repeated attempts fail; at 90 with the mean-distance rule and augmented training
+# 89-91%, while another enrolled person was still accepted 0 times in 100s of attempts. The price is paid by never-enrolled
+# strangers (see docs/final/recognition-policy.md). NOT validated on real webcam data.
+DISTANCE_THRESHOLD_PERCENTILE = 90.0
+# The per-user threshold uses that user's own out-of-fold distances when there are at least this many, else the pooled ones.
+MIN_USER_DISTANCES = 12
+
+# Training-time augmentation. Enrolment samples are captured in one sitting, so they hold almost none of the variation
+# between sessions (small shifts of the face box, scale, slight rotation, softer focus, side lighting). Each stored 64x64 crop
+# gets AUGMENT_COPIES slightly perturbed copies at training time (nothing extra is stored; the same crops are reused), and the
+# threshold is calibrated on held-out samples PLUS CALIBRATION_COPIES perturbed copies of them, so it reflects that spread.
+# A copy always stays on the same side of a cross-validation split as its source sample: no leakage.
+AUGMENT_COPIES = 4
+CALIBRATION_COPIES = 2
+AUGMENT_SEED = 20261011
+AUGMENT_MAX_SHIFT = 0.035  # fraction of the crop size
+AUGMENT_MAX_SCALE = 0.06
+AUGMENT_MAX_ROTATION = 4.0  # degrees
+AUGMENT_MAX_LIGHT_GRADIENT = 28.0  # grey levels across the crop (side lighting)
+# Perturbation size of the copies used to CALIBRATE the threshold, relative to the training copies. 1.5: a margin because the
+# real difference between two sessions (and between two devices) is not known and probably larger than the training copies
+# show. Measured trade-off (ml/results/auth_policy_v4.json): larger = more genuine users accepted, more strangers accepted.
+AUGMENT_CALIBRATION_STRENGTH = 1.5
+# Bump when training or the decision rule changes. A model trained with an older recipe is retrained automatically
+# from the stored samples the next time someone starts a face check (no new capture is needed).
+MODEL_RECIPE = "v4-augmented-mean"
+# A person whose own held-out samples are classified correctly less often than this is flagged: the model cannot reliably
+# tell them from another account (2 classes: 0.5 is a coin flip). Typical cause: two accounts set up with the same face.
+MIN_USER_RECALL = 0.65
 
 # ---------------------------------------------------------------- Phase 4: authentication
 # Decision policy (see app/services/auth_policy.py). The distance threshold itself is the per-model
 # value stored in each face profile (Phase 3: percentile of out-of-fold genuine distances).
 AUTH_MIN_CONFIDENCE = 0.5  # the predicted class must hold at least half of the classifier's vote/score
+# Distance rule over the baseline frames used: the MEAN distance must be within the user's threshold (averaging cancels
+# per-frame detector jitter, which genuine users have and impostors do not benefit from), and no single frame may be further
+# than AUTH_FRAME_DISTANCE_CAP x the threshold. Every frame must still be classified as the user with enough confidence.
+AUTH_FRAME_DISTANCE_CAP = 1.6
 AUTH_SECOND_FACE_RATIO = 0.15  # stricter than enrolment: any face >= 15% of the largest one blocks payment auth
 
 # Challenge-response liveness (app/ml/liveness.py)

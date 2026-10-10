@@ -112,3 +112,14 @@ the deployed app is not confirmed.**
 * **Consent.** Face setup asks for explicit agreement before the camera starts capturing (`POST /faces/consent`, audit event
   `FACE_CONSENT_GIVEN`). It is enforced in the interface, not by the samples endpoint.
 * Movement-based liveness still does not stop a photo moved by hand, a video that follows the challenge, a mask, or a deepfake.
+
+
+## Recognition recipe (v4)
+
+Why a genuine owner was rejected at identity recognition, what changed and the measured trade-off:
+[`final/recognition-policy.md`](final/recognition-policy.md). In short: training on perturbed copies of the stored crops, a
+per-person threshold at the 90th percentile of held-out distances (plus perturbed copies of them), a mean-distance decision
+(no single frame beyond 1.6x the threshold), automatic retraining of an older model from the stored samples, and a flag when two
+accounts cannot be told apart. **Measured offline on ORL with a simulated session shift; not on a real phone.** The price is that a
+never-enrolled stranger is accepted more often (about 22-28% with two enrolled people, 5-12% with five); another enrolled person
+is still essentially never accepted.

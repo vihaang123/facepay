@@ -109,6 +109,18 @@ describe('recognition status on the setup page', () => {
     await openPage({ 'GET /faces/readiness': { body: { ready: true, code: null, message: '', next_action: null, stale: false, model_version: 3, checks: checks({ people_with_finished_setup: { enough: true }, model_active: true, you_are_in_model: true }) } } })
     expect(await screen.findByText('Face recognition is ready for your account.')).toBeInTheDocument()
   })
+  const ready = (separation) => ({ ready: true, code: null, message: '', next_action: null, stale: false, separation, model_version: 3, checks: checks({ people_with_finished_setup: { enough: true }, model_active: true, you_are_in_model: true }) })
+  it('warns when the model cannot tell this account from another one (typically the same face set up twice)', async () => {
+    await openPage({ 'GET /faces/readiness': { body: ready({ ok: false }) } })
+    const panel = await screen.findByRole('region', { name: 'Recognition status' })
+    expect(panel).toHaveTextContent(/cannot reliably tell your face apart from another account/)
+    expect(panel).toHaveTextContent(/same face/)
+  })
+  it('shows no such warning when the accounts are separable or nothing is known yet', async () => {
+    await openPage({ 'GET /faces/readiness': { body: ready({ ok: true }) } })
+    expect(await screen.findByText('Face recognition is ready for your account.')).toBeInTheDocument()
+    expect(screen.queryByText(/cannot reliably tell your face apart/)).not.toBeInTheDocument()
+  })
 })
 
 const phase = () => screen.getByTestId('enroll-stage').dataset.phase

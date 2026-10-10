@@ -135,5 +135,6 @@ class Readiness(BaseModel):
     message: str
     next_action: str | None  # ENROLL | TRAIN | WAIT_FOR_SECOND_PERSON | CONTACT_ADMIN
     stale: bool
+    separation: dict[str, bool | None]  # {"ok": bool | None}: can the model tell this person from the other accounts?
     model_version: str | None
     checks: ReadinessChecks

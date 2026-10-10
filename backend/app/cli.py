@@ -4,6 +4,7 @@ the Render shell:
     python -m app.cli create-admin you@example.com     # promote an EXISTING customer account to administrator
     python -m app.cli remove-admin you@example.com     # back to an ordinary customer
     python -m app.cli reconcile-ledger                 # check that every balance equals its ledger entries
+    python -m app.cli retrain-model                    # rebuild the face model from the stored samples (no new capture)
 
 Nothing here is reachable over HTTP: there is deliberately no endpoint that grants a role.
 """
@@ -39,6 +40,15 @@ def main(argv: list[str]) -> int:
             problems = ledger_service.reconcile(db)
         print("Ledger is consistent." if not problems else "\n".join(problems))
         return 0 if not problems else 2
+    if argv == ["retrain-model"]:
+        from app.services import face_service
+
+        with SessionLocal() as db:
+            if face_service.retrain_if_outdated(db):
+                print("The face model was retrained from the stored samples.")
+            else:
+                print("Nothing to do: the model is already current, or fewer than 2 people have a finished face setup.")
+        return 0
     print(__doc__)
     return 64
 

@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     resolve_rate_limit_per_minute: int = 20  # FacePay ID lookups per customer (limits guessing which IDs exist)
     transfer_rate_limit_per_minute: int = 20  # creating transfers and money requests per customer
 
+    # Rebuild a model trained with an older recipe from the stored samples, in the background, when someone starts a face
+    # check or opens face setup. Nothing is captured again. Turn off to retrain only by hand (Face setup > Prepare the model).
+    auto_retrain_models: bool = True
+
     # --- Account-level biometric lockout: this many counted failures inside the window blocks further biometric
     # attempts until the oldest of them leaves the window.
     biometric_lockout_failures: int = 8

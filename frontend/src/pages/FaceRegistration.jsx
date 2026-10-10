@@ -44,6 +44,13 @@ function ReadinessPanel({ readiness }) {
       {readiness.ready
         ? <Alert tone="success">Face recognition is ready for your account.</Alert>
         : <Alert tone="warning">{readiness.message}</Alert>}
+      {readiness.separation?.ok === false && (
+        <div className="mt-3">
+          <Alert tone="warning">
+            The model cannot reliably tell your face apart from another account's. This usually means two accounts were set up with the same face. Each account needs its own person, using their own face.
+          </Alert>
+        </div>
+      )}
       {c && (
         <ul className="mt-3 flex flex-col gap-1 text-sm text-slate-700">
           <li>Usable samples: {c.samples.have} of {c.samples.need} needed</li>

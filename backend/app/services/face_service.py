@@ -14,6 +14,7 @@ import json
 import logging
 import secrets
 import threading
+import time
 from collections import defaultdict
 from datetime import UTC, datetime
 
@@ -24,11 +25,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core import crypto
+from app.core.config import get_settings
 from app.ml import config as cfg
 from app.ml import registry
 from app.ml.analysis import scatter_analysis
-from app.ml.evaluation import compare_and_select, genuine_threshold, strip_private
-from app.ml.pipeline import FacePipeline, InsufficientDataError
+from app.ml.evaluation import strip_private
+from app.ml.pipeline import InsufficientDataError
 from app.ml.preprocessing import (
     INVALID_IMAGE,
     FaceDetector,
@@ -38,8 +40,8 @@ from app.ml.preprocessing import (
     extract_face,
     process_gray,
     vectorize,
-    vectorize_many,
 )
+from app.ml.recipe import train_recognizer
 from app.ml.serialization import ModelLoadError, dump_model, library_versions
 from app.models import FaceProfile, FaceSample, ModelVersion, User
 from app.services import security_service as sec
@@ -267,7 +269,7 @@ def _load_training_data(db: Session, eligible: dict[int, list[tuple[int, str]]])
     )
     y = np.array([owner[s.id] for s in samples])
     groups = np.array([pose_by_id[s.id] for s in samples])
-    return vectorize_many(crops), y, groups
+    return crops, y, groups
 
 
 def train(db: Session, user: User) -> dict:
@@ -281,89 +283,169 @@ def train(db: Session, user: User) -> dict:
                 f"Capture at least {cfg.MIN_SAMPLES_PER_USER} samples across {cfg.MIN_POSES_PER_USER}+ poses first.",
                 422,
             )
-        if len(eligible) < cfg.MIN_USERS_TO_TRAIN:
-            raise FaceServiceError(
-                "NOT_ENOUGH_USERS",
-                "At least 2 enrolled users are required: LDA separates classes, so it needs 2 or more.",
-                422,
-            )
-        try:
-            X, y, groups = _load_training_data(db, eligible)
-        except crypto.BiometricCryptoError as exc:
-            log.warning("training stopped: stored face samples cannot be decrypted user_id=%s", user.id)
-            raise FaceServiceError("BIOMETRIC_DECRYPTION_FAILED", "Stored face data could not be read, so the model cannot be trained.", 503) from exc
-        try:
-            results, chosen, scheme = compare_and_select(X, y, groups)
-            model = FacePipeline(use_lda=True, classifier=chosen).fit(X, y)
-        except InsufficientDataError as exc:
-            raise FaceServiceError("NOT_ENOUGH_DATA", str(exc), 422) from exc
-        except Exception as exc:  # numerical or library failure while fitting: nothing has been changed yet
-            log.exception("training failed while fitting user_id=%s", user.id)
-            raise FaceServiceError("TRAINING_FAILED", "Training did not complete. Your previous model, if any, is unchanged. Try again.", 500) from exc
-
-        deployed = results[f"pca_lda_{chosen}"]
-        threshold = genuine_threshold(deployed["_genuine_distances"])
-        fingerprint = _fingerprint(eligible)
-        version = f"{datetime.now(UTC):%Y%m%d-%H%M%S}-{fingerprint[:6]}-{secrets.token_hex(2)}"
-        info = model.describe()
-
-        try:
-            previous = registry.active_model_row(db)
-            if previous is not None:
-                _retire_model(db, previous.id)
-                db.flush()
-            row = ModelVersion(
-                version=version,
-                pca_config=info["pca"],
-                lda_config=info["lda"],
-                classifier=f"pca_lda_{chosen}",
-                evaluation_metrics={
-                    "validation": scheme,
-                    "variants": strip_private(results),
-                    "distance_threshold": threshold,
-                    "threshold_percentile": cfg.DISTANCE_THRESHOLD_PERCENTILE,
-                    "scatter": scatter_analysis(model, X, y),
-                    "knn_k": info["knn_k"],
-                },
-                status="active",
-                artifact=dump_model(model, version),
-                n_samples=int(len(y)),
-                n_classes=int(len(model.classes_)),
-                dataset_fingerprint=fingerprint,
-                library_versions=library_versions(),
-            )
-            db.add(row)
-            db.flush()
-
-            z = model.transform(X)
-            for uid in model.classes_:
-                uid = int(uid)
-                mine = z[y == uid]
-                payload = {
-                    "centroid": [float(v) for v in model.centroids_[uid]],
-                    "distance_threshold": threshold,
-                    "train_distance_mean": float(np.linalg.norm(mine - model.centroids_[uid], axis=1).mean()),
-                }
-                db.add(
-                    FaceProfile(
-                        user_id=uid,
-                        model_version_id=row.id,
-                        feature_data=crypto.encrypt(json.dumps(payload).encode(), _profile_context(uid, version)),
-                        sample_count=int((y == uid).sum()),
-                        status="active",
-                    )
-                )
-            # older active profiles of these users belong to retired models and are already revoked
-            db.commit()
-        except Exception:  # the old model must stay active if anything fails while the new one is written
-            db.rollback()
-            registry.invalidate()
-            log.exception("training failed while saving the model user_id=%s", user.id)
-            raise
-        registry.invalidate()
+        _fit_and_store(db, user.id, eligible)
         return model_summary(db, user)["model"]
     finally:
         _train_lock.release()
+
+
+def recipe_outdated(row: ModelVersion | None) -> bool:
+    return row is not None and (row.evaluation_metrics or {}).get("recipe") != cfg.MODEL_RECIPE
+
+
+_retrain_state = threading.Lock()  # held while a background retraining is running
+_retrain_failed_at = 0.0
+RETRAIN_BACKOFF_SECONDS = 600
+
+
+def schedule_retrain(db: Session) -> bool:
+    """Start retraining in the background if the active model is from an older recipe. Never blocks the request and never
+    raises: until the new model is deployed, face checks keep using the existing one. Returns True if a run was started."""
+    global _retrain_failed_at
+    try:
+        if not get_settings().auto_retrain_models or not recipe_outdated(registry.active_model_row(db)):
+            return False
+        if time.monotonic() - _retrain_failed_at < RETRAIN_BACKOFF_SECONDS and _retrain_failed_at:
+            return False
+        if not _retrain_state.acquire(blocking=False):
+            return False  # already running
+
+        def run() -> None:
+            global _retrain_failed_at
+            try:
+                from app.database.session import SessionLocal
+
+                with SessionLocal() as session:
+                    if not retrain_if_outdated(session):
+                        _retrain_failed_at = time.monotonic()  # nothing deployed (not enough data, or it failed): do not retry at once
+            except Exception as exc:
+                _retrain_failed_at = time.monotonic()
+                log.warning("background retraining failed (%s)", type(exc).__name__)
+            finally:
+                _retrain_state.release()
+
+        threading.Thread(target=run, name="facepay-retrain", daemon=True).start()
+        return True
+    except SQLAlchemyError:
+        return False
+
+
+def retrain_if_outdated(db: Session) -> bool:
+    """Retrain the active model from the stored samples when it was trained with an older recipe.
+
+    Nothing is captured again and no sample is changed. If anything goes wrong the existing model stays active (training
+    never replaces a model until the new one is complete), so this can only improve the situation. Returns True if a new
+    model was deployed."""
+    row = registry.active_model_row(db)
+    if not recipe_outdated(row):
+        return False
+    if not _train_lock.acquire(blocking=False):
+        return False  # someone else is training right now
+    try:
+        row = registry.active_model_row(db)  # re-check under the lock
+        if not recipe_outdated(row):
+            return False
+        eligible = _eligible_rows(db)
+        if len(eligible) < cfg.MIN_USERS_TO_TRAIN:
+            return False
+        old = (row.evaluation_metrics or {}).get("recipe")
+        _fit_and_store(db, next(iter(eligible)), eligible)
+        log.info("model retrained automatically: recipe %s -> %s", old, cfg.MODEL_RECIPE)
+        return True
+    except Exception as exc:  # the old model is untouched; face checks go on with it
+        db.rollback()
+        log.warning("automatic retraining skipped (%s); the existing model stays active", type(exc).__name__)
+        return False
+    finally:
+        _train_lock.release()
+
+
+def _fit_and_store(db: Session, actor_id: int, eligible: dict[int, list[tuple[int, str]]]) -> None:
+    """Cross-validate, fit and deploy a model for every eligible user. The caller holds the training lock."""
+    if len(eligible) < cfg.MIN_USERS_TO_TRAIN:
+        raise FaceServiceError(
+            "NOT_ENOUGH_USERS",
+            "At least 2 enrolled users are required: LDA separates classes, so it needs 2 or more.",
+            422,
+        )
+    try:
+        crops, y, groups = _load_training_data(db, eligible)
+    except crypto.BiometricCryptoError as exc:
+        log.warning("training stopped: stored face samples cannot be decrypted user_id=%s", actor_id)
+        raise FaceServiceError("BIOMETRIC_DECRYPTION_FAILED", "Stored face data could not be read, so the model cannot be trained.", 503) from exc
+    try:
+        trained = train_recognizer(crops, y, groups)  # augmented training, calibrated per-user thresholds (app/ml/recipe.py)
+    except InsufficientDataError as exc:
+        raise FaceServiceError("NOT_ENOUGH_DATA", str(exc), 422) from exc
+    except Exception as exc:  # numerical or library failure while fitting: nothing has been changed yet
+        log.exception("training failed while fitting user_id=%s", actor_id)
+        raise FaceServiceError("TRAINING_FAILED", "Training did not complete. Your previous model, if any, is unchanged. Try again.", 500) from exc
+    model, chosen, scheme, results = trained.model, trained.chosen, trained.scheme, trained.results
+    X, X_fit, y_fit = trained.X, trained.X_fit, trained.y_fit
+    pooled, per_user, recall = trained.pooled_threshold, trained.user_thresholds, trained.recall
+    fingerprint = _fingerprint(eligible)
+    version = f"{datetime.now(UTC):%Y%m%d-%H%M%S}-{fingerprint[:6]}-{secrets.token_hex(2)}"
+    info = model.describe()
+
+    try:
+        previous = registry.active_model_row(db)
+        if previous is not None:
+            _retire_model(db, previous.id)
+            db.flush()
+        row = ModelVersion(
+            version=version,
+            pca_config=info["pca"],
+            lda_config=info["lda"],
+            classifier=f"pca_lda_{chosen}",
+            evaluation_metrics={
+                "recipe": cfg.MODEL_RECIPE,
+                "validation": scheme,
+                "variants": strip_private(results),
+                "distance_threshold": pooled,
+                "threshold_percentile": cfg.DISTANCE_THRESHOLD_PERCENTILE,
+                "augment_copies": cfg.AUGMENT_COPIES,
+                "per_user_recall": {str(k): v for k, v in recall.items()},
+                "scatter": scatter_analysis(model, X_fit, y_fit),
+                "knn_k": info["knn_k"],
+            },
+            status="active",
+            artifact=dump_model(model, version),
+            n_samples=int(len(y)),
+            n_classes=int(len(model.classes_)),
+            dataset_fingerprint=fingerprint,
+            library_versions=library_versions(),
+        )
+        db.add(row)
+        db.flush()
+
+        z = model.transform(X)
+        for uid in model.classes_:
+            uid = int(uid)
+            mine = z[y == uid]
+            payload = {
+                "centroid": [float(v) for v in model.centroids_[uid]],
+                "distance_threshold": per_user.get(uid, pooled),
+                "pooled_threshold": pooled,
+                "recall": recall.get(uid),
+                "train_distance_mean": float(np.linalg.norm(mine - model.centroids_[uid], axis=1).mean()),
+            }
+            db.add(
+                FaceProfile(
+                    user_id=uid,
+                    model_version_id=row.id,
+                    feature_data=crypto.encrypt(json.dumps(payload).encode(), _profile_context(uid, version)),
+                    sample_count=int((y == uid).sum()),
+                    status="active",
+                )
+            )
+        # older active profiles of these users belong to retired models and are already revoked
+        db.commit()
+    except Exception:  # the old model must stay active if anything fails while the new one is written
+        db.rollback()
+        registry.invalidate()
+        log.exception("training failed while saving the model user_id=%s", actor_id)
+        raise
+    registry.invalidate()
 
 
 def model_summary(db: Session, user: User) -> dict:
@@ -491,6 +573,15 @@ def inspect_model(db: Session, user: User) -> ModelState:
     return ModelState(None, row=row, model=model, profile=profile, payload=payload, stale=stale, facts=facts)
 
 
+def _separation(state: "ModelState") -> dict:
+    """Can the model tell THIS person apart from the other accounts? Judged on held-out samples of the person's own
+    (cross-validation), so it is a property of the samples, not of one attempt. ok=None when nothing is known yet."""
+    recall = (state.payload or {}).get("recall")
+    if recall is None:
+        return {"ok": None}
+    return {"ok": bool(recall >= cfg.MIN_USER_RECALL)}
+
+
 def readiness(db: Session, user: User) -> dict:
     """The customer-facing readiness report. Counts only; no model internals, scores or other people's identities."""
     state = inspect_model(db, user)
@@ -501,6 +592,7 @@ def readiness(db: Session, user: User) -> dict:
         "message": state.message or "Face recognition is ready.",
         "next_action": state.next_action,
         "stale": state.stale,
+        "separation": _separation(state),
         "model_version": state.row.version if state.row is not None else None,
         "checks": {
             "samples": {"have": f["your_samples"], "need": f["required_samples"]},

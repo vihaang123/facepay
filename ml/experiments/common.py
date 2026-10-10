@@ -22,8 +22,10 @@ sys.path.insert(0, str(BACKEND))
 from app.ml.preprocessing import crop_to_stored, vectorize_many  # noqa: E402
 
 
-def parse_args(description: str) -> argparse.Namespace:
+def parse_args(description: str, extra=None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=description)
+    if extra is not None:
+        extra(p)
     p.add_argument("--orl", required=True, help="path to orl.npz (X, y)")
     p.add_argument("--repeats", type=int, default=20)
     p.add_argument("--seed", type=int, default=0)

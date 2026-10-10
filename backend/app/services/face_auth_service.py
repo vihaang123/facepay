@@ -14,14 +14,17 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.ml import config as cfg
-from app.ml import liveness
-from app.ml.preprocessing import FaceDetector, FaceImageError, decode_image, process_gray, vectorize
+from app.ml import liveness, recipe
+from app.ml.preprocessing import FaceDetector, FaceImageError, decode_image, process_gray
 from app.models import AuthenticationLog, FaceAuthChallenge, User
 from app.services import auth_policy as policy
-from app.services.face_service import decode_upload, inspect_model
+from app.services.face_service import decode_upload, inspect_model, schedule_retrain
 
 
 def issue_challenge(db: Session, user: User) -> dict:
+    # A model trained with an older recipe is rebuilt from the stored samples in the background (no new capture needed; the
+    # existing model keeps working until the new one is complete), so nobody has to press anything after an update.
+    schedule_retrain(db)
     # Do not start (and do not let the browser capture frames for) a check that cannot be decided: say why instead.
     state = inspect_model(db, user)
     if not state.ready:
@@ -178,21 +181,16 @@ def authenticate(db: Session, user: User, token: str, frames_b64: list[str], det
             except FaceImageError as exc:
                 first_error = first_error or exc.code
                 continue
-            x = vectorize(face.crop)[None, :]
-            z = model.transform(x)
-            label = model.clf_.predict(z)[0]
-            proba = model.predict_proba(x)[0]
-            mine = float(proba[list(model.classes_).index(user.id)])  # score of YOUR class only
-            identities.append(
-                policy.FrameIdentity(
-                    predicted_is_user=int(label) == user.id,
-                    confidence=mine,
-                    distance=float(np.linalg.norm(z[0] - centroid)),
-                )
-            )
+            identities.append(recipe.frame_identity(model, user.id, centroid, face.crop))
         if len(identities) < cfg.BASELINE_MIN_USABLE:
             return finish(policy.Evidence(image_reason=policy.IMAGE_ERROR_REASON[first_error or "NO_FACE"], distance_threshold=threshold))
         ctx["frames"] = tuple(identities)
+        # Restricted server log: scores only (no images, vectors or tokens). Makes "why was my face not matched" answerable.
+        logging.getLogger("facepay.face").info(
+            "identity user_id=%s model=%s frames=%d predicted_is_user=%s confidence=%s distance=%s threshold=%.3f",
+            user.id, ctx["model_version"], len(identities), [f.predicted_is_user for f in identities],
+            [round(f.confidence, 2) for f in identities], [round(f.distance, 2) for f in identities], threshold,
+        )
 
         # --- liveness
         verdict = liveness.evaluate(ctx["challenge"], observations)

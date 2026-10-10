@@ -110,14 +110,17 @@ def decide(e: Evidence, min_confidence: float | None = None) -> Decision:
         return _no(*e.image_reason)
     if e.liveness_passed is not True:
         return _no("LIVENESS_FAILED", e.liveness_detail)
-    # Every baseline frame must independently pass identity, support and distance: one lucky frame is not enough.
+    # Every baseline frame must independently be classified as this user with enough support: one lucky frame is not enough.
     if not e.frames or e.distance_threshold is None:
         return _no("IDENTITY_MISMATCH")
     if not all(f.predicted_is_user for f in e.frames):
         return _no("IDENTITY_MISMATCH")
     if any(f.confidence < min_confidence for f in e.frames):
         return _no("LOW_CONFIDENCE")
-    if any(f.distance > e.distance_threshold for f in e.frames):
+    # Distance: the MEAN over the frames must be within the user's threshold (averaging cancels the per-frame detector jitter a
+    # genuine user has), and no single frame may be further than the cap, so one close frame cannot carry a far one.
+    mean_distance = sum(f.distance for f in e.frames) / len(e.frames)
+    if mean_distance > e.distance_threshold or any(f.distance > cfg.AUTH_FRAME_DISTANCE_CAP * e.distance_threshold for f in e.frames):
         return _no("DISTANCE_TOO_HIGH")
     return Decision(True)
 

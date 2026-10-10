@@ -201,6 +201,8 @@ simulated-camera run (`docs/browser-testing/`) and label it as simulated; it is 
 | `ModuleNotFoundError: psycopg2` | `DATABASE_URL` uses a driver prefix other than `postgres://`, `postgresql://` or `postgresql+psycopg://`. |
 | Camera does not start | Page is not HTTPS, permission denied, or another app holds the camera. |
 | "Not enough users" when training | The shared model needs at least two enrolled customers, each with enough samples. |
+| Face checks reject the real owner after an update | Recipe v4 (augmented training, per-person thresholds). An older model is rebuilt from the stored samples in the background the first time someone opens face setup or starts a face check (no new capture). Force it with `python -m app.cli retrain-model` in the Render shell, or "Prepare recognition model" in face setup. Read the Render log lines `identity user_id=... confidence=... distance=... threshold=...` and `liveness ...` (scores and counts only). Details: `recognition-policy.md`. |
+| "The model cannot reliably tell your face apart from another account's" | Two accounts were set up with the same face. Each account needs its own person. |
 | Everyone must re-enrol after a deploy | `BIOMETRIC_KEY` changed or was lost. |
 | 429 responses | Rate limit; if everyone gets them, `FORWARDED_ALLOW_IPS=*` is missing so all clients look like one address. |
 | 413 on face upload | Request over 12 MB (frames are normally a few MB). |

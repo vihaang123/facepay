@@ -91,7 +91,7 @@ trace: 1.02 in pixel space, 1.12 after PCA, 5.79 after LDA.
 
 A claim is accepted only if the classifier predicts the claimed identity **and** the sample's distance to that user's centroid
 in LDA space is at most a threshold. The threshold is a percentile of the out-of-fold genuine distances (computed the same
-way as in production). The deployed percentile is 70.
+way as in production). The percentile deployed when this section was measured was 70; **it is now 90 with augmented training and a mean-distance rule (recipe v4), see [`recognition-policy.md`](recognition-policy.md).**
 
 Terms: **genuine rejection rate** = share of genuine probes rejected (what a biometric paper would call false rejection
 rate, FRR). **Impostor acceptance rate** = share of impostor attempts accepted. We report it for two attacker models and do
@@ -228,6 +228,8 @@ dashboard.
 * Resistance to any presentation attack beyond a still image.
 * Behaviour at more than a few dozen enrolled users, or hosted performance.
 
+
+> **Superseded in part:** the recognition decision measured in the section below (70th percentile, every frame must pass, no augmentation) is the one that rejected a genuine owner five times in a row. Recipe v4 and its measurement are in [`recognition-policy.md`](recognition-policy.md).
 
 ## 9. End-to-end authentication: genuine user and impostors (offline, ORL)
 

@@ -34,7 +34,8 @@ def test_all_checks_pass():
         (dict(liveness_passed=None), "LIVENESS_FAILED"),
         (dict(frames=(GOOD, FrameIdentity(False, 0.9, 3.0))), "IDENTITY_MISMATCH"),
         (dict(frames=(GOOD, FrameIdentity(True, 0.49, 3.0))), "LOW_CONFIDENCE"),
-        (dict(frames=(GOOD, FrameIdentity(True, 0.9, 5.01))), "DISTANCE_TOO_HIGH"),
+        (dict(frames=(FrameIdentity(True, 0.9, 5.01), FrameIdentity(True, 0.9, 5.01))), "DISTANCE_TOO_HIGH"),  # mean over the limit
+        (dict(frames=(FrameIdentity(True, 0.9, 0.1), FrameIdentity(True, 0.9, 8.5))), "DISTANCE_TOO_HIGH"),  # one frame past the cap
         (dict(frames=()), "IDENTITY_MISMATCH"),
     ],
 )
@@ -69,11 +70,28 @@ def test_precedence_account_before_everything_and_liveness_before_identity():
 
 def test_one_good_frame_is_not_enough():
     assert not decide(ev(frames=(GOOD, FrameIdentity(True, 0.9, 50.0)))).authenticated
+    assert not decide(ev(frames=(GOOD, FrameIdentity(False, 0.9, 0.0)))).authenticated  # every frame must be classified as the user
 
 
 def test_confidence_floor_boundary_and_override():
     assert decide(ev(frames=(FrameIdentity(True, 0.5, 1.0),))).authenticated
     assert decide(ev(frames=(FrameIdentity(True, 0.7, 1.0),)), min_confidence=0.8).reason == "LOW_CONFIDENCE"
+
+
+def test_distance_is_judged_on_the_mean_of_the_frames_not_on_the_worst_one():
+    """Per-frame detector jitter must not fail a genuine user whose two frames straddle the threshold."""
+    straddling = (FrameIdentity(True, 0.9, 3.5), FrameIdentity(True, 0.9, 6.0))  # threshold 5.0: mean 4.75
+    assert decide(ev(frames=straddling)).authenticated
+    assert not decide(ev(frames=(FrameIdentity(True, 0.9, 5.5), FrameIdentity(True, 0.9, 6.0)))).authenticated  # mean 5.75
+
+
+def test_a_single_far_frame_cannot_be_averaged_away():
+    from app.ml import config as cfg
+
+    cap = cfg.AUTH_FRAME_DISTANCE_CAP * 5.0
+    assert not decide(ev(frames=(FrameIdentity(True, 0.9, 0.0), FrameIdentity(True, 0.9, cap + 0.01)))).authenticated
+    assert decide(ev(frames=(FrameIdentity(True, 0.9, 3.0), FrameIdentity(True, 0.9, cap - 0.01)))).reason == "DISTANCE_TOO_HIGH"  # mean 5.5 > 5
+    assert decide(ev(frames=(FrameIdentity(True, 0.9, 1.0), FrameIdentity(True, 0.9, 7.0)))).authenticated  # mean 4, max 7 <= cap 8
 
 
 def test_distance_boundary_is_inclusive():

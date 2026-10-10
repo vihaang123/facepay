@@ -1,0 +1,1702 @@
+{
+  "setting": "Recognition policy before and after the v4 recipe, through the code that runs in production.\n\n    backend/.venv/bin/python ml/experiments/auth_policy_v4.py --orl PATH/orl.npz --repeats 30 --out ml/results/auth_policy_v4.json\n\nWhy this exists: after the detection and liveness fixes a genuine account owner passed both and was still rejected at\nidentity recognition, five attempts in a row. This measures how often that happens under the OLD recipe, and what the NEW\nrecipe changes in both directions: genuine users accepted, and impostors accepted.\n\nWhat is real: app.ml.recipe.train_recognizer (cross-validation, classifier choice, augmented training, thresholds),\napp.ml.recipe.frame_identity and app.services.auth_policy.decide, exactly as the service calls them; the app's crop,\nhistogram equalisation and vectorisation.\n\nWhat is NOT real (read before quoting any number):\n  * ORL has 10 photographs per person, so each enrolled person has 6 training and 4 held-out photographs (the app asks\n    for 15 samples); these are public, studio-quality, 112x92 images, not phone selfies.\n  * No face detector is involved (ORL images are already face crops), so detector box jitter is only simulated.\n  * \"Session shift\" is SIMULATED on the held-out photographs: independent horizontal and vertical scale (+-8%), shift\n    (+-3 px), rotation (+-5 deg), a side-lighting ramp, blur and noise. It is a different family from the training\n    augmentation (which uses one isotropic scale, no anisotropy, no noise), but the two overlap in kind, so the gain from\n    augmentation on this table is probably larger than the gain on real devices. Real cross-device shift (a laptop\n    webcam at enrolment, a phone at payment time; different lenses, distances and software processing) is NOT simulated.\n  * Liveness is assumed passed. This measures identity recognition only.\n  * An attempt uses 2 frames, as the app does (BASELINE_MIN_USABLE). \"different photos\" = 2 different held-out photos\n    (pessimistic: more variation than two consecutive webcam frames). \"one capture\" = 2 frames of ONE photo with small\n    per-frame jitter (optimistic: what two consecutive frames of a still person look like).\n\nPopulations: genuine (held-out photos of enrolled person A claiming A), impostor_enrolled (another enrolled person B\nclaiming A) and impostor_unknown (people who were never enrolled claiming A). Held-out photos are never used for training\nor for calibrating the threshold.\n",
+  "arms": {
+    "A_before_v4": {
+      "training": "legacy",
+      "percentile": 70.0,
+      "rule": "legacy"
+    },
+    "B_mean_rule_only": {
+      "training": "legacy",
+      "percentile": 70.0,
+      "rule": "v4"
+    },
+    "C_augmented_p70": {
+      "training": "s15",
+      "percentile": 70.0,
+      "rule": "v4"
+    },
+    "D0_p90_calibration_strength_1.0": {
+      "training": "s10",
+      "percentile": 90.0,
+      "rule": "v4"
+    },
+    "D_deployed_p90_strength_1.5": {
+      "training": "s15",
+      "percentile": 90.0,
+      "rule": "v4"
+    },
+    "E_p95_strength_1.5": {
+      "training": "s15",
+      "percentile": 95.0,
+      "rule": "v4"
+    },
+    "F_p90_strength_2.0": {
+      "training": "s20",
+      "percentile": 90.0,
+      "rule": "v4"
+    }
+  },
+  "by_enrolled_people": {
+    "2": {
+      "trials": 30,
+      "train_photos_per_person": 6,
+      "results": {
+        "no_shift": {
+          "different_photos": {
+            "A_before_v4": {
+              "genuine": {
+                "accepted": 260,
+                "attempts": 360,
+                "rate": 0.7222,
+                "ci95": [
+                  0.6738,
+                  0.766
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 0,
+                "attempts": 360,
+                "rate": 0.0,
+                "ci95": [
+                  0,
+                  0.0106
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 287,
+                "attempts": 1800,
+                "rate": 0.1594,
+                "ci95": [
+                  0.1433,
+                  0.1771
+                ]
+              }
+            },
+            "B_mean_rule_only": {
+              "genuine": {
+                "accepted": 302,
+                "attempts": 360,
+                "rate": 0.8389,
+                "ci95": [
+                  0.7974,
+                  0.8733
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 0,
+                "attempts": 360,
+                "rate": 0.0,
+                "ci95": [
+                  0,
+                  0.0106
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 332,
+                "attempts": 1800,
+                "rate": 0.1844,
+                "ci95": [
+                  0.1672,
+                  0.203
+                ]
+              }
+            },
+            "C_augmented_p70": {
+              "genuine": {
+                "accepted": 319,
+                "attempts": 360,
+                "rate": 0.8861,
+                "ci95": [
+                  0.8491,
+                  0.9149
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 0,
+                "attempts": 360,
+                "rate": 0.0,
+                "ci95": [
+                  0,
+                  0.0106
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 219,
+                "attempts": 1800,
+                "rate": 0.1217,
+                "ci95": [
+                  0.1074,
+                  0.1376
+                ]
+              }
+            },
+            "D0_p90_calibration_strength_1.0": {
+              "genuine": {
+                "accepted": 337,
+                "attempts": 360,
+                "rate": 0.9361,
+                "ci95": [
+                  0.906,
+                  0.9571
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 0,
+                "attempts": 360,
+                "rate": 0.0,
+                "ci95": [
+                  0,
+                  0.0106
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 390,
+                "attempts": 1800,
+                "rate": 0.2167,
+                "ci95": [
+                  0.1982,
+                  0.2363
+                ]
+              }
+            },
+            "D_deployed_p90_strength_1.5": {
+              "genuine": {
+                "accepted": 343,
+                "attempts": 360,
+                "rate": 0.9528,
+                "ci95": [
+                  0.9257,
+                  0.9703
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 0,
+                "attempts": 360,
+                "rate": 0.0,
+                "ci95": [
+                  0,
+                  0.0106
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 422,
+                "attempts": 1800,
+                "rate": 0.2344,
+                "ci95": [
+                  0.2155,
+                  0.2546
+                ]
+              }
+            },
+            "E_p95_strength_1.5": {
+              "genuine": {
+                "accepted": 345,
+                "attempts": 360,
+                "rate": 0.9583,
+                "ci95": [
+                  0.9324,
+                  0.9746
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 0,
+                "attempts": 360,
+                "rate": 0.0,
+                "ci95": [
+                  0,
+                  0.0106
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 510,
+                "attempts": 1800,
+                "rate": 0.2833,
+                "ci95": [
+                  0.263,
+                  0.3046
+                ]
+              }
+            },
+            "F_p90_strength_2.0": {
+              "genuine": {
+                "accepted": 345,
+                "attempts": 360,
+                "rate": 0.9583,
+                "ci95": [
+                  0.9324,
+                  0.9746
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 0,
+                "attempts": 360,
+                "rate": 0.0,
+                "ci95": [
+                  0,
+                  0.0106
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 486,
+                "attempts": 1800,
+                "rate": 0.27,
+                "ci95": [
+                  0.25,
+                  0.291
+                ]
+              }
+            }
+          },
+          "one_capture": {
+            "A_before_v4": {
+              "genuine": {
+                "accepted": 377,
+                "attempts": 480,
+                "rate": 0.7854,
+                "ci95": [
+                  0.7465,
+                  0.8198
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 0,
+                "attempts": 480,
+                "rate": 0.0,
+                "ci95": [
+                  0,
+                  0.0079
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 377,
+                "attempts": 1800,
+                "rate": 0.2094,
+                "ci95": [
+                  0.1913,
+                  0.2289
+                ]
+              }
+            },
+            "B_mean_rule_only": {
+              "genuine": {
+                "accepted": 395,
+                "attempts": 480,
+                "rate": 0.8229,
+                "ci95": [
+                  0.7862,
+                  0.8545
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 0,
+                "attempts": 480,
+                "rate": 0.0,
+                "ci95": [
+                  0,
+                  0.0079
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 390,
+                "attempts": 1800,
+                "rate": 0.2167,
+                "ci95": [
+                  0.1982,
+                  0.2363
+                ]
+              }
+            },
+            "C_augmented_p70": {
+              "genuine": {
+                "accepted": 427,
+                "attempts": 480,
+                "rate": 0.8896,
+                "ci95": [
+                  0.8584,
+                  0.9146
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 0,
+                "attempts": 480,
+                "rate": 0.0,
+                "ci95": [
+                  0,
+                  0.0079
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 242,
+                "attempts": 1800,
+                "rate": 0.1344,
+                "ci95": [
+                  0.1195,
+                  0.151
+                ]
+              }
+            },
+            "D0_p90_calibration_strength_1.0": {
+              "genuine": {
+                "accepted": 451,
+                "attempts": 480,
+                "rate": 0.9396,
+                "ci95": [
+                  0.9146,
+                  0.9576
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 2,
+                "attempts": 480,
+                "rate": 0.0042,
+                "ci95": [
+                  0.0011,
+                  0.0151
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 453,
+                "attempts": 1800,
+                "rate": 0.2517,
+                "ci95": [
+                  0.2322,
+                  0.2722
+                ]
+              }
+            },
+            "D_deployed_p90_strength_1.5": {
+              "genuine": {
+                "accepted": 460,
+                "attempts": 480,
+                "rate": 0.9583,
+                "ci95": [
+                  0.9365,
+                  0.9729
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 2,
+                "attempts": 480,
+                "rate": 0.0042,
+                "ci95": [
+                  0.0011,
+                  0.0151
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 503,
+                "attempts": 1800,
+                "rate": 0.2794,
+                "ci95": [
+                  0.2592,
+                  0.3006
+                ]
+              }
+            },
+            "E_p95_strength_1.5": {
+              "genuine": {
+                "accepted": 464,
+                "attempts": 480,
+                "rate": 0.9667,
+                "ci95": [
+                  0.9465,
+                  0.9794
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 2,
+                "attempts": 480,
+                "rate": 0.0042,
+                "ci95": [
+                  0.0011,
+                  0.0151
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 604,
+                "attempts": 1800,
+                "rate": 0.3356,
+                "ci95": [
+                  0.3141,
+                  0.3577
+                ]
+              }
+            },
+            "F_p90_strength_2.0": {
+              "genuine": {
+                "accepted": 467,
+                "attempts": 480,
+                "rate": 0.9729,
+                "ci95": [
+                  0.9542,
+                  0.9841
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 2,
+                "attempts": 480,
+                "rate": 0.0042,
+                "ci95": [
+                  0.0011,
+                  0.0151
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 580,
+                "attempts": 1800,
+                "rate": 0.3222,
+                "ci95": [
+                  0.301,
+                  0.3442
+                ]
+              }
+            }
+          }
+        },
+        "shift": {
+          "different_photos": {
+            "A_before_v4": {
+              "genuine": {
+                "accepted": 180,
+                "attempts": 360,
+                "rate": 0.5,
+                "ci95": [
+                  0.4486,
+                  0.5514
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 0,
+                "attempts": 360,
+                "rate": 0.0,
+                "ci95": [
+                  0,
+                  0.0106
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 252,
+                "attempts": 1800,
+                "rate": 0.14,
+                "ci95": [
+                  0.1247,
+                  0.1568
+                ]
+              }
+            },
+            "B_mean_rule_only": {
+              "genuine": {
+                "accepted": 219,
+                "attempts": 360,
+                "rate": 0.6083,
+                "ci95": [
+                  0.557,
+                  0.6574
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 0,
+                "attempts": 360,
+                "rate": 0.0,
+                "ci95": [
+                  0,
+                  0.0106
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 307,
+                "attempts": 1800,
+                "rate": 0.1706,
+                "ci95": [
+                  0.1539,
+                  0.1886
+                ]
+              }
+            },
+            "C_augmented_p70": {
+              "genuine": {
+                "accepted": 209,
+                "attempts": 360,
+                "rate": 0.5806,
+                "ci95": [
+                  0.529,
+                  0.6304
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 0,
+                "attempts": 360,
+                "rate": 0.0,
+                "ci95": [
+                  0,
+                  0.0106
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 182,
+                "attempts": 1800,
+                "rate": 0.1011,
+                "ci95": [
+                  0.088,
+                  0.1159
+                ]
+              }
+            },
+            "D0_p90_calibration_strength_1.0": {
+              "genuine": {
+                "accepted": 265,
+                "attempts": 360,
+                "rate": 0.7361,
+                "ci95": [
+                  0.6883,
+                  0.779
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 1,
+                "attempts": 360,
+                "rate": 0.0028,
+                "ci95": [
+                  0.0005,
+                  0.0156
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 359,
+                "attempts": 1800,
+                "rate": 0.1994,
+                "ci95": [
+                  0.1816,
+                  0.2185
+                ]
+              }
+            },
+            "D_deployed_p90_strength_1.5": {
+              "genuine": {
+                "accepted": 295,
+                "attempts": 360,
+                "rate": 0.8194,
+                "ci95": [
+                  0.7764,
+                  0.8557
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 2,
+                "attempts": 360,
+                "rate": 0.0056,
+                "ci95": [
+                  0.0015,
+                  0.02
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 390,
+                "attempts": 1800,
+                "rate": 0.2167,
+                "ci95": [
+                  0.1982,
+                  0.2363
+                ]
+              }
+            },
+            "E_p95_strength_1.5": {
+              "genuine": {
+                "accepted": 310,
+                "attempts": 360,
+                "rate": 0.8611,
+                "ci95": [
+                  0.8216,
+                  0.893
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 2,
+                "attempts": 360,
+                "rate": 0.0056,
+                "ci95": [
+                  0.0015,
+                  0.02
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 478,
+                "attempts": 1800,
+                "rate": 0.2656,
+                "ci95": [
+                  0.2457,
+                  0.2864
+                ]
+              }
+            },
+            "F_p90_strength_2.0": {
+              "genuine": {
+                "accepted": 311,
+                "attempts": 360,
+                "rate": 0.8639,
+                "ci95": [
+                  0.8246,
+                  0.8955
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 2,
+                "attempts": 360,
+                "rate": 0.0056,
+                "ci95": [
+                  0.0015,
+                  0.02
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 458,
+                "attempts": 1800,
+                "rate": 0.2544,
+                "ci95": [
+                  0.2349,
+                  0.2751
+                ]
+              }
+            }
+          },
+          "one_capture": {
+            "A_before_v4": {
+              "genuine": {
+                "accepted": 308,
+                "attempts": 480,
+                "rate": 0.6417,
+                "ci95": [
+                  0.5978,
+                  0.6833
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 2,
+                "attempts": 480,
+                "rate": 0.0042,
+                "ci95": [
+                  0.0011,
+                  0.0151
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 384,
+                "attempts": 1800,
+                "rate": 0.2133,
+                "ci95": [
+                  0.195,
+                  0.2329
+                ]
+              }
+            },
+            "B_mean_rule_only": {
+              "genuine": {
+                "accepted": 323,
+                "attempts": 480,
+                "rate": 0.6729,
+                "ci95": [
+                  0.6297,
+                  0.7134
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 2,
+                "attempts": 480,
+                "rate": 0.0042,
+                "ci95": [
+                  0.0011,
+                  0.0151
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 393,
+                "attempts": 1800,
+                "rate": 0.2183,
+                "ci95": [
+                  0.1999,
+                  0.238
+                ]
+              }
+            },
+            "C_augmented_p70": {
+              "genuine": {
+                "accepted": 321,
+                "attempts": 480,
+                "rate": 0.6687,
+                "ci95": [
+                  0.6255,
+                  0.7094
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 2,
+                "attempts": 480,
+                "rate": 0.0042,
+                "ci95": [
+                  0.0011,
+                  0.0151
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 245,
+                "attempts": 1800,
+                "rate": 0.1361,
+                "ci95": [
+                  0.121,
+                  0.1527
+                ]
+              }
+            },
+            "D0_p90_calibration_strength_1.0": {
+              "genuine": {
+                "accepted": 384,
+                "attempts": 480,
+                "rate": 0.8,
+                "ci95": [
+                  0.7619,
+                  0.8333
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 5,
+                "attempts": 480,
+                "rate": 0.0104,
+                "ci95": [
+                  0.0045,
+                  0.0242
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 432,
+                "attempts": 1800,
+                "rate": 0.24,
+                "ci95": [
+                  0.2208,
+                  0.2603
+                ]
+              }
+            },
+            "D_deployed_p90_strength_1.5": {
+              "genuine": {
+                "accepted": 411,
+                "attempts": 480,
+                "rate": 0.8562,
+                "ci95": [
+                  0.822,
+                  0.8848
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 7,
+                "attempts": 480,
+                "rate": 0.0146,
+                "ci95": [
+                  0.0071,
+                  0.0298
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 483,
+                "attempts": 1800,
+                "rate": 0.2683,
+                "ci95": [
+                  0.2484,
+                  0.2893
+                ]
+              }
+            },
+            "E_p95_strength_1.5": {
+              "genuine": {
+                "accepted": 427,
+                "attempts": 480,
+                "rate": 0.8896,
+                "ci95": [
+                  0.8584,
+                  0.9146
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 9,
+                "attempts": 480,
+                "rate": 0.0187,
+                "ci95": [
+                  0.0099,
+                  0.0352
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 582,
+                "attempts": 1800,
+                "rate": 0.3233,
+                "ci95": [
+                  0.3021,
+                  0.3453
+                ]
+              }
+            },
+            "F_p90_strength_2.0": {
+              "genuine": {
+                "accepted": 424,
+                "attempts": 480,
+                "rate": 0.8833,
+                "ci95": [
+                  0.8515,
+                  0.9091
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 9,
+                "attempts": 480,
+                "rate": 0.0187,
+                "ci95": [
+                  0.0099,
+                  0.0352
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 561,
+                "attempts": 1800,
+                "rate": 0.3117,
+                "ci95": [
+                  0.2907,
+                  0.3334
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "5": {
+      "trials": 15,
+      "train_photos_per_person": 6,
+      "results": {
+        "no_shift": {
+          "different_photos": {
+            "A_before_v4": {
+              "genuine": {
+                "accepted": 328,
+                "attempts": 450,
+                "rate": 0.7289,
+                "ci95": [
+                  0.686,
+                  0.7679
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 0,
+                "attempts": 1800,
+                "rate": 0.0,
+                "ci95": [
+                  0.0,
+                  0.0021
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 87,
+                "attempts": 2250,
+                "rate": 0.0387,
+                "ci95": [
+                  0.0315,
+                  0.0475
+                ]
+              }
+            },
+            "B_mean_rule_only": {
+              "genuine": {
+                "accepted": 371,
+                "attempts": 450,
+                "rate": 0.8244,
+                "ci95": [
+                  0.7866,
+                  0.8568
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 0,
+                "attempts": 1800,
+                "rate": 0.0,
+                "ci95": [
+                  0.0,
+                  0.0021
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 111,
+                "attempts": 2250,
+                "rate": 0.0493,
+                "ci95": [
+                  0.0411,
+                  0.0591
+                ]
+              }
+            },
+            "C_augmented_p70": {
+              "genuine": {
+                "accepted": 411,
+                "attempts": 450,
+                "rate": 0.9133,
+                "ci95": [
+                  0.8837,
+                  0.936
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 0,
+                "attempts": 1800,
+                "rate": 0.0,
+                "ci95": [
+                  0.0,
+                  0.0021
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 63,
+                "attempts": 2250,
+                "rate": 0.028,
+                "ci95": [
+                  0.0219,
+                  0.0357
+                ]
+              }
+            },
+            "D0_p90_calibration_strength_1.0": {
+              "genuine": {
+                "accepted": 429,
+                "attempts": 450,
+                "rate": 0.9533,
+                "ci95": [
+                  0.9297,
+                  0.9693
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 0,
+                "attempts": 1800,
+                "rate": 0.0,
+                "ci95": [
+                  0.0,
+                  0.0021
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 129,
+                "attempts": 2250,
+                "rate": 0.0573,
+                "ci95": [
+                  0.0485,
+                  0.0677
+                ]
+              }
+            },
+            "D_deployed_p90_strength_1.5": {
+              "genuine": {
+                "accepted": 433,
+                "attempts": 450,
+                "rate": 0.9622,
+                "ci95": [
+                  0.9403,
+                  0.9763
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 0,
+                "attempts": 1800,
+                "rate": 0.0,
+                "ci95": [
+                  0.0,
+                  0.0021
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 159,
+                "attempts": 2250,
+                "rate": 0.0707,
+                "ci95": [
+                  0.0608,
+                  0.082
+                ]
+              }
+            },
+            "E_p95_strength_1.5": {
+              "genuine": {
+                "accepted": 433,
+                "attempts": 450,
+                "rate": 0.9622,
+                "ci95": [
+                  0.9403,
+                  0.9763
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 0,
+                "attempts": 1800,
+                "rate": 0.0,
+                "ci95": [
+                  0.0,
+                  0.0021
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 191,
+                "attempts": 2250,
+                "rate": 0.0849,
+                "ci95": [
+                  0.0741,
+                  0.0971
+                ]
+              }
+            },
+            "F_p90_strength_2.0": {
+              "genuine": {
+                "accepted": 433,
+                "attempts": 450,
+                "rate": 0.9622,
+                "ci95": [
+                  0.9403,
+                  0.9763
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 0,
+                "attempts": 1800,
+                "rate": 0.0,
+                "ci95": [
+                  0.0,
+                  0.0021
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 199,
+                "attempts": 2250,
+                "rate": 0.0884,
+                "ci95": [
+                  0.0774,
+                  0.1009
+                ]
+              }
+            }
+          },
+          "one_capture": {
+            "A_before_v4": {
+              "genuine": {
+                "accepted": 481,
+                "attempts": 600,
+                "rate": 0.8017,
+                "ci95": [
+                  0.7679,
+                  0.8316
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 7,
+                "attempts": 2400,
+                "rate": 0.0029,
+                "ci95": [
+                  0.0014,
+                  0.006
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 148,
+                "attempts": 2250,
+                "rate": 0.0658,
+                "ci95": [
+                  0.0563,
+                  0.0768
+                ]
+              }
+            },
+            "B_mean_rule_only": {
+              "genuine": {
+                "accepted": 494,
+                "attempts": 600,
+                "rate": 0.8233,
+                "ci95": [
+                  0.7908,
+                  0.8518
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 7,
+                "attempts": 2400,
+                "rate": 0.0029,
+                "ci95": [
+                  0.0014,
+                  0.006
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 154,
+                "attempts": 2250,
+                "rate": 0.0684,
+                "ci95": [
+                  0.0587,
+                  0.0796
+                ]
+              }
+            },
+            "C_augmented_p70": {
+              "genuine": {
+                "accepted": 540,
+                "attempts": 600,
+                "rate": 0.9,
+                "ci95": [
+                  0.8734,
+                  0.9215
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 3,
+                "attempts": 2400,
+                "rate": 0.0013,
+                "ci95": [
+                  0.0004,
+                  0.0037
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 92,
+                "attempts": 2250,
+                "rate": 0.0409,
+                "ci95": [
+                  0.0335,
+                  0.0499
+                ]
+              }
+            },
+            "D0_p90_calibration_strength_1.0": {
+              "genuine": {
+                "accepted": 563,
+                "attempts": 600,
+                "rate": 0.9383,
+                "ci95": [
+                  0.9162,
+                  0.9549
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 6,
+                "attempts": 2400,
+                "rate": 0.0025,
+                "ci95": [
+                  0.0011,
+                  0.0054
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 184,
+                "attempts": 2250,
+                "rate": 0.0818,
+                "ci95": [
+                  0.0712,
+                  0.0938
+                ]
+              }
+            },
+            "D_deployed_p90_strength_1.5": {
+              "genuine": {
+                "accepted": 574,
+                "attempts": 600,
+                "rate": 0.9567,
+                "ci95": [
+                  0.9373,
+                  0.9703
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 8,
+                "attempts": 2400,
+                "rate": 0.0033,
+                "ci95": [
+                  0.0017,
+                  0.0066
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 214,
+                "attempts": 2250,
+                "rate": 0.0951,
+                "ci95": [
+                  0.0837,
+                  0.1079
+                ]
+              }
+            },
+            "E_p95_strength_1.5": {
+              "genuine": {
+                "accepted": 576,
+                "attempts": 600,
+                "rate": 0.96,
+                "ci95": [
+                  0.9412,
+                  0.973
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 8,
+                "attempts": 2400,
+                "rate": 0.0033,
+                "ci95": [
+                  0.0017,
+                  0.0066
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 254,
+                "attempts": 2250,
+                "rate": 0.1129,
+                "ci95": [
+                  0.1005,
+                  0.1266
+                ]
+              }
+            },
+            "F_p90_strength_2.0": {
+              "genuine": {
+                "accepted": 584,
+                "attempts": 600,
+                "rate": 0.9733,
+                "ci95": [
+                  0.9571,
+                  0.9835
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 8,
+                "attempts": 2400,
+                "rate": 0.0033,
+                "ci95": [
+                  0.0017,
+                  0.0066
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 278,
+                "attempts": 2250,
+                "rate": 0.1236,
+                "ci95": [
+                  0.1106,
+                  0.1378
+                ]
+              }
+            }
+          }
+        },
+        "shift": {
+          "different_photos": {
+            "A_before_v4": {
+              "genuine": {
+                "accepted": 151,
+                "attempts": 450,
+                "rate": 0.3356,
+                "ci95": [
+                  0.2935,
+                  0.3804
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 1,
+                "attempts": 1800,
+                "rate": 0.0006,
+                "ci95": [
+                  0.0001,
+                  0.0031
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 54,
+                "attempts": 2250,
+                "rate": 0.024,
+                "ci95": [
+                  0.0184,
+                  0.0312
+                ]
+              }
+            },
+            "B_mean_rule_only": {
+              "genuine": {
+                "accepted": 197,
+                "attempts": 450,
+                "rate": 0.4378,
+                "ci95": [
+                  0.3927,
+                  0.484
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 1,
+                "attempts": 1800,
+                "rate": 0.0006,
+                "ci95": [
+                  0.0001,
+                  0.0031
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 81,
+                "attempts": 2250,
+                "rate": 0.036,
+                "ci95": [
+                  0.0291,
+                  0.0445
+                ]
+              }
+            },
+            "C_augmented_p70": {
+              "genuine": {
+                "accepted": 267,
+                "attempts": 450,
+                "rate": 0.5933,
+                "ci95": [
+                  0.5473,
+                  0.6377
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 0,
+                "attempts": 1800,
+                "rate": 0.0,
+                "ci95": [
+                  0.0,
+                  0.0021
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 46,
+                "attempts": 2250,
+                "rate": 0.0204,
+                "ci95": [
+                  0.0154,
+                  0.0272
+                ]
+              }
+            },
+            "D0_p90_calibration_strength_1.0": {
+              "genuine": {
+                "accepted": 326,
+                "attempts": 450,
+                "rate": 0.7244,
+                "ci95": [
+                  0.6814,
+                  0.7637
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 1,
+                "attempts": 1800,
+                "rate": 0.0006,
+                "ci95": [
+                  0.0001,
+                  0.0031
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 93,
+                "attempts": 2250,
+                "rate": 0.0413,
+                "ci95": [
+                  0.0339,
+                  0.0504
+                ]
+              }
+            },
+            "D_deployed_p90_strength_1.5": {
+              "genuine": {
+                "accepted": 358,
+                "attempts": 450,
+                "rate": 0.7956,
+                "ci95": [
+                  0.7559,
+                  0.8302
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 1,
+                "attempts": 1800,
+                "rate": 0.0006,
+                "ci95": [
+                  0.0001,
+                  0.0031
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 120,
+                "attempts": 2250,
+                "rate": 0.0533,
+                "ci95": [
+                  0.0448,
+                  0.0634
+                ]
+              }
+            },
+            "E_p95_strength_1.5": {
+              "genuine": {
+                "accepted": 369,
+                "attempts": 450,
+                "rate": 0.82,
+                "ci95": [
+                  0.7818,
+                  0.8527
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 1,
+                "attempts": 1800,
+                "rate": 0.0006,
+                "ci95": [
+                  0.0001,
+                  0.0031
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 145,
+                "attempts": 2250,
+                "rate": 0.0644,
+                "ci95": [
+                  0.055,
+                  0.0754
+                ]
+              }
+            },
+            "F_p90_strength_2.0": {
+              "genuine": {
+                "accepted": 370,
+                "attempts": 450,
+                "rate": 0.8222,
+                "ci95": [
+                  0.7842,
+                  0.8548
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 1,
+                "attempts": 1800,
+                "rate": 0.0006,
+                "ci95": [
+                  0.0001,
+                  0.0031
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 152,
+                "attempts": 2250,
+                "rate": 0.0676,
+                "ci95": [
+                  0.0579,
+                  0.0787
+                ]
+              }
+            }
+          },
+          "one_capture": {
+            "A_before_v4": {
+              "genuine": {
+                "accepted": 293,
+                "attempts": 600,
+                "rate": 0.4883,
+                "ci95": [
+                  0.4485,
+                  0.5283
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 29,
+                "attempts": 2400,
+                "rate": 0.0121,
+                "ci95": [
+                  0.0084,
+                  0.0173
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 147,
+                "attempts": 2250,
+                "rate": 0.0653,
+                "ci95": [
+                  0.0558,
+                  0.0763
+                ]
+              }
+            },
+            "B_mean_rule_only": {
+              "genuine": {
+                "accepted": 312,
+                "attempts": 600,
+                "rate": 0.52,
+                "ci95": [
+                  0.48,
+                  0.5597
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 32,
+                "attempts": 2400,
+                "rate": 0.0133,
+                "ci95": [
+                  0.0095,
+                  0.0188
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 156,
+                "attempts": 2250,
+                "rate": 0.0693,
+                "ci95": [
+                  0.0596,
+                  0.0806
+                ]
+              }
+            },
+            "C_augmented_p70": {
+              "genuine": {
+                "accepted": 361,
+                "attempts": 600,
+                "rate": 0.6017,
+                "ci95": [
+                  0.562,
+                  0.6401
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 14,
+                "attempts": 2400,
+                "rate": 0.0058,
+                "ci95": [
+                  0.0035,
+                  0.0098
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 73,
+                "attempts": 2250,
+                "rate": 0.0324,
+                "ci95": [
+                  0.0259,
+                  0.0406
+                ]
+              }
+            },
+            "D0_p90_calibration_strength_1.0": {
+              "genuine": {
+                "accepted": 438,
+                "attempts": 600,
+                "rate": 0.73,
+                "ci95": [
+                  0.6931,
+                  0.764
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 24,
+                "attempts": 2400,
+                "rate": 0.01,
+                "ci95": [
+                  0.0067,
+                  0.0148
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 173,
+                "attempts": 2250,
+                "rate": 0.0769,
+                "ci95": [
+                  0.0666,
+                  0.0886
+                ]
+              }
+            },
+            "D_deployed_p90_strength_1.5": {
+              "genuine": {
+                "accepted": 482,
+                "attempts": 600,
+                "rate": 0.8033,
+                "ci95": [
+                  0.7696,
+                  0.8332
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 24,
+                "attempts": 2400,
+                "rate": 0.01,
+                "ci95": [
+                  0.0067,
+                  0.0148
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 200,
+                "attempts": 2250,
+                "rate": 0.0889,
+                "ci95": [
+                  0.0778,
+                  0.1014
+                ]
+              }
+            },
+            "E_p95_strength_1.5": {
+              "genuine": {
+                "accepted": 499,
+                "attempts": 600,
+                "rate": 0.8317,
+                "ci95": [
+                  0.7996,
+                  0.8595
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 27,
+                "attempts": 2400,
+                "rate": 0.0112,
+                "ci95": [
+                  0.0077,
+                  0.0163
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 253,
+                "attempts": 2250,
+                "rate": 0.1124,
+                "ci95": [
+                  0.1,
+                  0.1262
+                ]
+              }
+            },
+            "F_p90_strength_2.0": {
+              "genuine": {
+                "accepted": 508,
+                "attempts": 600,
+                "rate": 0.8467,
+                "ci95": [
+                  0.8156,
+                  0.8733
+                ]
+              },
+              "impostor_enrolled": {
+                "accepted": 29,
+                "attempts": 2400,
+                "rate": 0.0121,
+                "ci95": [
+                  0.0084,
+                  0.0173
+                ]
+              },
+              "impostor_unknown": {
+                "accepted": 260,
+                "attempts": 2250,
+                "rate": 0.1156,
+                "ci95": [
+                  0.103,
+                  0.1294
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

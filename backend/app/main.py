@@ -5,7 +5,9 @@ from fastapi.responses import JSONResponse
 from app.api import admin, auth, face_auth, faces, health, merchant_payments, payments, profile, security, transfers
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
+from app.core.logging_config import configure_logging
 
+configure_logging()
 settings = get_settings()
 
 app = FastAPI(

@@ -14,7 +14,7 @@ from sqlalchemy import select, text, update
 from sqlalchemy.exc import OperationalError
 
 from app.ml import config as cfg
-from app.ml import registry
+from app.ml import recipe, registry
 from app.ml.pipeline import FacePipeline
 from app.models import AuthenticationLog, FaceProfile, ModelVersion, User
 from app.services import face_service
@@ -269,7 +269,7 @@ def test_a_fitting_error_is_reported_with_a_code_and_changes_nothing(client, two
     def fail(*args, **kwargs):
         raise np.linalg.LinAlgError("singular")
 
-    monkeypatch.setattr(face_service, "compare_and_select", fail)
+    monkeypatch.setattr(recipe, "compare_and_select", fail)
     r = client.post("/faces/train", headers=a["headers"])
     assert r.status_code == 500 and r.json()["detail"]["code"] == "TRAINING_FAILED"
     assert "singular" not in r.text and "LinAlg" not in r.text

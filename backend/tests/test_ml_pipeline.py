@@ -157,3 +157,23 @@ def test_compare_and_select_reports_all_variants_with_real_out_of_fold_numbers()
         assert np.array(r["confusion_matrix"]).sum() == len(y)
         assert len(r["_genuine_distances"]) == len(y)
     assert genuine_threshold(results["pca_lda_knn"]["_genuine_distances"]) > 0
+
+
+def test_a_truncated_full_pca_equals_fitting_that_many_components_directly():
+    """The cross-validation fits one full PCA per fold and shares it between variants; the result must be identical."""
+    from sklearn.decomposition import PCA
+
+    from app.ml.pipeline import full_pca, truncated_pca
+
+    rng = np.random.default_rng(0)
+    X, y = rng.normal(size=(40, 300)), np.repeat([0, 1], 20)
+    full = full_pca(X, 38)
+    for p in (3, 10, 25):
+        direct = PCA(n_components=p, svd_solver="full").fit(X)
+        cut = truncated_pca(full, p)
+        assert np.allclose(direct.transform(X), cut.transform(X))
+        assert np.allclose(direct.explained_variance_ratio_, cut.explained_variance_ratio_)
+    own = FacePipeline().fit(X, y)
+    shared = FacePipeline().fit(X, y, pca_full=full)
+    assert np.allclose(own.transform(X), shared.transform(X))
+    assert own.describe() == shared.describe()

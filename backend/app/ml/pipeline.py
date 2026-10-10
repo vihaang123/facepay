@@ -39,8 +39,31 @@ class PcaChoice:
     floored: bool  # raised so LDA can still produce C - 1 discriminants
 
 
-def choose_pca_dimension(X: np.ndarray, y: np.ndarray, spec, use_lda: bool) -> PcaChoice:
+def full_pca(X: np.ndarray, cap: int) -> PCA:
+    """PCA with every component that can matter (cap = N - C). The expensive step: one SVD of the centred data."""
+    return PCA(n_components=cap, svd_solver="full").fit(X)
+
+
+def truncated_pca(full: PCA, p: int) -> PCA:
+    """The first p components of a fitted full PCA. With the full solver this is exactly what PCA(n_components=p) would
+    give (it computes every component and keeps the first p), without a second SVD."""
+    pca = PCA(n_components=p, svd_solver="full")
+    pca.components_ = full.components_[:p]
+    pca.explained_variance_ = full.explained_variance_[:p]
+    pca.explained_variance_ratio_ = full.explained_variance_ratio_[:p]
+    pca.singular_values_ = full.singular_values_[:p]
+    pca.mean_ = full.mean_
+    pca.n_components_ = p
+    pca.n_features_in_ = full.n_features_in_
+    pca.n_samples_ = full.n_samples_
+    pca.noise_variance_ = float(full.explained_variance_[p:].mean()) if p < len(full.explained_variance_) else 0.0
+    return pca
+
+
+def choose_pca_dimension(X: np.ndarray, y: np.ndarray, spec, use_lda: bool, probe: PCA | None = None) -> PcaChoice:
     """Resolve the PCA dimension.
+
+    probe: an already fitted full_pca(X, N - C) of the same data, to avoid repeating the SVD.
 
     spec: float in (0, 1)  -> smallest p reaching that explained-variance fraction
           int              -> fixed p
@@ -56,7 +79,7 @@ def choose_pca_dimension(X: np.ndarray, y: np.ndarray, spec, use_lda: bool) -> P
     elif isinstance(spec, (int, np.integer)) and not isinstance(spec, bool):
         p = min(int(spec), cap)
     else:
-        probe = PCA(n_components=cap, svd_solver="full").fit(X)
+        probe = probe if probe is not None else full_pca(X, cap)
         cum = np.cumsum(probe.explained_variance_ratio_)
         n_var = int(min(np.searchsorted(cum, float(spec)) + 1, cap))
         p = n_var
@@ -88,7 +111,9 @@ class FacePipeline(BaseEstimator, ClassifierMixin):
         self.random_state = random_state
 
     # ------------------------------------------------------------ fit
-    def fit(self, X, y):
+    def fit(self, X, y, *, pca_full: PCA | None = None):
+        """pca_full: a fitted full_pca(X, N - C) of exactly this X, when the caller already has one (the cross-validation
+        evaluates several variants on the same training fold and fits the PCA once)."""
         X = np.asarray(X, dtype=np.float64)
         y = np.asarray(y)
         classes, counts = np.unique(y, return_counts=True)
@@ -100,9 +125,11 @@ class FacePipeline(BaseEstimator, ClassifierMixin):
             raise ValueError(f"unknown classifier {self.classifier!r}")
 
         self.classes_ = classes
-        choice = choose_pca_dimension(X, y, self.pca_components, self.use_lda)
+        cap = max(1, min(X.shape[0] - len(classes), X.shape[1]))
+        full = pca_full if pca_full is not None else full_pca(X, cap)
+        choice = choose_pca_dimension(X, y, self.pca_components, self.use_lda, probe=full)
         self.pca_choice_ = choice
-        self.pca_ = PCA(n_components=choice.n_used, svd_solver="full").fit(X)
+        self.pca_ = truncated_pca(full, choice.n_used)
         z = self.pca_.transform(X)
 
         if self.use_lda:

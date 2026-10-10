@@ -120,6 +120,7 @@ def train(user: User = Depends(get_current_customer), db: Session = Depends(get_
 @router.get("/readiness", response_model=Readiness)
 def readiness(user: User = Depends(get_current_customer), db: Session = Depends(get_db)):
     """Why a face check can or cannot run right now. Cheap: no image is involved."""
+    svc.schedule_retrain(db)  # a model from an older recipe is rebuilt in the background from the stored samples
     return svc.readiness(db, user)
 
 
