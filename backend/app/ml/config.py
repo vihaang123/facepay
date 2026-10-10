@@ -13,6 +13,15 @@ DETECTION_MAX_SIDE = 640  # frames larger than this are downscaled before detect
 
 # Detection / quality gates
 MIN_FACE_PIXELS = 80  # face box width in the (possibly downscaled) frame
+# Two raw detections are one face when they overlap this much (IoU), or one lies this far inside the other.
+DUPLICATE_IOU = 0.3
+DUPLICATE_CONTAINMENT = 0.6
+# A candidate for a SECOND face needs this cascade confidence. Chosen from the grid in ml/results/detection_evidence.json
+# (ORL faces in 640x480 JPEG frames, real OpenCV Haar; NOT webcam frames; see docs/final/detection-evidence.md), judged on
+# 8-frame attempts with the "second face in >= 3 frames" rule: at 3.0, 1.0% of single-face attempts were wrongly rejected
+# (the old rule, raw boxes and any one frame: 67.5%) while a real second person was still rejected in 97-100% of attempts.
+# Stricter floors lose real second people (5.0: 90%); a floor of 0 keeps 5.5% false rejections.
+SECOND_FACE_MIN_WEIGHT = 3.0
 SECOND_FACE_RATIO = 0.4  # a second face this fraction of the largest => "multiple faces"
 MIN_SHARPNESS = 40.0  # variance of the Laplacian of the 64x64 crop (real faces scored 255-1800; sigma=2 blur ~30)
 BRIGHTNESS_RANGE = (35.0, 225.0)  # mean gray level of the 64x64 crop
@@ -63,7 +72,8 @@ AUTH_SECOND_FACE_RATIO = 0.15  # stricter than enrolment: any face >= 15% of the
 
 # Challenge-response liveness (app/ml/liveness.py)
 CHALLENGE_TTL_SECONDS = 60
-AUTH_BASELINE_FRAMES = 2  # first frames: user looks straight at the camera; used for identity
+AUTH_BASELINE_FRAMES = 3  # first frames: user looks straight at the camera; used for identity (2 usable ones are required)
+BASELINE_MIN_USABLE = 2  # one missed or blurred baseline frame is tolerated; every frame that is used must still match
 AUTH_MIN_FRAMES = 5
 AUTH_MAX_FRAMES = 10
 CHALLENGES = {
@@ -76,4 +86,11 @@ CHALLENGES = {
 # (geometry estimate, NOT validated on real webcam turns).
 LATERAL_THRESHOLD = 0.10
 BASELINE_MAX_DRIFT = 0.05  # the two baseline frames must agree within this (user is not already moving)
-MIN_USABLE_FRAME_FRACTION = 0.8  # frames with exactly one face; losing the face for long fails the challenge
+# Face continuity during the turn. A turned head is often no longer a frontal face, so a short loss is expected; a face
+# that is gone for long is not. The previous rule (80% of ALL frames usable, i.e. at most one lost frame) is replaced by:
+MIN_USABLE_TURN_FRACTION = 0.5  # at least half of the turn frames show exactly one face
+MIN_USABLE_TURN_FRAMES = 3
+MAX_LOST_RUN = 2  # no more than two consecutive turn frames without exactly one face
+# A second person must be seen in at least this many frames (and this fraction of the sequence) to reject the attempt.
+MULTI_FACE_MIN_FRAMES = 2
+MULTI_FACE_FRAME_FRACTION = 0.3

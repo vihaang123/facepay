@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
@@ -5,6 +7,7 @@ from app.api.deps import get_current_customer
 from app.core.config import get_settings
 from app.core.rate_limit import RateLimiter
 from app.database.session import get_db
+from app.ml import config as cfg
 from app.ml.preprocessing import FaceDetector, FaceImageError, HaarFaceDetector
 from app.models import User
 from app.schemas.faces import (
@@ -20,6 +23,7 @@ from app.schemas.faces import (
     SampleUpload,
 )
 from app.services import face_service as svc
+from app.services import security_service as sec
 
 _s = get_settings()
 face_limiter = RateLimiter(_s.face_rate_limit_per_minute, enabled=_s.rate_limit_enabled)
@@ -64,11 +68,25 @@ def enrollment(user: User = Depends(get_current_customer), db: Session = Depends
     return svc.enrollment_status(db, user)
 
 
+@router.post("/consent", status_code=204, dependencies=[Depends(_limit(enroll_limiter))])
+def give_consent(user: User = Depends(get_current_customer), db: Session = Depends(get_db)):
+    """The customer agreed to the capture and encrypted storage of their face samples. Recorded in the audit trail only:
+    no biometric data is involved, and withdrawing consent is deleting the face data (DELETE /faces/samples)."""
+    sec.record_event(db, user, "FACE_CONSENT_GIVEN")
+    db.commit()
+
+
 @router.post("/assess", response_model=AssessResult, dependencies=[Depends(_limit(assess_limiter))])
-def assess(data: AssessRequest, user: User = Depends(get_current_customer), detector: FaceDetector = Depends(get_detector)):
+def assess(
+    data: AssessRequest,
+    purpose: Literal["enroll", "auth"] = "enroll",
+    user: User = Depends(get_current_customer),
+    detector: FaceDetector = Depends(get_detector),
+):
     """Live framing feedback for guided capture. Stateless: the frame is analysed and discarded, never stored."""
     try:
-        return svc.assess_frame(svc.decode_upload(data.image_base64), detector)
+        ratio = cfg.AUTH_SECOND_FACE_RATIO if purpose == "auth" else cfg.SECOND_FACE_RATIO
+        return svc.assess_frame(svc.decode_upload(data.image_base64), detector, second_face_ratio=ratio)
     except FaceImageError as exc:
         raise _http(exc) from None
 

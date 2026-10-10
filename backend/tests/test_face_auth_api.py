@@ -133,7 +133,7 @@ def test_correct_user_with_completed_challenge_is_authenticated_and_logged(clien
     assert res["liveness"] == "PASSED"
     assert list(stages(res).values()) == ["PASSED"] * 4
     ident = res["identity"]
-    assert ident["verified"] and ident["name"] == "Asha Rao" and ident["frames_evaluated"] == cfg.AUTH_BASELINE_FRAMES
+    assert ident["verified"] and ident["name"] == "Asha Rao" and ident["frames_evaluated"] == cfg.BASELINE_MIN_USABLE
     # scores and distances are internal: the response carries the outcome only, the audit log keeps the numbers
     assert set(ident) == {"verified", "frames_evaluated", "name"}
     log = db.get(AuthenticationLog, res["authentication_id"])
@@ -231,35 +231,75 @@ def test_failed_liveness_challenge_is_rejected_even_for_the_right_face(client, t
 # ------------------------------------------------------------ face detection failures
 
 
-def test_multiple_faces_in_baseline_are_rejected(client, trained, db):
+SECOND = [(1, 5, 20, 70, 80)]  # a second person, 80 px wide next to a 96 px face
+
+
+def test_a_second_person_in_view_for_most_of_the_attempt_is_rejected(client, trained, db):
     a, _ = trained
     ch = get_challenge(client, a)
-    frames = sequence(0, ch["challenge"], GOOD_TURN)
-    frames[0] = scene(0, 300, extra=[(1, 5, 20, 70, 80)])
+    n = cfg.AUTH_BASELINE_FRAMES + len(GOOD_TURN)
+    frames = sequence(0, ch["challenge"], GOOD_TURN, extra_at={i: SECOND for i in range(n)})
     res = verify(client, a, ch["challenge_id"], frames).json()
     assert res["result"] == "REJECTED" and res["reason"] == "MULTIPLE_FACES_DETECTED"
     assert res["liveness"] == "NOT_EVALUATED" and [stages(res)[k] for k in ("FACE_DETECTION", "LIVENESS", "IDENTITY")] == ["FAILED", "SKIPPED", "SKIPPED"]
 
 
-def test_second_face_appearing_during_the_challenge_is_rejected(client, trained):
+def test_a_second_person_who_walks_in_during_the_challenge_is_rejected(client, trained):
     a, _ = trained
     ch = get_challenge(client, a)
-    frames = sequence(0, ch["challenge"], GOOD_TURN)
-    frames[5] = scene(0, 301, extra=[(1, 5, 20, 70, 80)])
+    n = cfg.AUTH_BASELINE_FRAMES + len(GOOD_TURN)
+    frames = sequence(0, ch["challenge"], GOOD_TURN, extra_at={i: SECOND for i in range(n - 3, n)})
+    assert verify(client, a, ch["challenge_id"], frames).json()["reason"] == "MULTIPLE_FACES_DETECTED"
+
+
+def test_one_stray_second_box_in_a_single_frame_does_not_reject_the_attempt(client, trained):
+    """Haar detectors flicker: a spurious second box in one frame of nine is not a second person."""
+    a, _ = trained
+    ch = get_challenge(client, a)
+    frames = sequence(0, ch["challenge"], GOOD_TURN, extra_at={cfg.AUTH_BASELINE_FRAMES + 1: SECOND})
     res = verify(client, a, ch["challenge_id"], frames).json()
-    assert res["reason"] == "MULTIPLE_FACES_DETECTED"
+    assert res["result"] == "AUTHENTICATED", res
 
 
-def test_small_background_face_is_still_blocked_but_a_speck_is_not(client, trained):
+def test_a_stray_box_in_the_baseline_does_not_reject_but_identity_still_needs_the_remaining_frames(client, trained):
     a, _ = trained
     ch = get_challenge(client, a)
-    frames = sequence(0, ch["challenge"], GOOD_TURN)
-    frames[1] = scene(0, 302, extra=[(1, 5, 10, 10, 40)])  # 40x40 = 17% of the main face area: blocks
+    frames = sequence(0, ch["challenge"], GOOD_TURN, extra_at={0: SECOND})
+    res = verify(client, a, ch["challenge_id"], frames).json()
+    assert res["result"] == "AUTHENTICATED", res
+    assert res["identity"]["frames_evaluated"] == cfg.BASELINE_MIN_USABLE
+
+
+def test_a_person_standing_in_view_cannot_be_hidden_by_a_small_face_size(client, trained):
+    a, _ = trained
+    ch = get_challenge(client, a)
+    n = cfg.AUTH_BASELINE_FRAMES + len(GOOD_TURN)
+    far = [(1, 5, 10, 10, 40)]  # 40x40 = 17% of the main face area: still blocks when it persists
+    frames = sequence(0, ch["challenge"], GOOD_TURN, extra_at={i: far for i in range(n)})
     assert verify(client, a, ch["challenge_id"], frames).json()["reason"] == "MULTIPLE_FACES_DETECTED"
     ch = get_challenge(client, a)
-    frames = sequence(0, ch["challenge"], GOOD_TURN)
-    frames[1] = scene(0, 302, extra=[(1, 5, 10, 10, 20)])  # 20x20 = 4%: ignored
+    speck = [(1, 5, 10, 10, 20)]  # 20x20 = 4%: ignored
+    frames = sequence(0, ch["challenge"], GOOD_TURN, extra_at={i: speck for i in range(n)})
     assert verify(client, a, ch["challenge_id"], frames).json()["result"] == "AUTHENTICATED"
+
+
+def test_a_missed_baseline_frame_is_recovered_not_reported_as_a_lost_face(client, trained):
+    a, _ = trained
+    ch = get_challenge(client, a)
+    frames = sequence(0, ch["challenge"], GOOD_TURN)
+    frames[0] = empty_scene()
+    res = verify(client, a, ch["challenge_id"], frames).json()
+    assert res["result"] == "AUTHENTICATED", res
+
+
+def test_losing_the_face_for_long_during_the_turn_is_reported_as_a_liveness_failure(client, trained):
+    a, _ = trained
+    ch = get_challenge(client, a)
+    frames = sequence(0, ch["challenge"], GOOD_TURN)
+    for i in range(cfg.AUTH_BASELINE_FRAMES + 1, len(frames)):
+        frames[i] = empty_scene()
+    res = verify(client, a, ch["challenge_id"], frames).json()
+    assert res["result"] == "REJECTED" and res["reason"] == "LIVENESS_FAILED" and res["detail"] == "FACE_LOST"
 
 
 def test_no_face_is_rejected(client, trained, db):
@@ -274,9 +314,24 @@ def test_blurry_baseline_is_poor_image_quality(client, trained):
     a, _ = trained
     ch = get_challenge(client, a)
     frames = sequence(0, ch["challenge"], GOOD_TURN)
-    frames[0] = blurry_scene(0, 1)
+    for i in range(cfg.AUTH_BASELINE_FRAMES):
+        frames[i] = blurry_scene(0, 1 + i)
     res = verify(client, a, ch["challenge_id"], frames).json()
     assert res["reason"] == "POOR_IMAGE_QUALITY" and res["detail"] == "TOO_BLURRY"
+
+
+def test_one_blurry_baseline_frame_is_skipped_and_the_rest_still_have_to_match(client, trained):
+    a, _ = trained
+    ch = get_challenge(client, a)
+    frames = sequence(0, ch["challenge"], GOOD_TURN)
+    frames[0] = blurry_scene(0, 1)
+    res = verify(client, a, ch["challenge_id"], frames).json()
+    assert res["result"] == "AUTHENTICATED" and res["identity"]["frames_evaluated"] == cfg.BASELINE_MIN_USABLE
+    # the same recovery never lets the wrong person through
+    ch = get_challenge(client, a)
+    frames = sequence(1, ch["challenge"], GOOD_TURN)  # the other enrolled person on this account
+    frames[0] = blurry_scene(1, 1)
+    assert verify(client, a, ch["challenge_id"], frames).json()["reason"] == "IDENTITY_MISMATCH"
 
 
 def test_undecodable_frames_are_rejected_as_invalid_image(client, trained):

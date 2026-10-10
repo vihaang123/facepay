@@ -17,6 +17,9 @@ describe('positionHint', () => {
     expect(positionHint(at({ state: 'TOO_DARK' })).key).toBe('LIGHT')
     expect(positionHint(at({ state: 'NO_FACE', face: null, faces: 0 })).key).toBe('NO_FACE')
     expect(positionHint(at({ faces: 2 })).key).toBe('MULTIPLE')
+    expect(positionHint(at({ faces: 2 })).message).toMatch(/private spot/)
+    expect(positionHint(at({ face: { cx: 0.5, cy: 0.45, width: 0.7, height: 0.5 } })).key).toBe('GOOD')
+    expect(positionHint(at({ face: { cx: 0.64, cy: 0.45, width: 0.72, height: 0.5 } })).key).toBe('CROPPED')
   })
   it('says good only when the face is in position, and never names left or right', () => {
     expect(positionHint(at())).toMatchObject({ tone: 'ok', key: 'GOOD' })

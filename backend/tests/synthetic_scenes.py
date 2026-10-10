@@ -5,6 +5,7 @@ differing from the background, standing in for the Haar detector (which needs re
 import cv2
 import numpy as np
 
+from app.ml import config as cfg
 from app.ml.preprocessing import Box
 from tests.synthetic_faces import png_bytes, sample_image
 
@@ -43,13 +44,14 @@ def blurry_scene(identity: int, variation: int, x: int = 150) -> bytes:
     return png_bytes(cv2.GaussianBlur(img, (0, 0), 7))  # blur the whole frame, edges included
 
 
-def sequence(identity: int, challenge: str, moves: list[float], base_x: int = 150, start_var: int = 200, **kw) -> list[bytes]:
+def sequence(identity: int, challenge: str, moves: list[float], base_x: int = 150, start_var: int = 200, extra_at=None, **kw) -> list[bytes]:
     """Frames for an attempt. `moves` = signed movement of each non-baseline frame as a fraction of the face
     width, positive = TOWARD the requested side (for turn_right the face moves to smaller x, see liveness.py).
-    Two stationary baseline frames come first."""
+    The stationary baseline frames come first."""
     sign = -1 if challenge == "turn_right" else +1
-    xs = [base_x, base_x] + [round(base_x + sign * m * FACE) for m in moves]
-    return [scene(identity, start_var + i, x=x, **kw) for i, x in enumerate(xs)]
+    xs = [base_x] * cfg.AUTH_BASELINE_FRAMES + [round(base_x + sign * m * FACE) for m in moves]
+    extra_at = extra_at or {}  # {frame index: [(identity, variation, x, y, size)]}: more faces in those frames only
+    return [scene(identity, start_var + i, x=x, extra=extra_at.get(i), **kw) for i, x in enumerate(xs)]
 
 
 GOOD_TURN = [0.04, 0.10, 0.16, 0.18, 0.18]

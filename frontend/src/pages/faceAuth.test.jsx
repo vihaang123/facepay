@@ -354,3 +354,17 @@ describe('FacePay authentication screen', () => {
     expect(document.querySelectorAll('img, canvas')).toHaveLength(0)
   })
 })
+
+describe('what the customer is told when the face check fails before recognition', () => {
+  it('explains a second face with a way out, and does not call it a picture-quality problem', async () => {
+    await openAndStart({ body: rejected('MULTIPLE_FACES_DETECTED', { stages: stages('FAILED', 'SKIPPED', 'SKIPPED'), liveness: 'NOT_EVALUATED' }) })
+    expect(await screen.findByRole('heading', { name: 'More than one face in view' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Picture not clear enough' })).not.toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(/private spot/)
+  })
+  it('tells someone whose face left the frame while turning how to correct it', async () => {
+    await openAndStart({ body: rejected('LIVENESS_FAILED', { detail: 'FACE_LOST', stages: stages('PASSED', 'FAILED', 'SKIPPED'), liveness: 'FAILED' }) })
+    expect(await screen.findByRole('alert')).toHaveTextContent(/turn gently, only as far as you need to/i)
+    expect(screen.getByRole('heading', { name: 'Liveness check not passed' })).toBeInTheDocument()
+  })
+})

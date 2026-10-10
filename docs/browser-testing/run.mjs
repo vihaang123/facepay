@@ -213,6 +213,7 @@ await step('face setup: there is no per-sample Capture button and no manual pose
 })
 await step('face setup: auto-capture walks five head positions and finishes with "Face setup complete"', async () => {
   await cpage.evaluate((u) => window.__cam.setFace(u, 100, { scale: 0.6 }), FACES.me[0])
+  await cpage.getByRole('checkbox', { name: /I agree that FacePay may use my camera/ }).check() // explicit consent comes first
   await cpage.getByRole('button', { name: 'Start face setup' }).click()
   await cpage.getByTestId('enroll-stage').waitFor()
   await cpage.waitForFunction(() => { const v = document.querySelector('video'); return v && v.videoWidth > 0 })
@@ -461,6 +462,7 @@ await step('camera permission denied: clear message, nothing breaks, setup can b
   await dp.getByRole('button', { name: /create account/i }).click()
   await dp.getByRole('heading', { name: /^Good (morning|afternoon|evening)/ }).waitFor()
   await dp.goto(APP + '/face')
+  await dp.getByRole('checkbox', { name: /I agree that FacePay may use my camera/ }).check()
   await dp.getByRole('button', { name: 'Start face setup' }).click()
   await dp.getByText(/Camera access is required for FacePay authentication/).first().waitFor()
   await dp.getByRole('button', { name: 'Try again' }).waitFor()

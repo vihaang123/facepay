@@ -34,6 +34,7 @@ from app.ml.preprocessing import (
     FaceDetector,
     FaceImageError,
     decode_image,
+    distinct_faces,
     extract_face,
     process_gray,
     vectorize,
@@ -200,22 +201,23 @@ def add_sample(db: Session, user: User, pose: str, image: bytes, detector: FaceD
     }
 
 
-def assess_frame(image: bytes, detector: FaceDetector) -> dict:
+def assess_frame(image: bytes, detector: FaceDetector, *, second_face_ratio: float = cfg.SECOND_FACE_RATIO) -> dict:
     """Live feedback for guided capture: what the server's own checks would say about this frame, plus where the face
-    is. Stores nothing. Acceptance is decided only by add_sample."""
+    is. Stores nothing. Acceptance is decided only by add_sample (enrolment) or the authentication flow, so the caller says which
+    second-face rule to preview: the preview and the decision must not disagree about whether a second face is in view."""
     gray = decode_image(image)
     h, w = gray.shape
     scale = cfg.DETECTION_MAX_SIDE / max(h, w)
     small = cv2.resize(gray, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA) if scale < 1 else gray
     sh, sw = small.shape
-    boxes = sorted(detector.detect(small), key=lambda b: b.area, reverse=True)
-    significant = [b for b in boxes if boxes and b.area >= cfg.SECOND_FACE_RATIO * boxes[0].area]
+    boxes = distinct_faces(detector.detect(small))
+    significant = [b for b in boxes if boxes and b.area >= second_face_ratio * boxes[0].area]
     face = None
     if boxes:
         b = boxes[0]
         face = {"cx": round((b.x + b.w / 2) / sw, 4), "cy": round((b.y + b.h / 2) / sh, 4), "width": round(b.w / sw, 4), "height": round(b.h / sh, 4)}
     try:
-        process_gray(gray, detector)
+        process_gray(gray, detector, second_face_ratio=second_face_ratio)
         state = "OK"
     except FaceImageError as exc:
         state = {"NO_FACE": "NO_FACE", "MULTIPLE_FACES": "MULTIPLE_FACES", "FACE_TOO_SMALL": "FACE_TOO_SMALL", "TOO_DARK": "TOO_DARK",

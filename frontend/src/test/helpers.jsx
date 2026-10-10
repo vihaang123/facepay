@@ -39,7 +39,7 @@ const respond = (status, body) => ({ ok: status >= 200 && status < 300, status, 
 export const READY = { ready: true, code: null, message: '', next_action: null, stale: false, model_version: 1 }
 
 export function mockApi(given) {
-  const routes = { 'GET /faces/readiness': { body: READY }, ...given }
+  const routes = { 'GET /faces/readiness': { body: READY }, 'POST /faces/consent': { status: 204 }, ...given }
   const calls = []
   const fn = vi.fn(async (url, init = {}) => {
     const key = `${(init.method || 'GET').toUpperCase()} ${new URL(url).pathname}`

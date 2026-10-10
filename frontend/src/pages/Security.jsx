@@ -13,6 +13,7 @@ const EVENT_LABELS = {
   BIOMETRIC_ENABLED: 'Face payments turned on',
   BIOMETRIC_DISABLED: 'Face payments turned off',
   FACE_DATA_REMOVED: 'Face data removed',
+  FACE_CONSENT_GIVEN: 'Face setup consent given',
   PAYMENT_CONFIRMED: 'Payment confirmed',
   PIN_SET: 'Payment PIN set',
   PIN_CHANGED: 'Payment PIN changed',

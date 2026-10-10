@@ -227,3 +227,35 @@ dashboard.
 * Accuracy, impostor acceptance or latency for real webcams, real users, other populations, lighting, pose or ageing.
 * Resistance to any presentation attack beyond a still image.
 * Behaviour at more than a few dozen enrolled users, or hosted performance.
+
+
+## 9. End-to-end authentication: genuine user and impostors (offline, ORL)
+
+Script `ml/experiments/auth_end_to_end.py`, result `ml/results/auth_end_to_end.json`. Photographs are put through the same
+capture path the app uses (Haar detector, preprocessing, quality gates), PCA -> LDA -> the classifier the app selects, the
+per-model distance threshold (70th percentile of out-of-fold genuine distances) and `auth_policy.decide`, where every
+baseline frame used must pass. **Liveness is assumed passed here; this measures recognition only.** Each enrolled person
+has 6 training and 4 held-out ORL images (ORL has only 10 per person; the app asks for 12 or more), 20 random trials per
+row, and an attempt is 3 different photographs (ORL photographs differ more than consecutive webcam frames, so genuine
+acceptance is pessimistic). Held-out images are never used for training or for the threshold. Capture failures (no face
+found, blur) are excluded from the rates and counted separately.
+
+| People enrolled | Genuine user accepted | Another ENROLLED person accepted as the account holder | Never-enrolled person accepted |
+|--:|---|---|---|
+| 2 | 76.6% (121/158; 95% CI 69.4-82.5%) | 0.0% (0/158; 95% CI 0.0-2.4%) | 14.7% (175/1192; 95% CI 12.8-16.8%) |
+| 5 | 70.0% (280/400; 95% CI 65.3-74.3%) | 0.0% (0/1600; 95% CI 0.0-0.2%) | 3.4% (102/2979; 95% CI 2.8-4.1%) |
+| 10 | 65.7% (524/798; 95% CI 62.3-68.9%) | 0.0% (0/7182; 95% CI 0.0-0.1%) | 1.1% (68/5974; 95% CI 0.9-1.4%) |
+
+What this shows, and what it does not:
+
+* A different enrolled customer was never accepted for another customer's account in any of the attempts (0 in
+  8940). With few people enrolled the classifier separates them easily.
+* **Genuine acceptance of roughly two thirds to three quarters is low.** It is set by the design (the 70th-percentile
+  threshold rejects about 30% of genuine distances by construction) and by ORL's small training sets. It was not tuned
+  and the threshold was not lowered. A real user who is rejected can try again; whether real users enrolled with 15 samples in
+  one sitting behave better or worse is **not measured**.
+* **With only two enrolled people a never-enrolled face is accepted far more often (about 15%)** than with five or ten
+  (about 3% and 1%), because there are so few identities to be confused with and only the distance threshold stands between
+  an unknown face and the account. This is a property of the open-set method at small sizes, not something a threshold tweak
+  fixes honestly. It is a real limitation of a two-customer deployment and is listed in the limitations.
+* No webcam, no real phone, no real customers. Treat these as method-level numbers on a controlled benchmark.

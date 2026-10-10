@@ -9,7 +9,7 @@ import { StatusBadge } from '../components/payUi'
 import { Alert, Button, Card, ConfirmPanel, ErrorState, PageHeader, Spinner } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
 import { CAMERA_MESSAGES, useCamera } from '../hooks/useCamera'
-import { deleteSamples, getEnrollment, getModel, getReadiness, recognize, trainModel } from '../services/faces'
+import { deleteSamples, getEnrollment, getModel, getReadiness, giveConsent, recognize, trainModel } from '../services/faces'
 import { captureFrame } from '../utils/capture'
 import { faceStatus } from '../utils/faceStatus'
 
@@ -128,6 +128,22 @@ function GuidedSetup({ camera, enrollment, model, token, reducedMotion, onSample
   const running = [PHASE.CAMERA_STARTING, ...LIVE_PHASES, PHASE.CAPTURING, PHASE.CAPTURE_SUCCESS, PHASE.NEXT_POSE].includes(state.phase)
   const trained = Boolean(model?.includes_you && !model.stale)
   const complete = guided.complete || state.phase === PHASE.COMPLETED
+  const [agreed, setAgreed] = useState(false)
+  const [consentError, setConsentError] = useState(null)
+  const needsConsent = guided.captured === 0 && state.phase === PHASE.IDLE && !complete
+  // Explicit consent comes first: nothing is captured until the customer has said yes. The yes is kept in the audit trail.
+  const begin = async () => {
+    if (needsConsent) {
+      try {
+        await giveConsent(token)
+      } catch (err) {
+        setConsentError(err?.message || 'Your consent could not be saved. Try again.')
+        return
+      }
+    }
+    setConsentError(null)
+    start()
+  }
   const head = headlineFor(state, { complete, trained, captured: guided.captured, finishing, cameraStatus: camera.status })
   const warn = state.phase === PHASE.POSITION_FACE && state.message
   const guideTone = state.phase === PHASE.CHECKING_QUALITY || state.phase === PHASE.CAPTURING ? 'ok' : warn ? 'warn' : null
@@ -165,10 +181,20 @@ function GuidedSetup({ camera, enrollment, model, token, reducedMotion, onSample
           </p>
         )}
 
+        {needsConsent && (
+          <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800">
+            <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-1 h-5 w-5 shrink-0 accent-brand-700" />
+            <span>
+              I agree that FacePay may use my camera to capture my face for this setup. Only a small grayscale crop of each position is
+              kept, encrypted, and used only to check that it is me when I pay in this simulated app. I can delete it at any time.
+            </span>
+          </label>
+        )}
+        {consentError && <Alert tone="error">{consentError}</Alert>}
         {finishError && <Alert tone="error">{finishError}</Alert>}
 
         <div className="flex flex-col gap-2 sm:flex-row">
-          {state.phase === PHASE.IDLE && !complete && <Button size="lg" onClick={start} className="sm:flex-1">{guided.captured > 0 ? 'Continue face setup' : 'Start face setup'}</Button>}
+          {state.phase === PHASE.IDLE && !complete && <Button size="lg" onClick={begin} disabled={needsConsent && !agreed} className="sm:flex-1">{guided.captured > 0 ? 'Continue face setup' : 'Start face setup'}</Button>}
           {state.phase === PHASE.IDLE && complete && !trained && <Button size="lg" onClick={onFinish} loading={finishing} className="sm:flex-1">Finish setup</Button>}
           {state.phase === PHASE.ERROR && <Button size="lg" onClick={start} className="sm:flex-1">Try again</Button>}
           {state.phase === PHASE.COMPLETED && !trained && !finishing && <Button size="lg" onClick={onFinish} className="sm:flex-1">Finish setup</Button>}

@@ -28,7 +28,7 @@ export default function FaceAuthentication() {
         requestChallenge={() => requestChallenge(token)}
         verify={(payload, opts) => verifyFace(token, payload, opts)}
         onOutcome={loadAttempts}
-        assess={(frame) => assessFrame(token, frame)}
+        assess={(frame) => assessFrame(token, frame, { purpose: 'auth' })}
       />
 
       {attempts.length > 0 && (

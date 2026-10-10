@@ -67,3 +67,17 @@ same photo sideways in the frame**, so this says nothing about real head turns o
 
 N is tiny (2 impostor tries per kind). This shows the pieces work together; it is not an error-rate estimate, and the
 Phase 3 open-set numbers above remain the honest picture of impostor acceptance.
+
+## detection_evidence.json (script `ml/experiments/detection_evidence.py`)
+
+How often the real OpenCV Haar detector reports a spurious "second face" on frames that contain one face, and how often it
+reports a real second person, under different counting rules on identical frames. ORL photographs pasted into noisy
+640x480 JPEG frames, 200 single-face and 67 two-person attempts of 8 frames per size. Not webcam frames. Written up in
+`docs/final/detection-evidence.md`.
+
+## auth_end_to_end.json (script `ml/experiments/auth_end_to_end.py`)
+
+Genuine user, another enrolled customer, and never-enrolled people claiming an account, through the app's capture path,
+PCA -> LDA -> classifier, per-model distance threshold and `auth_policy.decide`. 2, 5 and 10 enrolled people, 20 random
+trials each, 6 training and 4 held-out ORL images per enrolled person. Liveness is assumed passed. Summarised in
+`docs/final/evaluation-results.md` section 9.

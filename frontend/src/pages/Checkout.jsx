@@ -371,7 +371,7 @@ export default function Checkout() {
             verify={(payload, opts) => authenticateForPayment(token, sessionId, payload, opts)}
             onOutcome={onOutcome}
             onError={onAuthError}
-            assess={(frame) => assessFrame(token, frame)}
+            assess={(frame) => assessFrame(token, frame, { purpose: 'auth' })}
           />
           <Button variant="ghost" onClick={restart} className="self-center">Back to payment</Button>
         </>

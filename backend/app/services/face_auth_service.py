@@ -159,18 +159,25 @@ def authenticate(db: Session, user: User, token: str, frames_b64: list[str], det
         except FaceImageError as exc:
             return finish(policy.Evidence(image_reason=policy.IMAGE_ERROR_REASON[exc.code], distance_threshold=threshold))
         observations = [liveness.observe(g, detector) for g in grays]
-        if any(o.faces > 1 for o in observations):
+        if liveness.multiple_faces(observations):
             return finish(policy.Evidence(image_reason=policy.IMAGE_ERROR_REASON["MULTIPLE_FACES"], distance_threshold=threshold))
-        if any(o.faces == 0 for o in observations[: cfg.AUTH_BASELINE_FRAMES]):
-            return finish(policy.Evidence(image_reason=policy.IMAGE_ERROR_REASON["NO_FACE"], distance_threshold=threshold))
 
-        # --- identity on the baseline frames (full Phase 3 preprocessing + quality gates)
+        # --- identity on the baseline frames (full Phase 3 preprocessing + quality gates). A baseline frame that shows no
+        # single face, or is too blurry, is skipped. Identity is decided on the first BASELINE_MIN_USABLE usable frames (the same
+        # number as before this recovery existed), and EVERY one of them must match, so the identity bar is not lowered.
         identities = []
-        for g in grays[: cfg.AUTH_BASELINE_FRAMES]:
+        first_error = None
+        for g, obs in zip(grays[: cfg.AUTH_BASELINE_FRAMES], observations, strict=False):
+            if len(identities) == cfg.BASELINE_MIN_USABLE:
+                break  # the spare baseline frame exists only to recover from a bad one; the decision is on exactly this many
+            if obs.faces != 1:
+                first_error = first_error or "NO_FACE"
+                continue
             try:
-                face = process_gray(g, detector, second_face_ratio=cfg.AUTH_SECOND_FACE_RATIO)
+                face = process_gray(g, detector, second_face_ratio=cfg.AUTH_SECOND_FACE_RATIO, reject_multiple=False)
             except FaceImageError as exc:
-                return finish(policy.Evidence(image_reason=policy.IMAGE_ERROR_REASON[exc.code], distance_threshold=threshold))
+                first_error = first_error or exc.code
+                continue
             x = vectorize(face.crop)[None, :]
             z = model.transform(x)
             label = model.clf_.predict(z)[0]
@@ -183,11 +190,17 @@ def authenticate(db: Session, user: User, token: str, frames_b64: list[str], det
                     distance=float(np.linalg.norm(z[0] - centroid)),
                 )
             )
+        if len(identities) < cfg.BASELINE_MIN_USABLE:
+            return finish(policy.Evidence(image_reason=policy.IMAGE_ERROR_REASON[first_error or "NO_FACE"], distance_threshold=threshold))
         ctx["frames"] = tuple(identities)
 
         # --- liveness
         verdict = liveness.evaluate(ctx["challenge"], observations)
         ctx["liveness_result"] = verdict.result
+        # Restricted server log: counts only (no images, vectors, coordinates or tokens). It makes a liveness failure diagnosable.
+        logging.getLogger("facepay.face").info(
+            "liveness user_id=%s challenge=%s result=%s detail=%s %s", user.id, ctx["challenge"], verdict.result, verdict.detail, verdict.trace
+        )
         return finish(
             policy.Evidence(
                 liveness_passed=verdict.passed,

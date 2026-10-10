@@ -3,7 +3,7 @@ import { MODEL_FALLBACK_MESSAGE, isModelIssue } from './modelIssues'
 
 const REASON_MESSAGES = {
   FACE_NOT_DETECTED: 'We could not find your face. Face the camera in good light and try again.',
-  MULTIPLE_FACES_DETECTED: 'More than one face is visible. For your security, only you may be in front of the camera.',
+  MULTIPLE_FACES_DETECTED: 'More than one face is visible. For your security only you may be in front of the camera. Move to a private spot, or ask the other person to step out of view.',
   FACE_TOO_SMALL: 'You are too far from the camera. Move closer and try again.',
   POOR_IMAGE_QUALITY: 'The picture was not clear enough (too dark, too bright or blurry). Improve the light and hold still.',
   INVALID_IMAGE: 'The camera image could not be read. Try again.',
@@ -29,7 +29,7 @@ const LIVENESS_MESSAGES = {
   INCOMPLETE_MOVEMENT: 'You started to turn but not far enough. Turn a little further.',
   WRONG_DIRECTION: 'You turned the wrong way. Follow the instruction on screen.',
   AMBIGUOUS_MOTION: 'Too much movement in both directions. Turn once, smoothly.',
-  FACE_LOST: 'Your face left the camera view. Keep it in frame while you turn.',
+  FACE_LOST: 'Your face went out of view while you turned. Hold the phone steady at eye level, centre your face, and turn gently, only as far as you need to, so your whole face stays in the frame.',
   UNSTABLE_BASELINE: 'You were already moving at the start. Hold still first, then turn.',
   TOO_FEW_FRAMES: 'Not enough camera frames were captured. Try again.',
 }
@@ -62,7 +62,7 @@ export function errorMessage(err) {
 // A rejected face and a broken service are different things. Only a real decision by the server about the face is ever
 // presented as "did not match"; connection and server trouble say so and tell the person nothing was decided about them.
 const REASON_CATEGORY = {
-  FACE_NOT_DETECTED: 'quality', MULTIPLE_FACES_DETECTED: 'quality', FACE_TOO_SMALL: 'quality', POOR_IMAGE_QUALITY: 'quality', INVALID_IMAGE: 'quality',
+  FACE_NOT_DETECTED: 'quality', MULTIPLE_FACES_DETECTED: 'faces', FACE_TOO_SMALL: 'quality', POOR_IMAGE_QUALITY: 'quality', INVALID_IMAGE: 'quality',
   LIVENESS_FAILED: 'liveness',
   IDENTITY_MISMATCH: 'mismatch', LOW_CONFIDENCE: 'mismatch', DISTANCE_TOO_HIGH: 'mismatch',
   NOT_ENROLLED: 'enrollment', ENROLLMENT_INSUFFICIENT: 'enrollment', MODEL_UNAVAILABLE: 'model',
@@ -72,6 +72,7 @@ const REASON_CATEGORY = {
 }
 export const CATEGORY_TITLES = {
   quality: 'Picture not clear enough',
+  faces: 'More than one face in view',
   liveness: 'Liveness check not passed',
   mismatch: 'Face did not match',
   enrollment: 'Face setup needed',

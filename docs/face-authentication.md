@@ -82,3 +82,33 @@ model can exist, however many samples that person captured. The face screen now 
 opens the camera, shows which condition applies and the one action that fixes it, and sends no frames while the model
 is not ready. The seven visible stages (camera, face, quality, model, liveness, identity, match) are marked only from
 what actually happened.
+
+
+## Detection and liveness robustness (v3)
+
+Evidence and limits: [`final/detection-evidence.md`](final/detection-evidence.md). Every number there is from ORL photographs in
+synthetic frames with the real Haar detector; **no real webcam or phone has been used, and the cause of the failures reported on
+the deployed app is not confirmed.**
+
+* **Distinct faces.** Overlapping or nested boxes are one face; a candidate for a second face also needs cascade confidence
+  (`SECOND_FACE_MIN_WEIGHT`). The largest face is always kept. Used by enrolment, the live preview, and authentication.
+* **Multiple faces over a sequence.** An attempt is rejected as `MULTIPLE_FACES_DETECTED` when a second face is seen in at least
+  `max(2, ceil(0.3 n))` frames. One stray box in one frame is detector noise and is ignored; a person standing in view is not.
+* **The preview agrees with the decision.** `POST /faces/assess?purpose=auth` applies the authentication second-face rule
+  (15% of the main face's area). Enrolment keeps its own rule (40%).
+* **Liveness.** `AUTH_BASELINE_FRAMES` is 3 and 2 usable ones are required: one missed or blurred baseline frame is skipped, but
+  identity is still decided on exactly two frames and every one of them must match (the identity bar is unchanged). During the turn,
+  up to 2 consecutive lost frames and up to half of the turn frames may be lost (a turned head is often no longer a frontal
+  face); more is `FACE_LOST`. The movement threshold (`LATERAL_THRESHOLD` 0.10 box widths) is unchanged, but it now has to be
+  reached in **at least two** usable frames, so one noisy frame can neither pass nor fail a challenge. The baseline is the median
+  of the usable baseline frames. The loss tolerance was relaxed from "at most one lost frame" without a measurement on real head
+  turns; it rests on the measured per-frame miss rate (about 1.6% of frames in the synthetic setting) and on the reasoning above,
+  and it **has not been validated on a real phone**.
+* **Diagnosis.** The server log line `liveness user_id=... challenge=... result=... detail=... frames=N baseline_usable=a/b
+  turn_usable=c/d longest_lost_run=r toward=... away=...` records counts only (no images, coordinates, vectors or tokens), so a
+  liveness failure on a real device can be read from the log.
+* **Direction.** The UI shows the instruction returned by the server (`turn_right` / `turn_left`, always the user's own right or
+  left); the image sent is not mirrored, only the preview is. Unchanged and covered by `test_direction_convention_unmirrored_image`.
+* **Consent.** Face setup asks for explicit agreement before the camera starts capturing (`POST /faces/consent`, audit event
+  `FACE_CONSENT_GIVEN`). It is enforced in the interface, not by the samples endpoint.
+* Movement-based liveness still does not stop a photo moved by hand, a video that follows the challenge, a mask, or a deepfake.

@@ -51,7 +51,7 @@ describe('face check stages', () => {
 describe('failure categories', () => {
   it.each([
     ['IDENTITY_MISMATCH', 'mismatch'], ['LOW_CONFIDENCE', 'mismatch'], ['DISTANCE_TOO_HIGH', 'mismatch'],
-    ['POOR_IMAGE_QUALITY', 'quality'], ['FACE_NOT_DETECTED', 'quality'], ['FACE_TOO_SMALL', 'quality'], ['MULTIPLE_FACES_DETECTED', 'quality'],
+    ['POOR_IMAGE_QUALITY', 'quality'], ['FACE_NOT_DETECTED', 'quality'], ['FACE_TOO_SMALL', 'quality'], ['MULTIPLE_FACES_DETECTED', 'faces'],
     ['LIVENESS_FAILED', 'liveness'], ['NOT_ENROLLED', 'enrollment'], ['MODEL_UNAVAILABLE', 'model'], ['CHALLENGE_EXPIRED', 'challenge'], ['ACCOUNT_DISABLED', 'account'],
   ])('%s is a %s problem', (reason, category) => {
     expect(classifyRejection({ reason, detail: null }).category).toBe(category)

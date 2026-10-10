@@ -1,0 +1,169 @@
+{
+  "setting": "Genuine-user and impostor evaluation through the deployed capture path and decision policy.\n\n    backend/.venv/bin/python ml/experiments/auth_end_to_end.py --orl PATH/orl.npz --out ml/results/auth_end_to_end.json\n\nWhat is real: the OpenCV Haar detector, the app's preprocessing and quality gates (process_gray), PCA -> LDA -> the\nclassifier the app selects (compare_and_select), the per-model distance threshold (70th percentile of out-of-fold genuine\ndistances), and app.services.auth_policy.decide with every baseline frame having to pass.\nWhat is NOT: ORL photographs pasted into noisy 640x480 JPEG frames are not webcam frames; ORL has 10 images per person (the\napp asks for >= 12 per user), so each enrolled person here has 6 training and 4 held-out images; liveness is assumed passed\n(this script measures RECOGNITION only; liveness is covered by tests); the three \"baseline frames\" of an attempt are three\nDIFFERENT photographs (ORL photos differ more than consecutive webcam frames, so genuine acceptance is pessimistic).\n\nAttempt = 3 baseline frames of one person claiming one enrolled account. Frames whose capture fails (no face found, blur...)\nare skipped as in the app (2 usable frames are required); an attempt with fewer than 2 usable frames is counted separately as\na capture failure, never as a recognition decision. Held-out images are never used for training or threshold calibration.\n\nPopulations per trial (C enrolled people, a random sample of ORL subjects):\n  genuine            held-out images of enrolled person A claiming A\n  impostor_enrolled  held-out images of another ENROLLED person B claiming A\n  impostor_unknown   images of people who were never enrolled claiming A\n",
+  "capture": {
+    "images": 400,
+    "capture_failed": 10,
+    "reasons": {
+      "FACE_TOO_SMALL": 1,
+      "NO_FACE": 8,
+      "TOO_BLURRY": 1
+    }
+  },
+  "threshold_percentile": 70.0,
+  "auth_min_confidence": 0.5,
+  "by_enrolled_people": {
+    "2": {
+      "genuine": {
+        "attempts": 160,
+        "capture_failed": 2,
+        "decided": 158,
+        "accepted": 121,
+        "accept_rate": 0.7658,
+        "accept_rate_95ci": [
+          0.694,
+          0.8251
+        ],
+        "outcomes": {
+          "ACCEPT": 121,
+          "DISTANCE_TOO_HIGH": 31,
+          "CAPTURE_FAILED": 2,
+          "IDENTITY_MISMATCH": 6
+        }
+      },
+      "impostor_enrolled": {
+        "attempts": 160,
+        "capture_failed": 2,
+        "decided": 158,
+        "accepted": 0,
+        "accept_rate": 0.0,
+        "accept_rate_95ci": [
+          0,
+          0.0237
+        ],
+        "outcomes": {
+          "IDENTITY_MISMATCH": 158,
+          "CAPTURE_FAILED": 2
+        }
+      },
+      "impostor_unknown": {
+        "attempts": 1200,
+        "capture_failed": 8,
+        "decided": 1192,
+        "accepted": 175,
+        "accept_rate": 0.1468,
+        "accept_rate_95ci": [
+          0.1279,
+          0.168
+        ],
+        "outcomes": {
+          "IDENTITY_MISMATCH": 775,
+          "ACCEPT": 175,
+          "CAPTURE_FAILED": 8,
+          "DISTANCE_TOO_HIGH": 242
+        }
+      }
+    },
+    "5": {
+      "genuine": {
+        "attempts": 400,
+        "capture_failed": 0,
+        "decided": 400,
+        "accepted": 280,
+        "accept_rate": 0.7,
+        "accept_rate_95ci": [
+          0.6534,
+          0.7428
+        ],
+        "outcomes": {
+          "ACCEPT": 280,
+          "IDENTITY_MISMATCH": 44,
+          "DISTANCE_TOO_HIGH": 76
+        }
+      },
+      "impostor_enrolled": {
+        "attempts": 1600,
+        "capture_failed": 0,
+        "decided": 1600,
+        "accepted": 0,
+        "accept_rate": 0.0,
+        "accept_rate_95ci": [
+          0,
+          0.0024
+        ],
+        "outcomes": {
+          "IDENTITY_MISMATCH": 1600
+        }
+      },
+      "impostor_unknown": {
+        "attempts": 3000,
+        "capture_failed": 21,
+        "decided": 2979,
+        "accepted": 102,
+        "accept_rate": 0.0342,
+        "accept_rate_95ci": [
+          0.0283,
+          0.0414
+        ],
+        "outcomes": {
+          "IDENTITY_MISMATCH": 2697,
+          "ACCEPT": 102,
+          "DISTANCE_TOO_HIGH": 178,
+          "CAPTURE_FAILED": 21,
+          "LOW_CONFIDENCE": 2
+        }
+      }
+    },
+    "10": {
+      "genuine": {
+        "attempts": 800,
+        "capture_failed": 2,
+        "decided": 798,
+        "accepted": 524,
+        "accept_rate": 0.6566,
+        "accept_rate_95ci": [
+          0.623,
+          0.6888
+        ],
+        "outcomes": {
+          "IDENTITY_MISMATCH": 109,
+          "ACCEPT": 524,
+          "DISTANCE_TOO_HIGH": 165,
+          "CAPTURE_FAILED": 2
+        }
+      },
+      "impostor_enrolled": {
+        "attempts": 7200,
+        "capture_failed": 18,
+        "decided": 7182,
+        "accepted": 0,
+        "accept_rate": 0.0,
+        "accept_rate_95ci": [
+          0,
+          0.0005
+        ],
+        "outcomes": {
+          "IDENTITY_MISMATCH": 7182,
+          "CAPTURE_FAILED": 18
+        }
+      },
+      "impostor_unknown": {
+        "attempts": 6000,
+        "capture_failed": 26,
+        "decided": 5974,
+        "accepted": 68,
+        "accept_rate": 0.0114,
+        "accept_rate_95ci": [
+          0.009,
+          0.0144
+        ],
+        "outcomes": {
+          "IDENTITY_MISMATCH": 5747,
+          "ACCEPT": 68,
+          "DISTANCE_TOO_HIGH": 157,
+          "CAPTURE_FAILED": 26,
+          "LOW_CONFIDENCE": 2
+        }
+      }
+    }
+  }
+}

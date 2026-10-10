@@ -232,7 +232,7 @@ export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onEr
         {phase === 'baseline' && (
           <div>
             <h2 className="text-xl font-extrabold">Hold still</h2>
-            <p className="mt-1 text-sm text-slate-700">Capturing your face. Look at the camera.</p>
+            <p className="mt-1 text-sm text-slate-700">Look straight at the camera and hold still. Keep your whole face inside the frame.</p>
             <LivenessDots step={1} />
           </div>
         )}
@@ -241,7 +241,7 @@ export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onEr
           <div>
             <h2 className="text-xl font-extrabold">Quick security check</h2>
             <p className="mt-2 text-2xl font-extrabold text-brand-700">{instruction}</p>
-            <p className="mt-1 text-sm text-slate-700">Basic liveness check. Keep your face in the frame while you move.</p>
+            <p className="mt-1 text-sm text-slate-700">Basic liveness check. Turn gently, hold for a moment, and keep your whole face in the frame. A small turn is enough.</p>
             <LivenessDots step={2} />
             <p className="mt-2 text-xs text-slate-600">Frames captured: {captured}</p>
           </div>

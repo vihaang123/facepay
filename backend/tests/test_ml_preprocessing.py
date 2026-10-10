@@ -48,8 +48,11 @@ def test_stored_crop_shape_and_dtype():
 def test_no_face_and_multiple_faces():
     img = sample_image(0, 0)
     assert code_of(pp.process_gray, img, FakeDetector([])) == pp.NO_FACE
-    two = FakeDetector([pp.Box(0, 0, 90, 90), pp.Box(0, 0, 80, 80)])
+    two = FakeDetector([pp.Box(0, 0, 90, 90), pp.Box(100, 0, 80, 80)])  # two separate people
     assert code_of(pp.process_gray, img, two) == pp.MULTIPLE_FACES
+    # two boxes on the same face are one face, not two people
+    duplicate = FakeDetector([pp.Box(0, 0, 90, 90), pp.Box(0, 0, 80, 80)])
+    assert pp.process_gray(img, duplicate).crop.shape[0] == cfg.IMAGE_SIZE
     # a much smaller background face is ignored
     ok = FakeDetector([pp.Box(0, 0, 90, 90), pp.Box(0, 0, 20, 20)])
     assert pp.process_gray(img, ok).crop.shape[0] == cfg.IMAGE_SIZE

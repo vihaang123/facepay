@@ -1,0 +1,205 @@
+{
+  "setting": "Evidence for the face-count rule: raw Haar boxes vs distinct, supported faces.\n\n    backend/.venv/bin/python ml/experiments/detection_evidence.py --orl PATH/orl.npz --out ml/results/detection_evidence.json\n\nSetting (stated so nobody over-reads it): ORL photographs (grayscale, 92x112) are enlarged and pasted into a smoothed\nrandom-noise 640x480 background, JPEG quality 80, then run through the REAL OpenCV Haar detector. This is NOT a webcam.\nIt measures how often the detector reports a spurious second box on a frame that contains exactly one face, and how often\nit reports a real second person, under each counting rule. A real room has different clutter, so the absolute rates will\ndiffer on a phone; the point is the comparison between rules on identical frames.",
+  "deployed": {
+    "floor": 4.0,
+    "k_of_9": "max(2, ceil(0.3 n))"
+  },
+  "single_face_frames": {
+    "attempts": 200,
+    "frames": 1600,
+    "frames_with_no_face_found": 25,
+    "rules": {
+      "raw": {
+        "frames_wrongly_multiple": 0.1256,
+        "attempts_rejected_if_seen_in_1_or_more_frames": "135/200",
+        "attempts_rejected_if_seen_in_2_or_more_frames": "52/200",
+        "attempts_rejected_if_seen_in_3_or_more_frames": "11/200",
+        "attempts_rejected_if_seen_in_4_or_more_frames": "2/200"
+      },
+      "dedupe_only": {
+        "frames_wrongly_multiple": 0.1244,
+        "attempts_rejected_if_seen_in_1_or_more_frames": "135/200",
+        "attempts_rejected_if_seen_in_2_or_more_frames": "51/200",
+        "attempts_rejected_if_seen_in_3_or_more_frames": "10/200",
+        "attempts_rejected_if_seen_in_4_or_more_frames": "2/200"
+      },
+      "weight>=3.0": {
+        "frames_wrongly_multiple": 0.0794,
+        "attempts_rejected_if_seen_in_1_or_more_frames": "99/200",
+        "attempts_rejected_if_seen_in_2_or_more_frames": "26/200",
+        "attempts_rejected_if_seen_in_3_or_more_frames": "2/200",
+        "attempts_rejected_if_seen_in_4_or_more_frames": "0/200"
+      },
+      "weight>=3.5": {
+        "frames_wrongly_multiple": 0.0669,
+        "attempts_rejected_if_seen_in_1_or_more_frames": "85/200",
+        "attempts_rejected_if_seen_in_2_or_more_frames": "21/200",
+        "attempts_rejected_if_seen_in_3_or_more_frames": "1/200",
+        "attempts_rejected_if_seen_in_4_or_more_frames": "0/200"
+      },
+      "weight>=4.0": {
+        "frames_wrongly_multiple": 0.05,
+        "attempts_rejected_if_seen_in_1_or_more_frames": "68/200",
+        "attempts_rejected_if_seen_in_2_or_more_frames": "12/200",
+        "attempts_rejected_if_seen_in_3_or_more_frames": "0/200",
+        "attempts_rejected_if_seen_in_4_or_more_frames": "0/200"
+      },
+      "weight>=5.0": {
+        "frames_wrongly_multiple": 0.03,
+        "attempts_rejected_if_seen_in_1_or_more_frames": "43/200",
+        "attempts_rejected_if_seen_in_2_or_more_frames": "5/200",
+        "attempts_rejected_if_seen_in_3_or_more_frames": "0/200",
+        "attempts_rejected_if_seen_in_4_or_more_frames": "0/200"
+      }
+    }
+  },
+  "real_second_person": {
+    "0.35": {
+      "relative_width": 0.35,
+      "relative_area": 0.12,
+      "attempts": 67,
+      "rules": {
+        "raw": {
+          "per_frame_seen": 0.978,
+          "attempts_rejected_if_seen_in_1_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_2_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_3_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_4_or_more_frames": "66/67"
+        },
+        "dedupe_only": {
+          "per_frame_seen": 0.976,
+          "attempts_rejected_if_seen_in_1_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_2_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_3_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_4_or_more_frames": "65/67"
+        },
+        "weight>=3.0": {
+          "per_frame_seen": 0.974,
+          "attempts_rejected_if_seen_in_1_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_2_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_3_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_4_or_more_frames": "65/67"
+        },
+        "weight>=3.5": {
+          "per_frame_seen": 0.968,
+          "attempts_rejected_if_seen_in_1_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_2_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_3_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_4_or_more_frames": "65/67"
+        },
+        "weight>=4.0": {
+          "per_frame_seen": 0.95,
+          "attempts_rejected_if_seen_in_1_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_2_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_3_or_more_frames": "66/67",
+          "attempts_rejected_if_seen_in_4_or_more_frames": "64/67"
+        },
+        "weight>=5.0": {
+          "per_frame_seen": 0.903,
+          "attempts_rejected_if_seen_in_1_or_more_frames": "66/67",
+          "attempts_rejected_if_seen_in_2_or_more_frames": "66/67",
+          "attempts_rejected_if_seen_in_3_or_more_frames": "66/67",
+          "attempts_rejected_if_seen_in_4_or_more_frames": "59/67"
+        }
+      }
+    },
+    "0.55": {
+      "relative_width": 0.55,
+      "relative_area": 0.3,
+      "attempts": 67,
+      "rules": {
+        "raw": {
+          "per_frame_seen": 0.993,
+          "attempts_rejected_if_seen_in_1_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_2_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_3_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_4_or_more_frames": "67/67"
+        },
+        "dedupe_only": {
+          "per_frame_seen": 0.989,
+          "attempts_rejected_if_seen_in_1_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_2_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_3_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_4_or_more_frames": "67/67"
+        },
+        "weight>=3.0": {
+          "per_frame_seen": 0.974,
+          "attempts_rejected_if_seen_in_1_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_2_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_3_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_4_or_more_frames": "66/67"
+        },
+        "weight>=3.5": {
+          "per_frame_seen": 0.97,
+          "attempts_rejected_if_seen_in_1_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_2_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_3_or_more_frames": "66/67",
+          "attempts_rejected_if_seen_in_4_or_more_frames": "65/67"
+        },
+        "weight>=4.0": {
+          "per_frame_seen": 0.959,
+          "attempts_rejected_if_seen_in_1_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_2_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_3_or_more_frames": "65/67",
+          "attempts_rejected_if_seen_in_4_or_more_frames": "64/67"
+        },
+        "weight>=5.0": {
+          "per_frame_seen": 0.892,
+          "attempts_rejected_if_seen_in_1_or_more_frames": "65/67",
+          "attempts_rejected_if_seen_in_2_or_more_frames": "64/67",
+          "attempts_rejected_if_seen_in_3_or_more_frames": "60/67",
+          "attempts_rejected_if_seen_in_4_or_more_frames": "59/67"
+        }
+      }
+    },
+    "0.9": {
+      "relative_width": 0.9,
+      "relative_area": 0.81,
+      "attempts": 67,
+      "rules": {
+        "raw": {
+          "per_frame_seen": 0.976,
+          "attempts_rejected_if_seen_in_1_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_2_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_3_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_4_or_more_frames": "65/67"
+        },
+        "dedupe_only": {
+          "per_frame_seen": 0.974,
+          "attempts_rejected_if_seen_in_1_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_2_or_more_frames": "67/67",
+          "attempts_rejected_if_seen_in_3_or_more_frames": "66/67",
+          "attempts_rejected_if_seen_in_4_or_more_frames": "65/67"
+        },
+        "weight>=3.0": {
+          "per_frame_seen": 0.968,
+          "attempts_rejected_if_seen_in_1_or_more_frames": "66/67",
+          "attempts_rejected_if_seen_in_2_or_more_frames": "66/67",
+          "attempts_rejected_if_seen_in_3_or_more_frames": "65/67",
+          "attempts_rejected_if_seen_in_4_or_more_frames": "65/67"
+        },
+        "weight>=3.5": {
+          "per_frame_seen": 0.965,
+          "attempts_rejected_if_seen_in_1_or_more_frames": "66/67",
+          "attempts_rejected_if_seen_in_2_or_more_frames": "66/67",
+          "attempts_rejected_if_seen_in_3_or_more_frames": "65/67",
+          "attempts_rejected_if_seen_in_4_or_more_frames": "65/67"
+        },
+        "weight>=4.0": {
+          "per_frame_seen": 0.961,
+          "attempts_rejected_if_seen_in_1_or_more_frames": "66/67",
+          "attempts_rejected_if_seen_in_2_or_more_frames": "66/67",
+          "attempts_rejected_if_seen_in_3_or_more_frames": "65/67",
+          "attempts_rejected_if_seen_in_4_or_more_frames": "65/67"
+        },
+        "weight>=5.0": {
+          "per_frame_seen": 0.903,
+          "attempts_rejected_if_seen_in_1_or_more_frames": "64/67",
+          "attempts_rejected_if_seen_in_2_or_more_frames": "63/67",
+          "attempts_rejected_if_seen_in_3_or_more_frames": "63/67",
+          "attempts_rejected_if_seen_in_4_or_more_frames": "61/67"
+        }
+      }
+    }
+  }
+}

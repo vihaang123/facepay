@@ -119,19 +119,59 @@ def _eye_cascade() -> "cv2.CascadeClassifier":
     return cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_eye.xml")
 
 
+def _overlap(a: Box, b: Box) -> tuple[float, float]:
+    """(intersection over union, intersection over the SMALLER box's area)."""
+    ix = max(0, min(a.x + a.w, b.x + b.w) - max(a.x, b.x))
+    iy = max(0, min(a.y + a.h, b.y + b.h) - max(a.y, b.y))
+    inter = ix * iy
+    if inter == 0:
+        return 0.0, 0.0
+    return inter / (a.area + b.area - inter), inter / min(a.area, b.area)
+
+
+def is_same_face(a: Box, b: Box) -> bool:
+    """Two raw detections of one face: heavily overlapping, or one nested inside the other."""
+    iou, inside = _overlap(a, b)
+    return iou >= cfg.DUPLICATE_IOU or inside >= cfg.DUPLICATE_CONTAINMENT
+
+
+def distinct_faces(boxes: list[Box]) -> list[Box]:
+    """Non-maximum suppression: the largest detection of each face, largest first. A face is counted once however many
+    overlapping boxes the detector produced for it."""
+    kept: list[Box] = []
+    for box in sorted(boxes, key=lambda b: b.area, reverse=True):
+        if not any(is_same_face(box, k) for k in kept):
+            kept.append(box)
+    return kept
+
+
 class HaarFaceDetector:
     """Classical Viola-Jones detector shipped with OpenCV.
 
     This is used for DETECTION only (where the face is). It is not a recognition model:
     identity is decided exclusively by the PCA -> LDA -> classifier pipeline.
+
+    Raw Viola-Jones output contains duplicate boxes on one face and occasional small false positives elsewhere. Neither is
+    a second person, so before anything counts faces: duplicates are suppressed, and a candidate for a SECOND face must also
+    have real detector support (cascade confidence >= SECOND_FACE_MIN_WEIGHT). The largest detection is always kept, so a
+    lone face is never lost to this filter. A real second person is still reported: see docs/final/detection-evidence.md.
     """
 
     def detect(self, gray: np.ndarray) -> list[Box]:
         eq = cv2.equalizeHist(gray)
-        found = _face_cascade().detectMultiScale(
-            eq, scaleFactor=1.1, minNeighbors=5, minSize=(cfg.MIN_FACE_PIXELS // 2,) * 2
+        found, _, weights = _face_cascade().detectMultiScale3(
+            eq, scaleFactor=1.1, minNeighbors=5, minSize=(cfg.MIN_FACE_PIXELS // 2,) * 2, outputRejectLevels=True
         )
-        return [Box(int(x), int(y), int(w), int(h)) for (x, y, w, h) in found]
+        scored = [(Box(int(x), int(y), int(w), int(h)), float(wt)) for (x, y, w, h), wt in zip(found, weights, strict=False)]
+        scored.sort(key=lambda t: t[0].area, reverse=True)
+        kept: list[Box] = []
+        for box, weight in scored:
+            if any(is_same_face(box, k) for k in kept):
+                continue
+            if kept and weight < cfg.SECOND_FACE_MIN_WEIGHT:
+                continue  # a weak second candidate is not accepted as a person
+            kept.append(box)
+        return kept
 
 
 class FullFrameDetector:
@@ -237,17 +277,21 @@ def process_gray(
     *,
     check_quality: bool = True,
     second_face_ratio: float = cfg.SECOND_FACE_RATIO,
+    reject_multiple: bool = True,
 ) -> ProcessedFace:
-    """Detect, align, crop and quality-check a grayscale frame."""
+    """Detect, align, crop and quality-check a grayscale frame.
+
+    reject_multiple=False is for the authentication frames whose face count was already decided across the whole sequence
+    (see liveness.multiple_faces); the largest distinct face is then used."""
     h, w = gray.shape
     scale = cfg.DETECTION_MAX_SIDE / max(h, w)
     if scale < 1:
         gray = cv2.resize(gray, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
 
-    boxes = sorted(detector.detect(gray), key=lambda b: b.area, reverse=True)
+    boxes = distinct_faces(detector.detect(gray))
     if not boxes:
         raise FaceImageError(NO_FACE, "No face found. Face the camera in good light and try again.")
-    if len(boxes) > 1 and boxes[1].area >= second_face_ratio * boxes[0].area:
+    if reject_multiple and len(boxes) > 1 and boxes[1].area >= second_face_ratio * boxes[0].area:
         raise FaceImageError(MULTIPLE_FACES, "More than one face is visible. Make sure only you are in frame.")
     box = boxes[0]
     if box.w < cfg.MIN_FACE_PIXELS and not isinstance(detector, FullFrameDetector):

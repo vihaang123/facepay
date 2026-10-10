@@ -112,7 +112,11 @@ describe('recognition status on the setup page', () => {
 })
 
 const phase = () => screen.getByTestId('enroll-stage').dataset.phase
-const startSetup = async (user) => user.click(screen.getByRole('button', { name: /(Start|Continue) face setup/ }))
+const startSetup = async (user) => {
+  const consent = screen.queryByRole('checkbox', { name: /I agree that FacePay may use my camera/ })
+  if (consent) await user.click(consent) // a first-time setup asks for consent before anything is captured
+  await user.click(screen.getByRole('button', { name: /(Start|Continue) face setup/ }))
+}
 const until = (fn, timeout = 4000) => waitFor(fn, { timeout })
 
 
@@ -143,7 +147,7 @@ describe('guided face setup', () => {
     await openPage()
     expect(screen.queryByRole('button', { name: /capture sample/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('radio')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Start face setup' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Start face setup' })).toBeDisabled() // until the customer agrees
     expect(phase()).toBe('IDLE')
   })
 
@@ -396,7 +400,8 @@ describe('guided face setup', () => {
     const user = userEvent.setup()
     mockApi(routes())
     const { unmount } = renderApp('/face')
-    await user.click(await screen.findByRole('button', { name: 'Start face setup' }))
+    await screen.findByRole('button', { name: 'Start face setup' })
+    await startSetup(user)
     await until(() => expect(phase()).not.toBe('CAMERA_STARTING'))
     unmount()
     expect(stopTrack).toHaveBeenCalled()
@@ -454,3 +459,26 @@ describe('face data controls and recognition test', () => {
   })
 })
 
+
+describe('consent before biometric enrolment', () => {
+  it('captures nothing until the customer agrees, and records the agreement', async () => {
+    const user = userEvent.setup()
+    const api = await openPage()
+    const start = screen.getByRole('button', { name: /Start face setup/ })
+    expect(start).toBeDisabled()
+    expect(api.callsTo('POST /faces/consent')).toHaveLength(0)
+    await user.click(screen.getByRole('checkbox', { name: /I agree that FacePay may use my camera/ }))
+    expect(start).toBeEnabled()
+    await user.click(start)
+    await until(() => expect(api.callsTo('POST /faces/consent')).toHaveLength(1))
+    expect(api.callsTo('POST /faces/samples')).toHaveLength(0) // agreeing alone captures nothing
+  })
+  it('does not start when the agreement cannot be saved', async () => {
+    const user = userEvent.setup()
+    await openPage({ 'POST /faces/consent': { status: 500, body: { detail: 'boom' } } })
+    await user.click(screen.getByRole('checkbox', { name: /I agree that FacePay may use my camera/ }))
+    await user.click(screen.getByRole('button', { name: /Start face setup/ }))
+    expect(await screen.findByText(/consent could not be saved|went wrong|try again/i)).toBeInTheDocument()
+    expect(phase()).toBe('IDLE')
+  })
+})
