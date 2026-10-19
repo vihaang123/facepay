@@ -4,11 +4,11 @@
 
 FacePay is an academic prototype. A merchant creates a payment request, a customer opens the checkout link, shows their
 face to the camera, follows one short head-movement instruction, and, if the system accepts them, confirms a **simulated**
-payment. There is no UPI, bank or real money anywhere in it; the wallet balance, the transfers and a "transaction" are
-rows in PostgreSQL.
+payment. There is no UPI, bank or real money anywhere in it; the connected "bank accounts", the transfers and a
+"transaction" are rows in PostgreSQL.
 
 Beyond merchant checkout it now behaves like a small **UPI-style app with simulated money**: every customer has a
-FacePay ID (`name@facepay`, not a real UPI ID), a simulated balance, **Send** (recipient -> amount -> review -> face
+FacePay ID (`name@facepay`, not a real UPI ID), simulated **connected bank accounts** to pay from (no wallet balance), **Send** (recipient -> amount -> review -> face
 check -> confirm -> receipt), **Request**, **My QR / Scan QR**, and a filterable **Activity** history. Merchants see
 their own payments and an aggregate security summary. An **admin-only ML Lab** shows the PCA/LDA/classifier results;
 customers never see model internals. Details: [`docs/final/upi-style-payments.md`](docs/final/upi-style-payments.md).
@@ -77,7 +77,7 @@ needs the configured minimum of samples across several poses. A merchant account
 | `CORS_ORIGINS` | backend | Exact frontend origin(s), comma separated |
 | `APP_ENV` | backend | `production` enables the startup checks and turns off `/docs` |
 | `*_RATE_LIMIT_PER_MINUTE`, `JWT_*` | backend | Rate limits and token settings (defaults in `.env.example`) |
-| `OPENING_BALANCE`, `TRANSFER_SESSION_MINUTES`, `REQUEST_TTL_DAYS`, `FACEPAY_ID_CHANGE_COOLDOWN_DAYS` | backend | Optional simulated-wallet settings (defaults 10000, 10, 7, 30) |
+| `TRANSFER_SESSION_MINUTES`, `REQUEST_TTL_DAYS`, `FACEPAY_ID_CHANGE_COOLDOWN_DAYS` | backend | Optional transfer settings (defaults 10, 7, 30). `OPENING_BALANCE` is no longer used and is ignored if set |
 | `TEST_DATABASE_URL` | backend, tests only | Must name a database ending in `_test` |
 | `VITE_API_BASE_URL` | frontend | Backend URL, compiled into the bundle |
 
@@ -134,7 +134,7 @@ Render's free tier sleeps, so the first request after idle can be slow.
 * One shared model for everyone, trained on demand; per-process rate limits and caches (run one backend instance).
 * Tokens are kept in `localStorage`; no refresh tokens, revocation, email verification, password reset or Content-Security-Policy.
 * One encryption key, no rotation. No consent records or retention policy.
-* Simulated money only: no refunds or payouts, and nothing connects to UPI, a bank or a card network. The ledger is a prototype, not a bank-grade one. Historical simulated merchant payments made before the wallet existed were not subtracted from the opening balance.
+* Simulated money only: no refunds or payouts, and nothing connects to UPI, a bank or a card network. The ledger is a prototype, not a bank-grade one. Payments made under the earlier simulated wallet keep their ledger history; new payments are recorded as transactions with a demo funding source and do not touch a balance.
 * Guided face setup was exercised with a simulated camera only; its brightness, sharpness, motion and head-position thresholds are untuned, pose labels are client-asserted, and the duplicate-frame threshold is provisional.
 * The payment PIN and risk rules are a prototype sketch, not a fraud system.
 
@@ -147,6 +147,7 @@ Render's free tier sleeps, so the first request after idle can be slow.
 | [`docs/final/reproducibility.md`](docs/final/reproducibility.md) | Environment, dataset, seeds, commands |
 | [`docs/final/security-assessment.md`](docs/final/security-assessment.md) | Threats, mitigations, residual risks |
 | [`docs/final/guided-enrollment-and-payment-hardening.md`](docs/final/guided-enrollment-and-payment-hardening.md) | Guided auto-capture enrollment, authorization binding, PIN step-up, limits, Security page |
+| [`docs/final/face-first-payments.md`](docs/final/face-first-payments.md) | The face-first payment experience: connected demo banks, funding source at confirmation, payment requests, nearby (demo) discovery, merchant reconciliation, migration 0008, security rules |
 | [`docs/final/upi-style-payments.md`](docs/final/upi-style-payments.md) | FacePay IDs, wallet and ledger, send, request, QR, activity, roles, admin ML Lab, migration 0007, creating an admin |
 | [`docs/final/deployment-guide.md`](docs/final/deployment-guide.md) | Deployment preparation and checks |
 | [`docs/final/demo-script.md`](docs/final/demo-script.md) | Eight-minute demo walkthrough |

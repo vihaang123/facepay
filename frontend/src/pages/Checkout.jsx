@@ -3,14 +3,15 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AuthDetails, PaymentStages } from '../components/AuthStages'
 import Icon from '../components/Icon'
 import FaceAuthFlow from '../components/FaceAuthFlow'
+import { BankMark, DemoNotice } from '../components/banks'
 import { Amount, MerchantHeader, Row, SecurityNote, SimulatedTag, StatusBadge, Timeline } from '../components/payUi'
 import { Alert, Button, ButtonLink, Card, ErrorState, Skeleton } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
 import { assessFrame } from '../services/faces'
 import { ApiError } from '../services/api'
-import { authenticateForPayment, confirmPayment, getCheckout, startPaymentAuth } from '../services/payments'
+import { authenticateForPayment, cancelAuthorization, confirmPayment, getCheckout, startPaymentAuth } from '../services/payments'
 import { cancelTransfer } from '../services/transfers'
-import { DASHBOARD_PATH, RECEIPT_PATH, SECURITY_PATH } from '../utils/roles'
+import { BANKS_PATH, DASHBOARD_PATH, RECEIPT_PATH, SECURITY_PATH } from '../utils/roles'
 import { formatDateTime, formatMoney, isPayable } from '../utils/format'
 import { customerTimeline } from '../utils/timeline'
 
@@ -35,7 +36,8 @@ const CONFIRM_ERRORS = {
   SESSION_ALREADY_PAID: 'This payment was already completed. Check your payment history before paying again.',
   RECIPIENT_MISMATCH: 'The person you are paying changed. Please review the payment and verify your face again.',
   EXPECTATION_MISSING: 'We could not match what you reviewed with this payment. Please start again.',
-  INSUFFICIENT_BALANCE: 'Your balance is too low for this payment. No money moved.',
+  NO_FUNDING_SOURCE: 'Connect a demo bank account to pay from, then verify your face again. No money moved.',
+  FUNDING_SOURCE_INVALID: 'That bank account is not available any more. Choose another one. No money moved.',
   REQUEST_NOT_PENDING: 'The request behind this payment is no longer open. No money moved.',
   RECIPIENT_UNAVAILABLE: 'This person cannot receive payments right now. No money moved.',
 }
@@ -72,29 +74,75 @@ function Secured() {
 
 const PIN_LENGTH = 6
 
-function Authorized({ session, auth, outcome, error, pinError, busy, onConfirm, onRestart }) {
+function FundingPicker({ sources, value, onChange, disabled }) {
+  if (sources.length === 0) {
+    return (
+      <div className="rounded-xl bg-amber-50 p-4 text-sm ring-1 ring-amber-200">
+        <p className="font-semibold text-amber-900">Connect a demo bank account to pay</p>
+        <p className="mt-1 text-amber-900">A payment needs a funding source. This takes a few seconds and uses a simulated connection.</p>
+        <Link className="mt-2 inline-block font-semibold text-amber-900 underline" to={BANKS_PATH}>Connect a demo bank</Link>
+      </div>
+    )
+  }
+  return (
+    <fieldset disabled={disabled} className="flex flex-col gap-2">
+      <legend className="text-sm font-semibold text-slate-800">Pay from</legend>
+      <div className="mt-1 flex flex-col gap-2">
+        {sources.map((c) => (
+          <label key={c.connection_id} className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 transition ${value === c.connection_id ? 'border-brand-600 bg-brand-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+            <input type="radio" name="funding-source" value={c.connection_id} checked={value === c.connection_id} onChange={() => onChange(c.connection_id)} className="h-4 w-4 accent-brand-700" />
+            <BankMark bank={{ short: c.bank_code.toUpperCase().slice(0, 4), color: '#334155' }} size="h-9 w-9 text-[0.6rem]" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-semibold leading-tight">{c.bank_name} · {c.account_type_label}</span>
+              <span className="block font-mono text-xs text-slate-600">{c.account_ref}{c.is_default ? ' · Default' : ''}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      {sources.length > 1 && <p className="text-xs text-slate-600">You can pick a different demo account before you confirm.</p>}
+    </fieldset>
+  )
+}
+
+function Authorized({ session, auth, outcome, error, pinError, busy, onConfirm, onRestart, onCancel }) {
   const left = useSecondsLeft(auth.expiresAt)
   const [pin, setPin] = useState('')
+  const sources = session.funding_sources ?? []
+  const [sourceId, setSourceId] = useState(() => (sources.find((c) => c.is_default) ?? sources[0])?.connection_id ?? null)
   const expired = left === 0
-  const amount = formatMoney(session.amount, session.currency)
+  const total = session.total ?? session.amount
+  const confirmLabel = `Confirm and Pay ${formatMoney(total, session.currency)}`
   const needsPin = auth.stepUp
   const pinReady = !needsPin || (auth.pinSet && pin.length === PIN_LENGTH)
+  const ready = pinReady && sourceId !== null
   const submit = (e) => {
     e.preventDefault()
-    if (pinReady && !busy) onConfirm(needsPin ? pin : undefined)
+    if (ready && !busy) onConfirm({ pin: needsPin ? pin : undefined, fundingSourceId: sourceId })
   }
   return (
     <section aria-label="Confirm payment" className="animate-rise flex flex-col gap-5">
       <div className="rounded-[1.5rem] border border-slate-200/80 bg-white p-6 text-center shadow-card">
-        <h2 className="text-sm font-semibold text-slate-600">Confirm payment</h2>
+        <p className="inline-flex items-center gap-1.5 text-sm font-bold text-emerald-800">
+          <Icon name="check" className="h-4 w-4" strokeWidth="2.6" />Face verified
+        </p>
+        <h2 className="mt-1 text-sm font-semibold text-slate-600">Confirm payment</h2>
         <Amount value={session.amount} currency={session.currency} className="mt-2 text-5xl" data-testid="confirm-amount" />
         <dl className="mt-5 text-left">
           <Row label="To">
             {payeeName(session)}
-            {session.recipient_masked_id && <span className="block font-mono text-xs font-normal text-slate-600">{session.recipient_masked_id}</span>}
+            {session.recipient_facepay_id && <span className="block font-mono text-xs font-normal text-slate-600">{session.recipient_facepay_id}</span>}
+            {!session.recipient_facepay_id && session.recipient_masked_id && <span className="block font-mono text-xs font-normal text-slate-600">{session.recipient_masked_id}</span>}
           </Row>
-          {session.kind === 'TRANSFER' ? (session.note && <Row label="Note">{session.note}</Row>) : <Row label="Order">{session.order_reference ?? '—'}</Row>}
-          <Row label="Authenticated"><span className="text-emerald-800">Face + basic liveness check</span></Row>
+          {session.kind === 'TRANSFER' ? (session.note && <Row label="Description">{session.note}</Row>) : (
+            <>
+              <Row label="Order">{session.order_reference ?? '—'}</Row>
+              {session.description && <Row label="Description">{session.description}</Row>}
+            </>
+          )}
+          <Row label="Amount">{formatMoney(session.amount, session.currency)}</Row>
+          <Row label="Fee (simulated)">{formatMoney(session.fee ?? 0, session.currency)}</Row>
+          <Row label="Total"><span data-testid="confirm-total">{formatMoney(total, session.currency)}</span></Row>
+          <Row label="Authentication"><span className="text-emerald-800">Face + basic liveness check passed</span></Row>
         </dl>
         <SimulatedTag className="mt-3" />
       </div>
@@ -108,7 +156,9 @@ function Authorized({ session, auth, outcome, error, pinError, busy, onConfirm, 
           <Button size="lg" onClick={onRestart}>Verify again</Button>
         </div>
       ) : (
-        <form onSubmit={submit} className="flex flex-col gap-3" noValidate>
+        <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
+          <FundingPicker sources={sources} value={sourceId} onChange={setSourceId} disabled={busy} />
+          {sources.length > 0 && <DemoNotice />}
           {needsPin && (
             <div className="rounded-xl bg-amber-50 p-4 text-sm ring-1 ring-amber-200">
               <p className="font-semibold text-amber-900">This payment needs your payment PIN</p>
@@ -132,9 +182,9 @@ function Authorized({ session, auth, outcome, error, pinError, busy, onConfirm, 
               )}
             </div>
           )}
-          <Button size="lg" type="submit" disabled={!pinReady} loading={busy}>Confirm payment of {amount}</Button>
-          <Button variant="ghost" onClick={onRestart} disabled={busy}>Cancel</Button>
-          <p className="text-center text-xs text-slate-600">This authorization is for this payment only, can be used once and stays valid for {clock(left)}.</p>
+          <Button size="lg" type="submit" disabled={!ready} loading={busy}>{confirmLabel}</Button>
+          <Button variant="secondary" onClick={onCancel} disabled={busy}>Cancel</Button>
+          <p className="text-center text-xs text-slate-600">Nothing is paid until you confirm. This face check is for this payment only, works once and stays valid for {clock(left)}.</p>
         </form>
       )}
       <details className="rounded-xl bg-white/70 px-4 py-3 text-sm ring-1 ring-slate-200">
@@ -167,7 +217,8 @@ function Success({ receipt, session, outcome }) {
         <p className="mt-2 text-lg font-bold">{receipt.recipient_name ?? receipt.merchant_name ?? payeeName(session)}</p>
         <p className="mt-3 text-xs text-slate-600">Transaction</p>
         <p className="font-mono text-sm font-semibold">{receipt.transaction_id}</p>
-        <p className="mt-3 text-sm font-semibold text-emerald-800">Authenticated: {receipt.authentication ?? 'Face + basic liveness check'}</p>
+        {receipt.funding_source && <p className="mt-3 text-sm font-semibold">Paid from {receipt.funding_source.bank_name} · <span className="font-mono">{receipt.funding_source.account_ref}</span></p>}
+        <p className="mt-2 text-sm font-semibold text-emerald-800">Authenticated: {receipt.authentication ?? 'Face + basic liveness check'}</p>
         <p className="mt-1 text-xs text-slate-600">{formatDateTime(receipt.timestamp)}</p>
         <SimulatedTag className="mt-4" />
       </div>
@@ -195,7 +246,6 @@ function Summary({ session, payable, attempts, onPay, onCancel, cancelling }) {
         {transfer ? (
           <>
             {session.note && <Row label="Note">{session.note}</Row>}
-            {session.balance != null && <Row label="Your balance">{formatMoney(session.balance, session.currency)}</Row>}
             {session.request_id && <Row label="Answers request"><span className="font-mono text-[0.8rem]">{session.request_id}</span></Row>}
           </>
         ) : (
@@ -206,9 +256,15 @@ function Summary({ session, payable, attempts, onPay, onCancel, cancelling }) {
         )}
         <Row label="Status"><StatusBadge status={session.status} /></Row>
       </dl>
+      {payable && session.funding_sources?.length === 0 && (
+        <div className="mt-4 rounded-xl bg-amber-50 p-3.5 text-sm ring-1 ring-amber-200">
+          <p className="font-semibold text-amber-900">You have no demo bank account connected</p>
+          <p className="mt-1 text-amber-900">You can verify your face now, but you need a funding source to confirm. <Link className="font-semibold underline" to={BANKS_PATH}>Connect a demo bank</Link></p>
+        </div>
+      )}
       {payable && (
         <div className="mt-5 flex flex-col gap-3">
-          <p className="text-center text-sm font-semibold">Pay with FacePay</p>
+          <p className="text-center text-sm font-semibold">Pay with your face</p>
           <Button size="lg" onClick={onPay}><Icon name="face" className="h-5 w-5" />Pay with Face</Button>
           <Secured />
           <p className="text-center text-xs text-slate-600">{attempts}</p>
@@ -271,7 +327,7 @@ export default function Checkout() {
     if (err.status === 404 || err.status === 409) load() // the session changed under us: show its real state
   }
 
-  const confirm = async (pin) => {
+  const confirm = async ({ pin, fundingSourceId } = {}) => {
     setStep('processing')
     setConfirmError(null)
     setPinError(null)
@@ -284,6 +340,7 @@ export default function Checkout() {
           ? { expectedRecipient: session.recipient_facepay_id }
           : { expectedMerchant: session.merchant_name, expectedOrderReference: session.order_reference ?? '' }),
         pin,
+        fundingSourceId,
       })
       setReceipt(done)
       setSession((s) => ({ ...s, status: 'PAID' }))
@@ -308,6 +365,19 @@ export default function Checkout() {
         setStep('authorized') // network / server trouble: the authorization is still valid, let them retry
         setConfirmError(`${err.message} Your payment was not confirmed.`)
       }
+    }
+  }
+
+  // Cancel at the confirmation screen: the server voids the face authorization, so nothing can be paid with it.
+  const cancelConfirmation = async () => {
+    setConfirmError(null)
+    try {
+      await cancelAuthorization(token, sessionId)
+      restart()
+      setNotice('Payment not confirmed. Nothing was paid.')
+      load()
+    } catch (err) {
+      setConfirmError(`${err.message} Your payment was not confirmed.`)
     }
   }
 
@@ -351,7 +421,7 @@ export default function Checkout() {
     <div className="mx-auto flex w-full max-w-md flex-col gap-5">
       {heading && <h1 className="text-2xl font-extrabold tracking-tight">{heading}</h1>}
 
-      {notice && <Alert tone="error">{notice}</Alert>}
+      {notice && <Alert tone={notice.startsWith('Payment not confirmed') ? 'info' : 'error'}>{notice}</Alert>}
 
       {step !== 'paid' && (step === 'summary' || !payable) && (
         <Summary session={session} payable={payable && step === 'summary'} attempts={attempts} onPay={() => { setNotice(null); setStep('authenticating') }} onCancel={cancelPayment} cancelling={cancelling} />
@@ -378,7 +448,7 @@ export default function Checkout() {
       )}
 
       {step === 'authorized' && auth && outcome && (
-        <Authorized session={session} auth={auth} outcome={outcome} error={confirmError} pinError={pinError} onConfirm={confirm} onRestart={restart} />
+        <Authorized session={session} auth={auth} outcome={outcome} error={confirmError} pinError={pinError} onConfirm={confirm} onRestart={restart} onCancel={cancelConfirmation} />
       )}
 
       {step === 'processing' && <Processing outcome={outcome} />}

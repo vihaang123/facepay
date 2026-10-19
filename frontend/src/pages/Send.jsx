@@ -5,8 +5,7 @@ import RecipientPicker from '../components/RecipientPicker'
 import { Alert, Button, FormField, Skeleton } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
 import { useLoad } from '../hooks/useLoad'
-import { getWallet, prepareTransfer, resolveRecipient } from '../services/transfers'
-import { formatMoney } from '../utils/format'
+import { prepareTransfer, resolveRecipient } from '../services/transfers'
 import { MAX_AMOUNT, newKey, toAmountString, validateAmount } from '../utils/money'
 import { CHECKOUT_PATH } from '../utils/roles'
 
@@ -14,15 +13,12 @@ function AmountStep({ recipient, onBack }) {
   const { token } = useAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const wallet = useLoad(() => getWallet(token), [token])
   const [amount, setAmount] = useState(params.get('amount') ?? '')
   const [note, setNote] = useState('')
   const [error, setError] = useState(null)
   const [formError, setFormError] = useState(null)
   const [busy, setBusy] = useState(false)
   const key = useRef(newKey()) // one key per attempt: a double tap cannot prepare two payments
-
-  const balance = wallet.data ? Number(wallet.data.balance) : undefined
 
   const submit = async (e) => {
     e.preventDefault()
@@ -56,7 +52,6 @@ function AmountStep({ recipient, onBack }) {
           inputMode="decimal"
           autoComplete="off"
           placeholder="0.00"
-          hint={wallet.loading ? 'Checking your balance…' : balance !== undefined ? `Available: ${formatMoney(wallet.data.balance, wallet.data.currency)} (simulated)` : undefined}
         />
         <FormField label="Note (optional)" id="note" value={note} onChange={(e) => setNote(e.target.value.slice(0, 140))} maxLength={140} autoComplete="off" placeholder="What is it for?" hint={`${note.length} of 140`} />
       </div>
@@ -64,7 +59,7 @@ function AmountStep({ recipient, onBack }) {
         <Button size="lg" type="submit" loading={busy}>Review payment</Button>
         <Button variant="ghost" onClick={onBack} disabled={busy}>Change recipient</Button>
       </div>
-      <p className="text-center text-xs text-slate-600">Next you review the payment, verify your face and confirm. Nothing is sent until you confirm.</p>
+      <p className="text-center text-xs text-slate-600">Next you verify your face, pick the demo bank account to pay from and confirm. Nothing is sent until you confirm.</p>
     </form>
   )
 }

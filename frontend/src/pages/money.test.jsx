@@ -10,10 +10,11 @@ beforeEach(() => { window.localStorage.clear(); Object.assign(TIMING, { baseline
 
 const me = { ...customerProfile, facepay_id: 'asha.rao@facepay' }
 const ravi = { display_name: 'Ravi Shah', masked_id: 'ra***i@facepay', is_self: false }
+const BANK = { connection_id: 'bk_hdfc1', bank_code: 'hdfc', bank_name: 'HDFC Bank', account_type_label: 'Savings account', account_ref: 'DEMO-••••-4821', is_default: true }
 const inHour = () => new Date(Date.now() + 3_600_000).toISOString()
 const session = (over = {}) => ({
   session_id: 'ps_transfer1', kind: 'TRANSFER', merchant_name: null, recipient_name: 'Ravi Shah', recipient_facepay_id: 'ravi.shah@facepay', recipient_masked_id: 'ra***i@facepay',
-  note: 'Cab fare', request_id: null, balance: '9500.00', order_reference: null, description: null, amount: '250.00', currency: 'INR', status: 'CREATED',
+  note: 'Cab fare', request_id: null, fee: '0.00', total: '250.00', funding_sources: [BANK], order_reference: null, description: null, amount: '250.00', currency: 'INR', status: 'CREATED',
   expires_at: inHour(), max_auth_attempts: 5, attempts_remaining: 5, authorization_seconds: 120, ...over,
 })
 const request = (over = {}) => ({
@@ -23,7 +24,7 @@ const request = (over = {}) => ({
 })
 const base = () => ({
   'GET /users/me': { body: me },
-  'GET /wallet': { body: { balance: '9500.00', currency: 'INR', simulated: true, entries: [] } },
+  'GET /banks': { body: [] },
   'GET /facepay/contacts': { body: [] },
 })
 
@@ -59,7 +60,7 @@ describe('role separation in the app', () => {
     renderApp('/dashboard')
     const main = await screen.findByRole('navigation', { name: 'Main' })
     expect(within(main).queryByText(/ML Lab/)).not.toBeInTheDocument()
-    expect(within(main).getAllByRole('link').map((a) => a.textContent)).toEqual(['Home', 'Send', 'Scan', 'Activity', 'Requests', 'My QR', 'Face profile', 'Security', 'Profile'])
+    expect(within(main).getAllByRole('link').map((a) => a.textContent)).toEqual(['Home', 'Pay', 'Send', 'Activity', 'Banks', 'Scan', 'Requests', 'My QR', 'Face profile', 'Security', 'Profile'])
   })
 
   it('signing in as an administrator lands on the ML Lab', async () => {
@@ -164,13 +165,13 @@ describe('Send money', () => {
 
     await user.type(await screen.findByLabelText('Amount (₹)'), '250')
     await user.type(screen.getByLabelText('Note (optional)'), 'Cab fare')
-    expect(await screen.findByText(/Available: ₹9,500\.00/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Review payment' }))
 
     const call = api.callsTo('POST /transfers')[0]
     expect(call.body).toEqual({ recipient_facepay_id: 'Ravi.Shah@facepay', amount: '250.00', note: 'Cab fare' })
     expect(call.headers['Idempotency-Key']).toMatch(/.{8,}/)
-    // the review: recipient, amount, note and balance, before any face check
+    // the review: recipient, amount and note, before any face check, and no balance anywhere
+    expect(document.body.textContent).not.toMatch(/balance/i)
     expect(await screen.findByRole('heading', { name: 'Review payment' })).toBeInTheDocument()
     const summary = screen.getByRole('region', { name: 'Payment summary' })
     expect(within(summary).getByText('Ravi Shah')).toBeInTheDocument()
@@ -194,14 +195,14 @@ describe('Send money', () => {
     },
   )
 
-  it('shows the server’s reason when it refuses (for example an insufficient balance) and keeps the form', async () => {
+  it('shows the server’s reason when it refuses (for example a payment limit) and keeps the form', async () => {
     const user = userEvent.setup()
     storeSession('customer')
-    mockApi({ ...base(), 'GET /facepay/resolve': { body: ravi }, 'POST /transfers': { status: 409, body: { detail: { code: 'INSUFFICIENT_BALANCE', message: 'Your balance is too low for this payment.' } } } })
+    mockApi({ ...base(), 'GET /facepay/resolve': { body: ravi }, 'POST /transfers': { status: 409, body: { detail: { code: 'PER_TRANSACTION_LIMIT', message: 'That is above your per-payment limit.' } } } })
     renderApp('/send?to=ravi.shah%40facepay')
     await user.type(await screen.findByLabelText('Amount (₹)'), '99999')
     await user.click(screen.getByRole('button', { name: 'Review payment' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Your balance is too low for this payment.')
+    expect(await screen.findByRole('alert')).toHaveTextContent('That is above your per-payment limit.')
     expect(screen.getByLabelText('Amount (₹)')).toHaveValue('99999')
   })
 
@@ -276,15 +277,15 @@ describe('paying a person: checkout', () => {
     expect(within(section).getByText('Ravi Shah')).toBeInTheDocument() // shown again after the face check
     expect(within(section).getByTestId('confirm-amount')).toHaveTextContent('₹250.00')
     expect(within(section).getByText('Cab fare')).toBeInTheDocument()
-    await user.click(within(section).getByRole('button', { name: /Confirm payment of ₹250\.00/ }))
+    await user.click(within(section).getByRole('button', { name: /Confirm and Pay ₹250\.00/ }))
     expect(await screen.findByRole('heading', { name: 'Payment successful' })).toBeInTheDocument()
 
-    expect(api.callsTo('POST /payments/sessions/ps_transfer1/confirm')[0].body).toEqual({ authorization_token: 'T'.repeat(43), expected_amount: '250.00', expected_recipient: 'ravi.shah@facepay' })
+    expect(api.callsTo('POST /payments/sessions/ps_transfer1/confirm')[0].body).toEqual({ authorization_token: 'T'.repeat(43), expected_amount: '250.00', expected_recipient: 'ravi.shah@facepay', funding_source_id: 'bk_hdfc1' })
     expect(screen.getByText('Ravi Shah')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'View receipt' })).toHaveAttribute('href', '/receipts/FP-TRANSFER01')
   })
 
-  it('a payment that cannot be confirmed because of the balance says so and moves no money', async () => {
+  it('a payment whose bank account is no longer available says so and moves no money', async () => {
     const user = userEvent.setup()
     storeSession('customer')
     mockApi({
@@ -292,15 +293,15 @@ describe('paying a person: checkout', () => {
       'GET /payments/sessions/ps_transfer1': { body: session() },
       'POST /payments/sessions/ps_transfer1/authenticate/start': { body: challenge },
       'POST /payments/sessions/ps_transfer1/authenticate': { body: ok },
-      'POST /payments/sessions/ps_transfer1/confirm': { status: 409, body: { detail: { code: 'INSUFFICIENT_BALANCE', message: 'x' } } },
+      'POST /payments/sessions/ps_transfer1/confirm': { status: 409, body: { detail: { code: 'FUNDING_SOURCE_INVALID', message: 'x' } } },
     })
     renderApp('/checkout/ps_transfer1')
     await user.click(await screen.findByRole('button', { name: /Pay with Face/ }))
     await user.click(await screen.findByRole('button', { name: 'Turn camera on' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start face check' })).toBeEnabled())
     await user.click(screen.getByRole('button', { name: 'Start face check' }))
-    await user.click(await screen.findByRole('button', { name: /Confirm payment of/ }))
-    expect(await screen.findByText(/balance is too low for this payment\. No money moved/)).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: /Confirm and Pay/ }))
+    expect(await screen.findByText(/bank account is not available any more.*No money moved/)).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Payment successful' })).not.toBeInTheDocument()
   })
 

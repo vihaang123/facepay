@@ -43,6 +43,7 @@ export const MY_QR_PATH = '/my-qr'
 export const ACTIVITY_PATH = '/activity'
 export const ACTIVITY_DETAIL_PATH = (ref) => `/activity/${ref}`
 export const FACEPAY_ID_PATH = '/facepay-id'
+export const BANKS_PATH = '/banks'
 
 /** Deep link into Send with a recipient already chosen (from QR, contacts or a request). Only the ID travels in the URL. */
 export const sendTo = (id, amount) => `${SEND_PATH}?to=${encodeURIComponent(id)}${amount ? `&amount=${encodeURIComponent(amount)}` : ''}`

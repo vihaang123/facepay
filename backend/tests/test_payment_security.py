@@ -352,7 +352,8 @@ def test_pin_rules(client, trained, db):
     assert stored.startswith("$argon2") and "482915" not in stored
     removed = client.post("/security/pin/remove", json={"password": STRONG_PASSWORD}, headers=a["headers"])
     assert removed.status_code == 200 and removed.json()["pin_set"] is False
-    assert events(db, a["id"]) == ["PIN_SET", "PIN_REMOVED"]
+    # the fixture customer connected a demo bank first (BANK_CONNECTED); the PIN events follow, in order, with nothing else
+    assert events(db, a["id"]) == ["BANK_CONNECTED", "PIN_SET", "PIN_REMOVED"]
 
 
 # ============================================================ lockout after repeated biometric failures
@@ -408,7 +409,7 @@ def test_turning_biometric_payments_off_blocks_face_authentication_and_unused_ti
     on = client.put("/security/biometric", json={"enabled": True}, headers=a["headers"])
     assert on.json()["biometric_enabled"] is True
     assert confirm(client, a, sid, token).status_code == 200
-    assert events(db, a["id"])[:2] == ["BIOMETRIC_DISABLED", "BIOMETRIC_ENABLED"]
+    assert events(db, a["id"])[:3] == ["BANK_CONNECTED", "BIOMETRIC_DISABLED", "BIOMETRIC_ENABLED"]
 
 
 def test_removing_face_data_retires_the_profile_and_is_audited(client, trained, shop, db):

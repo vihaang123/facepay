@@ -50,6 +50,7 @@ def _transactions(db: Session, user: User, flt: str, q: str | None, cap: int) ->
     out = []
     for t, payer_name, payer_id, recipient_name, recipient_id, merchant_name, order_ref in db.execute(query.order_by(Transaction.id.desc()).limit(cap)):
         sent = t.payer_id == user.id
+        funding = f"{t.funding_bank_name} · {t.funding_account_ref}" if sent and t.funding_bank_name else None
         if sent:
             other_name = merchant_name or recipient_name
             other_id = fid.mask(recipient_id) if recipient_id else None
@@ -68,6 +69,7 @@ def _transactions(db: Session, user: User, flt: str, q: str | None, cap: int) ->
                 "timestamp": t.timestamp,
                 "note": t.note,
                 "order_reference": order_ref,
+                "funding_source": funding,
             }
         )
     return out
@@ -192,6 +194,7 @@ def detail(db: Session, user: User, ref: str) -> dict:
             "authentication": _authentication_label(db, ps),
             "order_reference": ps.order_reference if ps else None,
             "request_id": req,
+            "funding_source": f"{txn.funding_bank_name} · {txn.funding_account_ref}" if txn.payer_id == user.id and txn.funding_bank_name else None,
         }
     if ref.startswith("pr_"):
         view = request_service.view(db, user, ref)

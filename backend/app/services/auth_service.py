@@ -13,9 +13,8 @@ from app.core.security import (
     password_needs_rehash,
     verify_password,
 )
-from app.core.config import get_settings
 from app.models import Merchant, User
-from app.services import facepay_service, ledger_service
+from app.services import facepay_service
 from app.schemas.auth import (
     CustomerRegister,
     MerchantRegister,
@@ -37,7 +36,7 @@ class AccountDisabled(Exception):
 
 
 def register_customer(db: Session, data: CustomerRegister) -> User:
-    """Creates the customer with a unique FacePay ID and the simulated opening balance, in one commit."""
+    """Creates the customer with a unique FacePay ID in one commit. FacePay keeps no wallet: nobody is given a balance."""
     if db.scalar(select(User.id).where(User.email == data.email)) is not None:
         raise EmailAlreadyRegistered
     password_hash = hash_password(data.password)
@@ -52,7 +51,6 @@ def register_customer(db: Session, data: CustomerRegister) -> User:
         db.add(user)
         try:
             db.flush()
-            ledger_service.grant_opening_balance(db, user, get_settings().opening_balance)
             db.commit()
         except IntegrityError as exc:
             db.rollback()

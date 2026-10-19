@@ -215,7 +215,11 @@ def test_full_flow_merchant_to_receipt_to_both_dashboards(client, trained, shop,
     theirs = client.get("/merchant/transactions", headers=shop["headers"]).json()
     assert [t["transaction_id"] for t in theirs] == [rec["transaction_id"]] and theirs[0]["payer_name"] == "Asha Rao"
     assert "email" not in theirs[0] and "payer_id" not in theirs[0]
-    assert client.get(f"/merchant/transactions/{rec['transaction_id']}", headers=shop["headers"]).json() == rec
+    # The merchant sees the same receipt, except that the payer's own bank account is private to the payer.
+    merchant_view = client.get(f"/merchant/transactions/{rec['transaction_id']}", headers=shop["headers"]).json()
+    assert rec["funding_source"] == {"bank_name": a["bank"]["bank_name"], "account_ref": a["bank"]["account_ref"]}
+    assert merchant_view["funding_source"] is None
+    assert {**merchant_view, "funding_source": rec["funding_source"]} == rec
     ms = client.get(f"/merchant/payment-sessions/{sid}", headers=shop["headers"]).json()
     assert ms["status"] == "PAID" and ms["transaction_id"] == rec["transaction_id"]
     sm = client.get("/merchant/summary", headers=shop["headers"]).json()

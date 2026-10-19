@@ -25,13 +25,13 @@ not part of the unit-test suites (it needs the whole stack running) and is kept 
 # 2. API (from backend/): relaxed limits and 8-sample minimum, for the test only
 AUTH_RATE_LIMIT_PER_MINUTE=1000 FACE_RATE_LIMIT_PER_MINUTE=1000 FACE_AUTH_RATE_LIMIT_PER_MINUTE=1000 \
 TRAIN_RATE_LIMIT_PER_MINUTE=100 PAYMENT_RATE_LIMIT_PER_MINUTE=1000 RESOLVE_RATE_LIMIT_PER_MINUTE=1000 \
-TRANSFER_RATE_LIMIT_PER_MINUTE=1000 OPENING_BALANCE=100000 PYTHONPATH=. \
+TRANSFER_RATE_LIMIT_PER_MINUTE=1000 PYTHONPATH=. \
 python -c "from app.ml import config as c; c.MIN_SAMPLES_PER_USER = 8; import uvicorn; from app.main import app; uvicorn.run(app, host='127.0.0.1', port=8000)"
 # 3. frontend: npm run build && npx vite preview --port 5173 --host localhost
 # 4. seed + run (needs `playwright` and `axe-core` installed where run.mjs lives, and the ORL .npz with arrays X, y)
 ORL_NPZ=/path/to/orl.npz python seed.py && BACKEND_DIR=/path/to/backend node run.mjs
 # BACKEND_DIR must hold a .venv (or set BACKEND_PY): the admin step promotes an account with `python -m app.cli create-admin`.
-# OPENING_BALANCE=100000 lets the large-payment step (12,000) and the transfers run on one account; use a scratch database.
+# Payments need a connected demo bank account (Banks page); the script's accounts must connect one first. Use a scratch database.
 # add BLUR_CAMERA=1 to blur the camera preview in screenshots (used for the pictures in docs/final/screenshots)
 ```
 

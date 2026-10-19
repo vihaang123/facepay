@@ -72,7 +72,7 @@ class ContactOut(BaseModel):
 
 
 class TransferCreate(BaseModel):
-    """What the payer chooses. The recipient is re-resolved on the server, and limits and balance are checked there."""
+    """What the payer chooses. The recipient is re-resolved on the server, and limits are checked there."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -94,21 +94,6 @@ class CancelOut(BaseModel):
     status: str
 
 
-class LedgerLine(BaseModel):
-    direction: str
-    amount: Decimal
-    balance_after: Decimal
-    kind: str
-    created_at: datetime
-
-
-class WalletOut(BaseModel):
-    balance: Decimal
-    currency: str
-    simulated: bool
-    entries: list[LedgerLine]
-
-
 class ActivityItem(BaseModel):
     ref: str
     kind: str  # MERCHANT_PAYMENT | TRANSFER | REQUEST
@@ -121,6 +106,8 @@ class ActivityItem(BaseModel):
     timestamp: datetime
     note: str | None
     order_reference: str | None
+    # The simulated bank account a SENT payment was made from ("HDFC Bank · DEMO-••••-4821"). Never shown to the recipient.
+    funding_source: str | None = None
 
 
 class ActivityDetail(ActivityItem):

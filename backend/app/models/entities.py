@@ -229,6 +229,8 @@ class PaymentSession(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Rejected face-authentication attempts that counted against this session (see payment_service).
     failed_auth_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # The merchant chose to display this request in the simulated "nearby" list (a demo of discovery; no location is used).
+    discoverable: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
 
     merchant: Mapped[Merchant | None] = relationship(back_populates="payment_sessions")
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="payment_session")
@@ -272,6 +274,11 @@ class Transaction(Base):
     payment_method: Mapped[str] = mapped_column(String(20), default="FACE_PAY", server_default="FACE_PAY")
     status: Mapped[str] = mapped_column(String(20), default="PENDING", server_default="PENDING")
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # The simulated bank account this payment was made from. Name and reference are copied so the receipt stays correct
+    # if the account is disconnected later. Only the payer ever sees them.
+    funding_source_id: Mapped[int | None] = mapped_column(ForeignKey("bank_connections.id", name="fk_transactions_funding_source"))
+    funding_bank_name: Mapped[str | None] = mapped_column(String(80))
+    funding_account_ref: Mapped[str | None] = mapped_column(String(24))
 
     merchant: Mapped[Merchant | None] = relationship(back_populates="transactions")
     payer: Mapped[User] = relationship(back_populates="transactions", foreign_keys=[payer_id])
@@ -389,6 +396,43 @@ class PaymentRequest(Base):
     transaction_id: Mapped[int | None] = mapped_column(
         ForeignKey("transactions.id", use_alter=True, name="fk_payment_requests_transaction")  # breaks the table-creation cycle
     )
+
+
+class BankConnection(Base):
+    """A SIMULATED bank connection: the funding source a customer picks when paying. It is a record and nothing more:
+    no credentials, no real account number, no balance, and nothing is ever sent to a bank. The reference shown to the
+    customer is DEMO-••••-<last4>, which cannot be mistaken for a real account number."""
+
+    __tablename__ = "bank_connections"
+    __table_args__ = (
+        CheckConstraint("status IN ('CONNECTED', 'DISCONNECTED')", name="ck_bank_connections_status"),
+        CheckConstraint("account_type IN ('SAVINGS', 'SALARY', 'CURRENT')", name="ck_bank_connections_type"),
+        CheckConstraint("account_last4 ~ '^[0-9]{4}$'", name="ck_bank_connections_last4"),
+        CheckConstraint("NOT is_default OR status = 'CONNECTED'", name="ck_bank_connections_default_connected"),
+        Index("ix_bank_connections_user_status", "user_id", "status"),
+        # One default per customer, and one live connection per (customer, bank, account type).
+        Index("uq_bank_connections_one_default", "user_id", unique=True, postgresql_where=text("is_default AND status = 'CONNECTED'")),
+        Index(
+            "uq_bank_connections_live_account", "user_id", "bank_code", "account_type", unique=True,
+            postgresql_where=text("status = 'CONNECTED'"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    connection_id: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    bank_code: Mapped[str] = mapped_column(String(24))
+    bank_name: Mapped[str] = mapped_column(String(80))
+    account_type: Mapped[str] = mapped_column(String(20))
+    account_last4: Mapped[str] = mapped_column(String(4))
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    status: Mapped[str] = mapped_column(String(16), default="CONNECTED", server_default="CONNECTED")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    disconnected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    @property
+    def account_ref(self) -> str:
+        return f"DEMO-••••-{self.account_last4}"
 
 
 class LedgerEntry(Base):

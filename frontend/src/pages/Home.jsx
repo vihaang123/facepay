@@ -77,7 +77,7 @@ export default function Home() {
             </p>
             <h1 className="mt-5 text-[2.75rem] font-extrabold leading-[1.02] tracking-tight sm:text-6xl">Pay with your face.</h1>
             <p className="mt-5 max-w-md text-lg leading-relaxed text-slate-700">
-              FacePay uses facial authentication to authorize simulated digital payments.
+              FacePay uses facial authentication to authorize simulated digital payments. Confirm with confidence: you see who you are paying and how much, verify your face, then confirm.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <ButtonLink to="/register" size="lg" className="sm:w-auto sm:px-8">Try FacePay</ButtonLink>
@@ -162,7 +162,7 @@ export default function Home() {
             <div>
               <h3 className="font-bold text-rose-800">What it is not</h3>
               <ul className="mt-2 space-y-2 text-sm leading-relaxed text-slate-700">
-                <li>Not connected to any bank, card network or UPI. No real money moves.</li>
+                <li>Not connected to any bank, card network or UPI. Bank accounts in the app are demo records, no real account is accessed and no real money moves.</li>
                 <li>Not a replacement for existing payment methods or production financial infrastructure.</li>
                 <li>Not proven secure: the liveness check is basic and can be fooled by determined attackers.</li>
               </ul>

@@ -72,7 +72,7 @@ profiles are stored encrypted in PostgreSQL, not on disk, so Render's ephemeral 
 | `BIOMETRIC_KEY` | required | AES-256 key: 32 random bytes, base64. See section 3. |
 | `CORS_ORIGINS` | required | Exact Vercel origin(s), comma separated, e.g. `https://your-app.vercel.app`. `*` or an empty list stops the app starting in production. |
 | `FORWARDED_ALLOW_IPS` | recommended on Render: `*` | Read by uvicorn. Lets the per-IP rate limits see the real client behind Render's proxy. Only set it when the app is reachable only through that proxy. |
-| `OPENING_BALANCE` | optional (default `10000`) | Simulated rupees granted once to each **new** customer (and to existing customers by migration 0007, on first deploy only). Changing it later affects new accounts only. |
+| `OPENING_BALANCE` | no longer used | Removed with the wallet. If it is still set on Render it is ignored and can be deleted. |
 | `TRANSFER_SESSION_MINUTES`, `REQUEST_TTL_DAYS`, `FACEPAY_ID_CHANGE_COOLDOWN_DAYS`, `RESOLVE_RATE_LIMIT_PER_MINUTE`, `TRANSFER_RATE_LIMIT_PER_MINUTE` | optional (defaults 10, 7, 30, 20, 20) | Transfer review window, money-request lifetime, how rarely a FacePay ID can be renamed, and per-customer limits on ID lookups and on creating transfers or requests. |
 | `JWT_ALGORITHM`, `JWT_EXPIRE_MINUTES`, `RATE_LIMIT_ENABLED`, `AUTH_/FACE_/FACE_AUTH_/PAYMENT_/TRAIN_RATE_LIMIT_PER_MINUTE` | optional | Defaults in `.env.example`. Keep rate limiting on. |
 | `PORT` | provided by Render | Read by the Docker start command (default 8000). Do not set it. |
@@ -138,7 +138,7 @@ names and sizes in the dashboard).
 3. **Set the environment variables** from section 2: `APP_ENV=production`, `DATABASE_URL` (internal URL),
    `JWT_SECRET`, `BIOMETRIC_KEY`, `CORS_ORIGINS` (a placeholder you will fix in step 8, for example
    `http://localhost:5173`; do not leave it at that), `FORWARDED_ALLOW_IPS=*`.
-4. **Deploy.** The container runs `alembic upgrade head` and then starts the API. Watch the logs for the migrations (0007 adds FacePay IDs, the simulated wallet and ledger, money requests and transfers: it gives every existing customer a generated FacePay ID and the opening balance, and deletes nothing. 0006 adds the payment-security columns and `security_events`; existing two-minute authorizations stop working, which is harmless)
+4. **Deploy.** The container runs `alembic upgrade head` and then starts the API. Watch the logs for the migrations (0008 adds the `bank_connections` table, the funding-source snapshot columns on `transactions` and the `discoverable` flag on `payment_sessions`: it adds only, deletes nothing and gives nobody a bank account or a balance. 0007 adds FacePay IDs, the simulated wallet and ledger, money requests and transfers: it gives every existing customer a generated FacePay ID and the opening balance, and deletes nothing. 0006 adds the payment-security columns and `security_events`; existing two-minute authorizations stop working, which is harmless)
    on first start.
 5. **Verify** `https://<render-service>/health` returns `{"status":"ok","database":"ok",...}` and `/docs` returns 404.
 6. **Vercel: import the repo** (Add New > Project). **Root Directory `frontend`**, Framework Preset **Vite**,
@@ -218,7 +218,7 @@ Nothing in this section was run against Render or Vercel by the build session.
 2. Optional: take a database backup or snapshot first (Render dashboard > Postgres > Backups). 0007 only adds
    tables, columns and constraints, and fills them for existing rows. `alembic downgrade 0006` exists and was tested
    on seeded data, but restore from the snapshot rather than downgrading a database that already has transfers.
-3. Environment: no variable is required. Optional: `OPENING_BALANCE`, `TRANSFER_SESSION_MINUTES`, `REQUEST_TTL_DAYS`,
+3. Environment: no variable is required. Optional: `TRANSFER_SESSION_MINUTES`, `REQUEST_TTL_DAYS`,
    `FACEPAY_ID_CHANGE_COOLDOWN_DAYS`, `RESOLVE_RATE_LIMIT_PER_MINUTE`, `TRANSFER_RATE_LIMIT_PER_MINUTE`.
    Keep `CORS_ORIGINS` as the exact Vercel origin. The API now also allows the `Idempotency-Key` header in CORS.
 4. Open the Render **Shell** and create the administrator (the account must be registered first; there is no web

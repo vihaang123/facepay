@@ -2,52 +2,102 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import Icon from '../components/Icon'
 import { ActivityList, IdChip, NoActivity } from '../components/money'
-import { Alert, Card, ErrorState, FeedSkeleton, Skeleton } from '../components/ui'
+import { Alert, ButtonLink, Card, ErrorState, FeedSkeleton, Skeleton } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
 import { useLoad } from '../hooks/useLoad'
 import { getAttempts } from '../services/faceAuth'
 import { getEnrollment, getModel } from '../services/faces'
-import { getActivity, getActivityCounts, getWallet } from '../services/transfers'
+import { getMyBanks } from '../services/banks'
+import { getActivity, getActivityCounts } from '../services/transfers'
 import { faceStatus } from '../utils/faceStatus'
-import { formatFeedTime, formatMoney, greeting } from '../utils/format'
-import { ACTIVITY_PATH, AUTHENTICATE_PATH, FACE_PATH, MY_QR_PATH, REQUESTS_PATH, REQUEST_PATH, SCAN_PATH, SECURITY_PATH, SEND_PATH } from '../utils/roles'
+import { DEMO_DISCLAIMER } from '../utils/demo'
+import { formatFeedTime, greeting } from '../utils/format'
+import { ACTIVITY_PATH, AUTHENTICATE_PATH, BANKS_PATH, FACE_PATH, MY_QR_PATH, PAY_PATH, PROFILE_PATH, REQUESTS_PATH, REQUEST_PATH, SCAN_PATH, SECURITY_PATH, SEND_PATH } from '../utils/roles'
 
 const linkClass = 'text-sm font-semibold text-brand-700 underline-offset-2 hover:underline'
 
-const ACTIONS = [
-  ['Send money', SEND_PATH, 'send'],
-  ['Request money', REQUEST_PATH, 'request'],
-  ['Scan QR', SCAN_PATH, 'scan'],
-  ['My QR', MY_QR_PATH, 'qr'],
+const TILES = [
+  ['Pay a person', SEND_PATH, 'user', 'By FacePay ID'],
+  ['Pay a merchant', PAY_PATH, 'store', 'Link or request'],
+  ['Payment requests', REQUESTS_PATH, 'request', 'Money asked of you'],
+  ['FacePay nearby', PAY_PATH, 'nearby', 'Demo discovery'],
 ]
 
-function Balance() {
-  const { token } = useAuth()
-  const state = useLoad(() => getWallet(token), [token])
-  const [hidden, setHidden] = useState(false)
+/** The face-first action: the most prominent thing on the screen. */
+function FaceHero() {
   return (
-    <section aria-label="Balance" className="rounded-[1.5rem] bg-brand-800 p-5 text-white shadow-card">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-white/80">FacePay balance</p>
-        <button
-          type="button"
-          onClick={() => setHidden((h) => !h)}
-          aria-pressed={hidden}
-          aria-label={hidden ? 'Show balance' : 'Hide balance'}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white/90 transition hover:bg-white/10"
+    <section aria-label="Pay with your face" className="relative overflow-hidden rounded-[1.75rem] bg-brand-800 p-6 text-white shadow-card">
+      <span aria-hidden="true" className="pointer-events-none absolute -right-8 -top-8 h-36 w-36 rounded-full bg-white/10" />
+      <span aria-hidden="true" className="pointer-events-none absolute -bottom-10 right-10 h-24 w-24 rounded-full bg-white/5" />
+      <div className="relative">
+        <span aria-hidden="true" className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15"><Icon name="face" className="h-8 w-8" /></span>
+        <h2 className="mt-4 text-2xl font-extrabold leading-tight tracking-tight">Pay with your face.<br />Confirm with confidence.</h2>
+        <p className="mt-2 max-w-sm text-sm text-white/85">Open a payment, check who and how much, verify your face, then confirm. Nothing is paid until you say so.</p>
+        <Link
+          to={PAY_PATH}
+          className="mt-5 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 text-base font-bold text-brand-800 shadow-sm transition hover:bg-brand-50 active:scale-[0.98] motion-reduce:transition-none"
         >
-          <Icon name={hidden ? 'eyeoff' : 'eye'} className="h-5 w-5" />
-        </button>
+          <Icon name="face" className="h-5 w-5" />Pay with Face
+        </Link>
+        <p className="mt-3 text-xs text-white/80">Simulated payments. No real bank account is accessed and no money is transferred.</p>
       </div>
-      {state.loading ? (
-        <div role="status" aria-label="Loading balance" className="mt-2"><Skeleton className="h-10 w-44 !bg-white/20" /></div>
-      ) : state.error ? (
-        <p role="alert" className="mt-2 text-sm">Balance unavailable. <button type="button" onClick={state.reload} className="font-semibold underline">Try again</button></p>
-      ) : (
-        <p className="amount mt-1 text-4xl font-extrabold" data-testid="balance">{hidden ? '₹ ••••••' : formatMoney(state.data.balance, state.data.currency)}</p>
-      )}
-      <p className="mt-2 text-xs text-white/80">Simulated balance for this prototype. No real money, bank or UPI account is involved.</p>
     </section>
+  )
+}
+
+function Tiles() {
+  const { token } = useAuth()
+  const counts = useLoad(() => getActivityCounts(token), [token])
+  const waiting = counts.data?.pending_incoming_requests ?? 0
+  return (
+    <nav aria-label="Payment options" className="grid grid-cols-2 gap-3">
+      {TILES.map(([label, to, icon, hint]) => (
+        <Link key={label} to={to} className="relative flex min-h-[6.5rem] flex-col items-start justify-between gap-3 rounded-[1.25rem] border border-slate-200/80 bg-white p-4 shadow-card transition hover:border-brand-200 active:scale-[0.98] motion-reduce:transition-none">
+          <span aria-hidden="true" className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-50 text-brand-700"><Icon name={icon} className="h-5 w-5" /></span>
+          <span>
+            <span className="block text-sm font-bold leading-tight">{label}</span>
+            <span className="block text-xs text-slate-600">{hint}</span>
+          </span>
+          {to === REQUESTS_PATH && waiting > 0 && (
+            <span aria-label={`${waiting} waiting for you`} className="absolute right-3 top-3 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1 text-[0.7rem] font-bold text-white">{waiting > 9 ? '9+' : waiting}</span>
+          )}
+        </Link>
+      ))}
+    </nav>
+  )
+}
+
+function ConnectedBanks() {
+  const { token } = useAuth()
+  const state = useLoad(() => getMyBanks(token), [token])
+  return (
+    <Card title="Connected bank accounts" aria-label="Connected bank accounts" action={<Link className={linkClass} to={BANKS_PATH}>Manage</Link>}>
+      {state.loading ? (
+        <div role="status" aria-label="Loading bank accounts"><Skeleton className="h-14 w-full" /></div>
+      ) : state.error ? (
+        <ErrorState message={state.error} onRetry={state.reload} />
+      ) : state.data.length === 0 ? (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-slate-700">Connect a demo bank account to choose where your payments come from. You need one to confirm a payment.</p>
+          <ButtonLink to={BANKS_PATH} variant="secondary"><Icon name="bank" className="h-4 w-4" />Connect a demo bank</ButtonLink>
+        </div>
+      ) : (
+        <ul aria-label="Connected banks" className="flex flex-col gap-2">
+          {state.data.slice(0, 3).map((c) => (
+            <li key={c.connection_id} className="flex items-center gap-3">
+              <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-700"><Icon name="bank" className="h-5 w-5" /></span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold leading-tight">{c.bank_name} · {c.account_type_label}</p>
+                <p className="font-mono text-xs text-slate-600">{c.account_ref}</p>
+              </div>
+              {c.is_default && <span className="shrink-0 rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-semibold text-brand-800 ring-1 ring-inset ring-brand-200">Default</span>}
+            </li>
+          ))}
+          {state.data.length > 3 && <li className="text-xs text-slate-600">and {state.data.length - 3} more</li>}
+        </ul>
+      )}
+      <p className="mt-3 text-xs text-slate-600">{DEMO_DISCLAIMER}</p>
+    </Card>
   )
 }
 
@@ -106,8 +156,8 @@ function RecentActivity() {
   const { token } = useAuth()
   const state = useLoad(() => getActivity(token, { limit: 5 }), [token])
   return (
-    <Card title="Recent activity" action={<Link className={linkClass} to={ACTIVITY_PATH}>View all</Link>}>
-      {state.loading ? <FeedSkeleton label="Loading recent activity" /> : state.error ? <ErrorState message={state.error} onRetry={state.reload} /> : state.data.length === 0 ? <NoActivity /> : <ActivityList rows={state.data} label="Recent activity" />}
+    <Card title="Recent payments" action={<Link className={linkClass} to={ACTIVITY_PATH}>View all</Link>}>
+      {state.loading ? <FeedSkeleton label="Loading recent payments" /> : state.error ? <ErrorState message={state.error} onRetry={state.reload} /> : state.data.length === 0 ? <NoActivity /> : <ActivityList rows={state.data} label="Recent payments" />}
     </Card>
   )
 }
@@ -148,19 +198,18 @@ export default function CustomerHome() {
       </header>
       {notice && <Alert tone="info">{notice}</Alert>}
 
-      <Balance />
-
-      <nav aria-label="Money actions" className="grid grid-cols-4 gap-2.5">
-        {ACTIONS.map(([label, to, icon]) => (
-          <Link key={to} to={to} className="flex min-h-[5.5rem] flex-col items-center justify-center gap-2 rounded-[1.25rem] border border-slate-200/80 bg-white px-1 py-3 text-center shadow-card transition hover:border-brand-200 active:scale-[0.97] motion-reduce:transition-none">
-            <span aria-hidden="true" className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-50 text-brand-700"><Icon name={icon} className="h-5 w-5" /></span>
-            <span className="text-xs font-bold leading-tight">{label}</span>
-          </Link>
-        ))}
-      </nav>
+      <FaceHero />
+      <Tiles />
 
       <RecentActivity />
+      <ConnectedBanks />
       <SecurityStatus />
+      <nav aria-label="More" className="flex flex-wrap justify-center gap-x-5 gap-y-1">
+        <Link className={linkClass} to={REQUEST_PATH}>Request money</Link>
+        <Link className={linkClass} to={SCAN_PATH}>Scan QR</Link>
+        <Link className={linkClass} to={MY_QR_PATH}>My QR</Link>
+        <Link className={linkClass} to={PROFILE_PATH.customer}>Profile</Link>
+      </nav>
       <p className="text-center text-sm">
         <Link className={linkClass} to={AUTHENTICATE_PATH}>Try a test face check</Link>
         <span className="text-slate-600"> without making a payment</span>

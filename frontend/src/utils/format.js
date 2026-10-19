@@ -27,8 +27,8 @@ export const greeting = (now = new Date()) => {
 
 // Session / transaction states shown to people. The stored values stay machine-readable.
 export const STATUS_LABELS = {
-  CREATED: 'Waiting for customer',
-  AUTHENTICATED: 'Customer authenticated',
+  CREATED: 'Awaiting payment',
+  AUTHENTICATED: 'Authenticated',
   PAID: 'Successful',
   SUCCESS: 'Successful',
   FAILED: 'Failed',

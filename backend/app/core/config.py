@@ -43,8 +43,7 @@ class Settings(BaseSettings):
     payment_authorization_ttl_seconds: int = 120  # lifetime of the single-use ticket after face authentication
     max_auth_failures_per_session: int = 5  # counted biometric failures before a payment session is closed
 
-    # --- Simulated wallet and customer-to-customer transfers. Everything here is simulated money.
-    opening_balance: Decimal = Decimal("10000")  # granted once to every new customer, recorded as a ledger entry
+    # --- Customer-to-customer transfers. Everything here is simulated; FacePay holds no wallet balance.
     transfer_session_minutes: int = 10  # how long a reviewed transfer waits for face verification and confirmation
     request_ttl_days: int = 7  # a money request that nobody pays expires after this long
     facepay_id_change_cooldown_days: int = 30  # a customer may rename their FacePay ID this rarely

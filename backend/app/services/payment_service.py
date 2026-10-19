@@ -6,8 +6,9 @@ transfer_service for exactly one payer and one recipient. After preparation they
 
 Flow: merchant creates a session -> customer opens checkout -> customer passes face authentication FOR THAT
 session (the Phase 4 decision, unchanged) -> the backend issues a short-lived single-use authorization bound to
-(customer, session) -> the customer confirms -> the backend consumes the authorization and writes the
-transaction in one database transaction. No real money, UPI or bank is involved.
+(customer, session) -> the customer confirms, naming the simulated bank account to pay from -> the backend consumes
+the authorization and writes the transaction in one database transaction. FacePay keeps no wallet balance, and no real
+money, UPI or bank is involved: the funding source is a demo record (see bank_service).
 """
 
 import hashlib
@@ -25,11 +26,12 @@ from app.ml import registry
 from app.ml.preprocessing import FaceDetector
 from app.core import facepay_id as fid
 from app.models import AuthenticationLog, Merchant, PaymentAuthorization, PaymentRequest, PaymentSession, Transaction, User
-from app.services import face_auth_service, ledger_service, request_service
+from app.services import bank_service, face_auth_service, request_service
 from app.services import security_service as sec
 from app.services.security_service import COUNTED_REASONS  # rejections that count against the session (and the account)
 
 PAYABLE = ("CREATED", "AUTHENTICATED")
+FEE = Decimal("0.00")  # FacePay charges nothing, even in the simulation; shown so the customer sees the exact total
 _ID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"  # no I, L, O, U
 
 
@@ -138,7 +140,9 @@ def _attempts_remaining(ps: PaymentSession) -> int:
 # ------------------------------------------------------------------ merchant side
 
 
-def create_session(db: Session, merchant: Merchant, *, amount: Decimal, order_reference: str, description: str | None, expires_in_minutes: int) -> PaymentSession:
+def create_session(
+    db: Session, merchant: Merchant, *, amount: Decimal, order_reference: str, description: str | None, expires_in_minutes: int, discoverable: bool = False
+) -> PaymentSession:
     limit = get_settings().per_transaction_limit
     if amount > limit:
         raise _err(422, "PER_TRANSACTION_LIMIT", f"The simulated limit is ₹{limit:,.0f} per payment.")
@@ -150,6 +154,7 @@ def create_session(db: Session, merchant: Merchant, *, amount: Decimal, order_re
         order_reference=order_reference,
         description=description or None,
         status="CREATED",
+        discoverable=discoverable,
         expires_at=_now() + timedelta(minutes=expires_in_minutes),
     )
     db.add(ps)
@@ -158,7 +163,7 @@ def create_session(db: Session, merchant: Merchant, *, amount: Decimal, order_re
     return ps
 
 
-def _session_out(ps: PaymentSession, transaction_id: str | None = None) -> dict:
+def _session_out(ps: PaymentSession, paid: tuple[str, datetime] | None = None) -> dict:
     return {
         "session_id": ps.session_id,
         "amount": ps.amount,
@@ -169,19 +174,22 @@ def _session_out(ps: PaymentSession, transaction_id: str | None = None) -> dict:
         "created_at": ps.created_at,
         "expires_at": ps.expires_at,
         "checkout_path": f"/checkout/{ps.session_id}",
-        "transaction_id": transaction_id,
+        "transaction_id": paid[0] if paid else None,
+        "paid_at": paid[1] if paid else None,
+        "discoverable": bool(ps.discoverable) and ps.status in PAYABLE,
     }
 
 
-def _paid_transaction_ids(db: Session, pks: list[int]) -> dict[int, str]:
+def _paid_transactions(db: Session, pks: list[int]) -> dict[int, tuple[str, datetime]]:
+    """session pk -> (transaction id, time) for sessions settled by a SUCCESS transaction: the only proof of payment."""
     if not pks:
         return {}
     rows = db.execute(
-        select(Transaction.payment_session_id, Transaction.transaction_id).where(
+        select(Transaction.payment_session_id, Transaction.transaction_id, Transaction.timestamp).where(
             Transaction.payment_session_id.in_(pks), Transaction.status == "SUCCESS"
         )
     )
-    return {pk: tid for pk, tid in rows}
+    return {pk: (tid, ts) for pk, tid, ts in rows}
 
 
 def merchant_sessions(db: Session, merchant: Merchant, *, limit: int, offset: int, status: str | None) -> list[dict]:
@@ -191,7 +199,7 @@ def merchant_sessions(db: Session, merchant: Merchant, *, limit: int, offset: in
     if status:
         q = q.where(PaymentSession.status == status)
     rows = list(db.scalars(q.order_by(PaymentSession.id.desc()).limit(limit).offset(offset)))
-    paid = _paid_transaction_ids(db, [r.id for r in rows])
+    paid = _paid_transactions(db, [r.id for r in rows])
     return [_session_out(r, paid.get(r.id)) for r in rows]
 
 
@@ -203,7 +211,7 @@ def merchant_session(db: Session, merchant: Merchant, session_id: str) -> dict:
     _sweep(db, session_pk=ps.id)
     db.commit()
     db.refresh(ps)
-    return _session_out(ps, _paid_transaction_ids(db, [ps.id]).get(ps.id))
+    return _session_out(ps, _paid_transactions(db, [ps.id]).get(ps.id))
 
 
 def cancel_session(db: Session, merchant: Merchant, session_id: str) -> dict:
@@ -218,6 +226,54 @@ def cancel_session(db: Session, merchant: Merchant, session_id: str) -> dict:
     db.commit()
     db.refresh(ps)
     return _session_out(ps)
+
+
+def set_display(db: Session, merchant: Merchant, session_id: str, discoverable: bool) -> dict:
+    """The merchant shows or hides one of their open requests in the simulated nearby list."""
+    owned = db.scalar(select(PaymentSession.id).where(PaymentSession.session_id == session_id, PaymentSession.merchant_id == merchant.id))
+    if owned is None:
+        raise _err(404, "SESSION_NOT_FOUND", "Payment session not found.")
+    ps = _locked_session(db, session_id)
+    if ps.status not in PAYABLE:
+        _reject(db, 409, "SESSION_NOT_OPEN", f"A request that is {ps.status} cannot be displayed.")
+    ps.discoverable = discoverable
+    db.commit()
+    return merchant_session(db, merchant, session_id)
+
+
+def reconciliation(db: Session, merchant: Merchant, limit: int = 50) -> dict:
+    """Every payment request against the backend transaction that settled it. A request counts as paid only when a
+    SUCCESS transaction exists for it; nothing here relies on what a customer says or shows."""
+    _sweep(db, merchant_id=merchant.id)
+    db.commit()
+    ps_, t = PaymentSession, Transaction
+    settled = exists().where(t.payment_session_id == ps_.id, t.status == "SUCCESS", t.amount == ps_.amount)
+    any_success = exists().where(t.payment_session_id == ps_.id, t.status == "SUCCESS")
+    requested, awaiting, mismatches = db.execute(
+        select(
+            func.coalesce(func.sum(ps_.amount), 0),
+            func.coalesce(func.sum(ps_.amount).filter(ps_.status.in_(PAYABLE)), 0),
+            func.count().filter(or_((ps_.status == "PAID") & ~settled, (ps_.status != "PAID") & any_success)),
+        ).where(ps_.merchant_id == merchant.id)
+    ).one()
+    paid_total = db.scalar(select(func.coalesce(func.sum(t.amount), 0)).where(t.merchant_id == merchant.id, t.status == "SUCCESS"))
+    rows = list(db.scalars(select(ps_).where(ps_.merchant_id == merchant.id).order_by(ps_.id.desc()).limit(limit)))
+    paid = _paid_transactions(db, [r.id for r in rows])
+    return {
+        "currency": "INR",
+        "requested_total": requested,
+        "paid_total": paid_total,
+        "awaiting_total": awaiting,
+        "mismatches": mismatches,
+        "rows": [
+            {
+                "session_id": r.session_id, "order_reference": r.order_reference, "amount": r.amount, "status": r.status,
+                "transaction_id": paid[r.id][0] if r.id in paid else None, "paid_at": paid[r.id][1] if r.id in paid else None,
+                "created_at": r.created_at,
+            }
+            for r in rows
+        ],
+    }
 
 
 # ------------------------------------------------------------------ customer checkout
@@ -251,8 +307,34 @@ def checkout_view(db: Session, user: User, session_id: str) -> dict:
         "max_auth_attempts": max_auth_failures(),
         "authorization_seconds": get_settings().payment_authorization_ttl_seconds,
         "attempts_remaining": _attempts_remaining(ps),
-        "balance": user.balance,  # the payer's own simulated balance, shown on the review screen
+        "fee": FEE,
+        "total": ps.amount + FEE,
+        # The payer's OWN demo bank accounts, so they can pick the one to pay from. Nobody else's are ever returned.
+        "funding_sources": [bank_service.out(c) for c in bank_service.connected(db, user)],
     }
+
+
+def nearby(db: Session, user: User, limit: int = 10) -> list[dict]:
+    """Open merchant requests that the merchant chose to display. SIMULATED discovery: no location, Bluetooth or network
+    proximity is involved; it is only the merchants' own opt-in list. Opening one is an ordinary checkout."""
+    rows = db.execute(
+        select(PaymentSession, Merchant.business_name)
+        .join(Merchant, Merchant.id == PaymentSession.merchant_id)
+        .where(
+            PaymentSession.kind == "MERCHANT", PaymentSession.discoverable.is_(True),
+            PaymentSession.status.in_(PAYABLE), PaymentSession.expires_at > _now(),
+        )
+        .order_by(PaymentSession.id.desc())
+        .limit(limit)
+    )
+    return [
+        {
+            "session_id": ps.session_id, "merchant_name": name, "amount": ps.amount, "currency": ps.currency,
+            "order_reference": ps.order_reference, "description": ps.description, "expires_at": ps.expires_at,
+            "checkout_path": f"/checkout/{ps.session_id}",
+        }
+        for ps, name in rows
+    ]
 
 
 def start_authentication(db: Session, user: User, session_id: str) -> dict:
@@ -345,7 +427,8 @@ def _authentication_label(db: Session, ps: PaymentSession | None) -> str:
     return "Face + basic liveness check"
 
 
-def _receipt(db: Session, txn: Transaction) -> dict:
+def _receipt(db: Session, txn: Transaction, *, viewer_is_payer: bool = False) -> dict:
+    """The receipt as one party sees it. Only the payer sees which of their own demo bank accounts paid."""
     ps = db.get(PaymentSession, txn.payment_session_id) if txn.payment_session_id else None
     payer = db.get(User, txn.payer_id)
     recipient = db.get(User, txn.recipient_id) if txn.recipient_id else None
@@ -370,6 +453,13 @@ def _receipt(db: Session, txn: Transaction) -> dict:
         "request_id": request_ref,
         "session_id": ps.session_id if ps else None,
         "authentication": _authentication_label(db, ps),
+        "fee": FEE,
+        "total": txn.amount + FEE,
+        "funding_source": (
+            {"bank_name": txn.funding_bank_name, "account_ref": txn.funding_account_ref}
+            if viewer_is_payer and txn.funding_bank_name
+            else None
+        ),
     }
 
 
@@ -384,12 +474,14 @@ def confirm_payment(
     expected_order_reference: str | None = None,
     expected_recipient: str | None = None,
     pin: str | None = None,
+    funding_source_id: str | None = None,
 ) -> dict:
     """The explicit customer confirmation. Face recognition alone never gets here: the caller must hold a live,
     single-use authorization issued for exactly this customer and payment (session, payee, amount, currency, order,
     model version), and must state what they were shown - the amount and, for a merchant bill, the merchant and order,
-    or, for a transfer, the recipient's FacePay ID. Higher-risk payments also need the payment PIN. On success the
-    transaction row, the debit and the credit are one database commit."""
+    or, for a transfer, the recipient's FacePay ID. The simulated bank account to pay from must be one of the
+    customer's own connected accounts (their default when none is named). Higher-risk payments also need the payment PIN.
+    On success the transaction row, the consumed authorization and the settled session are one database commit."""
     sec.require_biometric_enabled(user)  # switched off after authenticating: the ticket is no longer honoured
     ps = _locked_session(db, session_id)  # row lock: two confirmations of one session are serialized
     _check_participant(db, ps, user)
@@ -456,8 +548,11 @@ def confirm_payment(
     if payee is not None and payee.status != "active":
         _reject(db, 409, "RECIPIENT_UNAVAILABLE", "The recipient cannot receive payments right now.")
     sec.check_amount_limits(db, user, ps.amount, ps.session_id)
-    if user.balance < ps.amount:  # early, so nobody is asked for a PIN on a payment that cannot go through
-        _reject(db, 409, "INSUFFICIENT_BALANCE", f"Not enough simulated balance. You have ₹{user.balance:,.2f}.")
+    try:  # early, so nobody is asked for a PIN on a payment that cannot go through
+        funding = bank_service.for_payment(db, user, funding_source_id)
+    except HTTPException:
+        db.commit()
+        raise
     if auth.step_up_required:
         sec.verify_pin(db, user, pin, ps.session_id)  # raises (and commits the failure count) unless the PIN is right
         auth.step_up_verified_at = _now()
@@ -487,14 +582,15 @@ def confirm_payment(
         payment_method="FACE_PAY",
         status="SUCCESS",
         timestamp=now,
+        # Copied from the server's own record of the account, never from the client, so the receipt stays correct even
+        # if the account is disconnected later.
+        funding_source_id=funding.id,
+        funding_bank_name=funding.bank_name,
+        funding_account_ref=funding.account_ref,
     )
     db.add(txn)
     try:
         db.flush()
-        ledger_service.post_payment(db, txn, payer_id=user.id, recipient_user_id=ps.payee_user_id, merchant_id=ps.merchant_id)
-    except HTTPException:
-        db.rollback()  # nothing was debited, nothing consumed: the customer can fix the cause and try again
-        raise
     except IntegrityError:
         db.rollback()
         raise _err(409, "SESSION_ALREADY_PAID", "This payment has already been completed.") from None
@@ -512,7 +608,23 @@ def confirm_payment(
         db.rollback()
         raise _err(409, "SESSION_ALREADY_PAID", "This payment has already been completed.") from None
     db.refresh(txn)
-    return _receipt(db, txn)
+    return _receipt(db, txn, viewer_is_payer=True)
+
+
+def revoke_authorization(db: Session, user: User, session_id: str) -> dict:
+    """The customer backs out at the confirmation screen: their live authorization for this payment is voided, so the
+    face check cannot be used to pay later, and the payment returns to waiting. Nothing is paid."""
+    ps = _locked_session(db, session_id)
+    _check_participant(db, ps, user)
+    db.execute(
+        update(PaymentAuthorization)
+        .where(PaymentAuthorization.payment_session_id == ps.id, PaymentAuthorization.user_id == user.id, PaymentAuthorization.status == "ACTIVE")
+        .values(status="REVOKED")
+    )
+    if ps.status == "AUTHENTICATED":
+        ps.status = "CREATED"
+    db.commit()
+    return {"session_id": ps.session_id, "status": ps.status}
 
 
 # ------------------------------------------------------------------ history and receipts
@@ -575,7 +687,7 @@ def customer_receipt(db: Session, user: User, transaction_id: str) -> dict:
     )
     if txn is None:
         raise _err(404, "TRANSACTION_NOT_FOUND", "Transaction not found.")
-    return _receipt(db, txn)
+    return _receipt(db, txn, viewer_is_payer=txn.payer_id == user.id)
 
 
 def merchant_transactions(db: Session, merchant: Merchant, *, limit: int, offset: int, status: str | None = None, q: str | None = None, sort: str = "newest") -> list[dict]:

@@ -1,7 +1,5 @@
 """Role separation is enforced by the API, not by the screens: customers, merchants and admins each reach only their own routes."""
 
-from decimal import Decimal
-
 import pytest
 from sqlalchemy import select, update
 
@@ -71,7 +69,7 @@ def test_a_forged_role_in_a_signed_token_still_needs_the_database(client, db, cu
     assert client.get("/admin/ml/overview", headers=bearer(forged)).status_code == 403
     merchant_claim, _ = create_access_token(customer["id"], "merchant")
     assert client.get("/merchant/transactions", headers=bearer(merchant_claim)).status_code in (401, 403, 404)
-    assert client.get("/wallet", headers=bearer(merchant_claim)).status_code in (401, 403)
+    assert client.get("/banks", headers=bearer(merchant_claim)).status_code in (401, 403)
 
 
 def test_a_token_minted_before_promotion_stays_a_customer_token(client, db, customer):
@@ -96,7 +94,7 @@ def test_an_admin_is_not_a_merchant_and_a_merchant_is_not_a_customer(client, adm
     assert client.get("/merchant/transactions", headers=admin["headers"]).status_code == 403
     assert client.get("/merchant/security-summary", headers=customer["headers"]).status_code == 403
     assert client.get("/merchant/security-summary", headers=merchant["headers"]).status_code == 200
-    for route in ("/wallet", "/activity", "/facepay/me", "/requests", "/faces/model"):
+    for route in ("/banks", "/activity", "/facepay/me", "/requests", "/faces/model"):
         assert client.get(route, headers=merchant["headers"]).status_code in (401, 403), route
 
 
@@ -168,9 +166,7 @@ def test_cli_grants_and_removes_the_admin_role(client, db, customer, monkeypatch
     assert cli.main(["reconcile-ledger"]) == 0 and cli.main(["bogus"]) == 64
 
 
-def test_every_new_customer_gets_an_opening_grant_that_reconciles(client, db, customer):
+def test_a_new_customer_has_no_opening_grant_and_the_ledger_still_reconciles(client, db, customer):
     from app.services import ledger_service
-    w = client.get("/wallet", headers=customer["headers"]).json()
-    assert Decimal(w["balance"]) == Decimal("10000.00")
-    assert [e["type"] if "type" in e else e.get("entry_type") for e in w["entries"]] and ledger_service.reconcile(db) == []
-    assert "simulated" in str(w).lower()
+    assert client.get("/wallet", headers=customer["headers"]).status_code == 404
+    assert ledger_service.reconcile(db) == []

@@ -6,6 +6,7 @@ import DashboardLayout from './layouts/DashboardLayout'
 import Checkout from './pages/Checkout'
 import CreatePayment from './pages/CreatePayment'
 import { MerchantDashboard } from './pages/Dashboards'
+import Banks from './pages/Banks'
 import Activity from './pages/Activity'
 import ActivityDetail from './pages/ActivityDetail'
 import AdminLab from './pages/AdminLab'
@@ -65,6 +66,7 @@ export default function AppRoutes() {
           <Route path="/transactions" element={<Navigate to="/activity" replace />} />
           <Route path="/face" element={<FaceRegistration />} />
           <Route path="/security" element={<Security />} />
+          <Route path="/banks" element={<Banks />} />
           <Route path="/authenticate" element={<FaceAuthentication />} />
           <Route path="/pay" element={<PayRequest />} />
           <Route path="/checkout/:sessionId" element={<Checkout />} />

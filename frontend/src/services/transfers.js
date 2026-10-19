@@ -8,8 +8,7 @@ const query = (params = {}) => {
   return text ? `?${text}` : ''
 }
 
-// ---- wallet and FacePay ID
-export const getWallet = (token) => apiFetch('/wallet', { token })
+// ---- FacePay ID
 export const getMyFacePay = (token) => apiFetch('/facepay/me', { token })
 export const changeFacePayId = (token, facepayId) => apiFetch('/facepay/me', { method: 'PUT', token, json: { facepay_id: facepayId } })
 export const resolveRecipient = (token, id, { signal } = {}) => apiFetch(`/facepay/resolve${query({ id })}`, { token, signal })

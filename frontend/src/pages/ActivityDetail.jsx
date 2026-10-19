@@ -6,6 +6,7 @@ import { useLoad } from '../hooks/useLoad'
 import { getActivityDetail } from '../services/transfers'
 import { activityTitle } from '../utils/activity'
 import { formatDateTime } from '../utils/format'
+import { SIMULATION_NOTICE } from '../utils/demo'
 import { ACTIVITY_PATH, REQUESTS_PATH } from '../utils/roles'
 
 const KIND = { TRANSFER: 'Sent to a person', MERCHANT_PAYMENT: 'Merchant payment', REQUEST: 'Money request' }
@@ -36,6 +37,7 @@ export default function ActivityDetail() {
         </div>
         <dl className="px-6 py-2">
           <Row label="Type">{KIND[d.kind] ?? d.kind}</Row>
+          {d.direction && d.direction !== 'NONE' && <Row label="Direction">{d.direction === 'SENT' ? 'Sent' : d.direction === 'RECEIVED' ? 'Received' : d.direction}</Row>}
           <Row label="From">{d.sender_name}{d.sender_masked_id && <span className="block font-mono text-xs font-normal text-slate-600">{d.sender_masked_id}</span>}</Row>
           <Row label="To">{d.recipient_name}{d.recipient_masked_id && <span className="block font-mono text-xs font-normal text-slate-600">{d.recipient_masked_id}</span>}</Row>
           {d.note && <Row label="Note">{d.note}</Row>}
@@ -43,10 +45,12 @@ export default function ActivityDetail() {
           <Row label="Reference"><span className="font-mono text-[0.8rem]">{d.ref}</span></Row>
           <Row label="Date and time">{formatDateTime(d.timestamp)}</Row>
           <Row label="Currency">{d.currency}</Row>
+          {d.funding_source && <Row label="Paid from">{d.funding_source}</Row>}
           <Row label="Payment method">{d.payment_method}</Row>
           <Row label="Authentication">{d.authentication}</Row>
           <Row label="Status">{d.status === 'SUCCESS' ? 'Successful' : d.status.charAt(0) + d.status.slice(1).toLowerCase()}</Row>
         </dl>
+        <p className="px-6 pb-4 text-xs text-slate-600">{SIMULATION_NOTICE}</p>
         <div className="no-print flex flex-col gap-2 border-t border-slate-100 px-6 py-4 sm:flex-row sm:justify-center">
           <ButtonLink to={ACTIVITY_PATH} variant="secondary">Back to activity</ButtonLink>
           {d.kind === 'REQUEST' && d.status === 'PENDING' && <ButtonLink to={REQUESTS_PATH}>Open requests</ButtonLink>}

@@ -20,7 +20,7 @@ const act = (n, over = {}) => ({
 })
 const homeRoutes = (over = {}) => ({
   'GET /users/me': { body: { ...customerProfile, facepay_id: 'asha.rao@facepay' } },
-  'GET /wallet': { body: { balance: '9500.00', currency: 'INR', simulated: true, entries: [] } },
+  'GET /banks': { body: [{ connection_id: 'bk_hdfc1', bank_code: 'hdfc', bank_name: 'HDFC Bank', account_type: 'SAVINGS', account_type_label: 'Savings account', account_ref: 'DEMO-••••-4821', is_default: true, status: 'CONNECTED', connected_at: '2026-10-07T10:00:00Z', disclaimer: 'Demo connection only.' }] },
   'GET /activity': { body: [] },
   'GET /activity/counts': { body: { pending_incoming_requests: 0 } },
   'GET /faces/enrollment': { body: { total_samples: 14, distinct_poses: 4, min_samples_to_train: 12, min_poses_to_train: 3, max_samples: 40, eligible: true, poses: [] } },
@@ -62,7 +62,7 @@ describe('navigation', () => {
     storeSession('customer')
     renderApp('/dashboard')
     const mobile = await screen.findByRole('navigation', { name: 'Mobile' })
-    expect(within(mobile).getAllByRole('link').map((a) => a.textContent)).toEqual(['Home', 'Send', 'Scan', 'Activity', 'Profile'])
+    expect(within(mobile).getAllByRole('link').map((a) => a.textContent)).toEqual(['Home', 'Pay', 'Send', 'Activity', 'Profile'])
     expect(within(mobile).getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page')
     expect(screen.queryByRole('button', { name: 'Open menu' })).not.toBeInTheDocument()
   })
@@ -153,20 +153,46 @@ describe('customer dashboard', () => {
     expect(faceStatus(e, model).label).toBe(label)
   })
 
-  it('shows the FacePay ID, simulated balance, actions, recent activity and security status', async () => {
+  it('shows the face-first action, payment options, FacePay ID, banks, recent payments and security status', async () => {
     storeSession('customer')
     mockApi(homeRoutes({ 'GET /activity': { body: [act(9, { amount: '950.00' })] }, 'GET /activity/counts': { body: { pending_incoming_requests: 2 } } }))
     renderApp('/dashboard')
     expect(await screen.findByTestId('facepay-id')).toHaveTextContent('asha.rao@facepay')
-    expect(await screen.findByTestId('balance')).toHaveTextContent('₹9,500.00')
-    expect(screen.getByText(/Simulated balance/)).toBeInTheDocument()
-    const actions = screen.getByRole('navigation', { name: 'Money actions' })
-    expect(within(actions).getAllByRole('link').map((a) => a.textContent)).toEqual(['Send money', 'Request money', 'Scan QR', 'My QR'])
-    expect(await screen.findByRole('list', { name: 'Recent activity' })).toBeInTheDocument()
+    const hero = screen.getByRole('region', { name: 'Pay with your face' })
+    expect(within(hero).getByRole('link', { name: 'Pay with Face' })).toHaveAttribute('href', '/pay')
+    expect(hero).toHaveTextContent('Pay with your face.')
+    expect(hero).toHaveTextContent('Confirm with confidence.')
+    const options = screen.getByRole('navigation', { name: 'Payment options' })
+    expect(within(options).getAllByRole('link').map((a) => a.textContent.replace(/\d+$/, ''))).toEqual([
+      'Pay a personBy FacePay ID', 'Pay a merchantLink or request', 'Payment requestsMoney asked of you', 'FacePay nearbyDemo discovery',
+    ])
+    expect(await within(options).findByLabelText('2 waiting for you')).toBeInTheDocument()
+    expect(await screen.findByRole('list', { name: 'Recent payments' })).toBeInTheDocument()
+    const banks = await screen.findByRole('list', { name: 'Connected banks' })
+    expect(banks).toHaveTextContent('HDFC Bank · Savings account')
+    expect(banks).toHaveTextContent('DEMO-••••-4821')
+    expect(screen.getByText(/Demo connection only/)).toBeInTheDocument()
     expect(await screen.findByText('Face authentication ready')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Biometric settings' })).toHaveAttribute('href', '/security')
-    expect(screen.getByRole('link', { name: 'Requests, 2 waiting for you' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'View all' })).toHaveAttribute('href', '/activity')
+  })
+
+  it('has no wallet balance, top-up or balance toggle', async () => {
+    storeSession('customer')
+    mockApi(homeRoutes())
+    renderApp('/dashboard')
+    await screen.findByText('Face authentication ready')
+    expect(screen.queryByTestId('balance')).not.toBeInTheDocument()
+    expect(screen.queryByText(/balance/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/top.?up|add money/i)).not.toBeInTheDocument()
+  })
+
+  it('invites a customer with no connected bank to connect a demo one', async () => {
+    storeSession('customer')
+    mockApi(homeRoutes({ 'GET /banks': { body: [] } }))
+    renderApp('/dashboard')
+    const link = await screen.findByRole('link', { name: /Connect a demo bank/ })
+    expect(link).toHaveAttribute('href', '/banks')
   })
 
   it('never shows model internals to a customer', async () => {
@@ -175,19 +201,7 @@ describe('customer dashboard', () => {
     renderApp('/dashboard')
     await screen.findByText('Face authentication ready')
     const text = document.body.textContent.toLowerCase()
-    for (const banned of ['pca', 'lda', 'confusion', 'eigen', 'distance', 'confidence', 'classifier', 'explained variance']) expect(text).not.toContain(banned)
-  })
-
-  it('hides and shows the balance on request', async () => {
-    const user = userEvent.setup()
-    storeSession('customer')
-    mockApi(homeRoutes())
-    renderApp('/dashboard')
-    expect(await screen.findByTestId('balance')).toHaveTextContent('₹9,500.00')
-    await user.click(screen.getByRole('button', { name: 'Hide balance' }))
-    expect(screen.getByTestId('balance')).not.toHaveTextContent('9,500')
-    await user.click(screen.getByRole('button', { name: 'Show balance' }))
-    expect(screen.getByTestId('balance')).toHaveTextContent('₹9,500.00')
+    for (const banned of ['pca', 'lda', 'confusion', 'eigen', 'distance', 'confidence score', 'classifier', 'explained variance']) expect(text).not.toContain(banned)
   })
 
   it('each section fails on its own, with a retry, and the rest still renders', async () => {
@@ -197,7 +211,7 @@ describe('customer dashboard', () => {
     expect(await screen.findByText('No activity yet')).toBeInTheDocument()
     expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong on our side')
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
-    expect(screen.getByTestId('balance')).toHaveTextContent('₹9,500.00')
+    expect(screen.getByRole('region', { name: 'Pay with your face' })).toBeInTheDocument()
   })
 
   it('shows empty-state guidance when there is no activity', async () => {
@@ -205,7 +219,7 @@ describe('customer dashboard', () => {
     mockApi(homeRoutes())
     renderApp('/dashboard')
     expect(await screen.findByText('No activity yet')).toBeInTheDocument()
-    expect(screen.getAllByRole('link', { name: 'Send money' }).length).toBeGreaterThanOrEqual(2) // the action grid and the empty state
+    expect(screen.getByRole('link', { name: 'Send money' })).toBeInTheDocument() // the empty state points at the first payment
   })
 })
 

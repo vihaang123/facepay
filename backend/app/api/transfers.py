@@ -1,4 +1,4 @@
-"""Customer wallet, FacePay ID, customer-to-customer payments, money requests, QR resolution and history.
+"""FacePay ID, customer-to-customer payments, money requests, QR resolution and history.
 Every route is customer-only and every query is scoped to the signed-in customer."""
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
@@ -24,9 +24,8 @@ from app.schemas.transfers import (
     RequestOut,
     ResolveOut,
     TransferCreate,
-    WalletOut,
 )
-from app.services import activity_service, facepay_service, ledger_service, request_service, transfer_service
+from app.services import activity_service, facepay_service, request_service, transfer_service
 
 _s = get_settings()
 resolve_limiter = RateLimiter(_s.resolve_rate_limit_per_minute, enabled=_s.rate_limit_enabled)
@@ -62,13 +61,7 @@ _read = _limit(read_limiter, "read", "Too many requests. Please wait a minute.")
 router = APIRouter(tags=["transfers"])
 
 
-# ------------------------------------------------------------------ wallet and FacePay ID
-
-
-@router.get("/wallet", response_model=WalletOut, dependencies=[Depends(_read)])
-def wallet(user: User = Depends(get_current_customer), db: Session = Depends(get_db)):
-    """The simulated balance and the ledger lines behind it. Authoritative: the browser never computes a balance."""
-    return ledger_service.wallet(db, user)
+# ------------------------------------------------------------------ FacePay ID
 
 
 @router.get("/facepay/me", response_model=FacePayProfile)

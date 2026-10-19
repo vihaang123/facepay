@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { SIMULATION_NOTICE } from '../utils/demo'
 import { STATUS_LABELS, formatDateTime, formatFeedTime, formatMoney } from '../utils/format'
 import Icon from './Icon'
 import { Avatar, Logo } from './ui'
@@ -167,10 +168,18 @@ export function Receipt({ receipt, children }) {
         {receipt.description && <Row label="Details">{receipt.description}</Row>}
         <Row label="Transaction ID"><span className="font-mono text-[0.8rem]">{receipt.transaction_id}</span></Row>
         <Row label="Date and time">{formatDateTime(receipt.timestamp)}</Row>
+        {receipt.funding_source && (
+          <Row label="Paid from">
+            {receipt.funding_source.bank_name}
+            <span className="block font-mono text-xs font-normal text-slate-600">{receipt.funding_source.account_ref}</span>
+          </Row>
+        )}
+        {Number(receipt.fee ?? 0) > 0 && <Row label="Fee">{formatMoney(receipt.fee, receipt.currency)}</Row>}
         <Row label="Payment method">{receipt.payment_method === 'FACE_PAY' ? 'FacePay' : receipt.payment_method}</Row>
         {verified && <Row label="Authenticated">{receipt.authentication ?? 'Face + basic liveness check'}</Row>}
         <Row label="Payment status">{ok ? 'Successful' : receipt.status}</Row>
       </dl>
+      <p className="px-6 pb-4 text-xs text-slate-600">{receipt.simulation_notice ?? SIMULATION_NOTICE}</p>
       {children && <div className="no-print flex flex-col gap-2 border-t border-slate-100 px-6 py-4 sm:flex-row sm:justify-center">{children}</div>}
     </article>
   )

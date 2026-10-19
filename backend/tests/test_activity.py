@@ -149,8 +149,7 @@ def test_history_is_empty_but_valid_for_a_new_customer(client, world):
     _, _, chitra = world
     assert items(client, chitra) == [] and client.get("/requests", headers=chitra["headers"]).json() == []
     assert client.get("/facepay/contacts", headers=chitra["headers"]).json() == []
-    w = client.get("/wallet", headers=chitra["headers"]).json()
-    assert Decimal(w["balance"]) == 10000 and len(w["entries"]) == 1
+    assert client.get("/wallet", headers=chitra["headers"]).status_code == 404  # FacePay keeps no wallet
 
 
 def test_pending_requests_count_drops_when_they_are_settled(client, world):

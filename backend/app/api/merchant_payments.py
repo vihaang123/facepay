@@ -7,7 +7,16 @@ from app.api.deps import get_current_merchant
 from app.database.session import get_db
 from app.models import Merchant
 from app.api.payments import TX_SORT, TX_STATUS
-from app.schemas.payments import MerchantSecuritySummary, MerchantSessionOut, MerchantSummary, MerchantTransactionOut, ReceiptOut, SessionCreate
+from app.schemas.payments import (
+    DisplayRequest,
+    MerchantSecuritySummary,
+    MerchantSessionOut,
+    MerchantSummary,
+    MerchantTransactionOut,
+    ReceiptOut,
+    ReconciliationOut,
+    SessionCreate,
+)
 from app.services import payment_service as svc
 
 router = APIRouter(prefix="/merchant", tags=["merchant-payments"])
@@ -19,7 +28,7 @@ _STATUS = "^(CREATED|AUTHENTICATED|PAID|FAILED|EXPIRED|CANCELLED)$"
 def create_session(data: SessionCreate, merchant: Merchant = Depends(get_current_merchant), db: Session = Depends(get_db)):
     ps = svc.create_session(
         db, merchant, amount=data.amount, order_reference=data.order_reference,
-        description=data.description, expires_in_minutes=data.expires_in_minutes,
+        description=data.description, expires_in_minutes=data.expires_in_minutes, discoverable=data.discoverable,
     )
     return svc.merchant_session(db, merchant, ps.session_id)
 
@@ -38,6 +47,18 @@ def list_sessions(
 @router.get("/payment-sessions/{session_id}", response_model=MerchantSessionOut)
 def read_session(session_id: str, merchant: Merchant = Depends(get_current_merchant), db: Session = Depends(get_db)):
     return svc.merchant_session(db, merchant, session_id)
+
+
+@router.post("/payment-sessions/{session_id}/display", response_model=MerchantSessionOut)
+def display_session(session_id: str, data: DisplayRequest, merchant: Merchant = Depends(get_current_merchant), db: Session = Depends(get_db)):
+    """Show or hide an open request in the simulated nearby list."""
+    return svc.set_display(db, merchant, session_id, data.discoverable)
+
+
+@router.get("/reconciliation", response_model=ReconciliationOut)
+def reconciliation(merchant: Merchant = Depends(get_current_merchant), db: Session = Depends(get_db)):
+    """Payment requests against the backend transactions that settled them (the only proof of payment)."""
+    return svc.reconciliation(db, merchant)
 
 
 @router.post("/payment-sessions/{session_id}/cancel", response_model=MerchantSessionOut)

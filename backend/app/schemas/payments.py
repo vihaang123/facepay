@@ -20,6 +20,14 @@ class SessionCreate(BaseModel):
     order_reference: Reference
     description: Description | None = None
     expires_in_minutes: int = Field(default=15, ge=1, le=60)
+    # Show this request in the simulated "nearby" list for customers (a demo of discovery; no location is used).
+    discoverable: bool = False
+
+
+class DisplayRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    discoverable: bool
 
 
 class MerchantSessionOut(BaseModel):
@@ -33,6 +41,17 @@ class MerchantSessionOut(BaseModel):
     expires_at: datetime | None
     checkout_path: str
     transaction_id: str | None = None  # set once paid
+    discoverable: bool = False
+    paid_at: datetime | None = None  # the backend transaction's timestamp: the only proof a request was paid
+
+
+class FundingSourceOut(BaseModel):
+    connection_id: str
+    bank_code: str
+    bank_name: str
+    account_type_label: str
+    account_ref: str  # DEMO-••••-1234
+    is_default: bool
 
 
 class CheckoutOut(BaseModel):
@@ -47,7 +66,9 @@ class CheckoutOut(BaseModel):
     recipient_masked_id: str | None = None
     note: str | None = None
     request_id: str | None = None  # set when this payment answers a money request
-    balance: Decimal | None = None  # the payer's own simulated balance
+    fee: Decimal = Decimal("0.00")  # simulated; FacePay charges nothing
+    total: Decimal | None = None  # amount + fee
+    funding_sources: list["FundingSourceOut"] = []  # the signed-in customer's OWN demo bank accounts
     order_reference: str | None
     description: str | None
     amount: Decimal
@@ -95,6 +116,13 @@ class ConfirmRequest(BaseModel):
     expected_order_reference: str | None = Field(default=None, max_length=80)
     expected_recipient: str | None = Field(default=None, max_length=60)
     pin: str | None = Field(default=None, max_length=12)
+    # Which of the customer's own demo bank accounts to pay from; the default is used when omitted. The server checks it.
+    funding_source_id: str | None = Field(default=None, min_length=4, max_length=40)
+
+
+class ReceiptFunding(BaseModel):
+    bank_name: str
+    account_ref: str
 
 
 class ReceiptOut(BaseModel):
@@ -116,6 +144,11 @@ class ReceiptOut(BaseModel):
     request_id: str | None = None
     session_id: str | None
     authentication: str  # e.g. "Face + basic liveness check"
+    fee: Decimal = Decimal("0.00")
+    total: Decimal | None = None
+    # The payer's own demo bank account. None for the recipient and the merchant, who never see the payer's account.
+    funding_source: "ReceiptFunding | None" = None
+    simulation_notice: str = "Simulated payment. No real bank account was accessed and no money was transferred."
 
 
 class CustomerTransactionOut(BaseModel):
@@ -179,3 +212,37 @@ class MerchantSecuritySummary(BaseModel):
     face_verified_sessions: int
     paid_with_pin_step_up: int
     note: str
+
+
+class NearbyRequestOut(BaseModel):
+    """A merchant payment request the merchant chose to display (simulated discovery). Opening it is an ordinary checkout."""
+
+    session_id: str
+    merchant_name: str
+    amount: Decimal
+    currency: str
+    order_reference: str | None
+    description: str | None
+    expires_at: datetime | None
+    checkout_path: str
+
+
+class ReconciliationRow(BaseModel):
+    session_id: str
+    order_reference: str | None
+    amount: Decimal
+    status: str
+    transaction_id: str | None
+    paid_at: datetime | None
+    created_at: datetime
+
+
+class ReconciliationOut(BaseModel):
+    """Payment requests against the backend transactions that settled them. 'Paid' means a SUCCESS transaction exists."""
+
+    currency: str
+    requested_total: Decimal  # every request ever created
+    paid_total: Decimal  # SUCCESS transactions
+    awaiting_total: Decimal  # open (CREATED / AUTHENTICATED) requests
+    mismatches: int  # paid sessions without exactly one SUCCESS transaction of the same amount (should be 0)
+    rows: list[ReconciliationRow]

@@ -23,7 +23,7 @@ export function ActivityRow({ a }) {
         <Avatar name={a.counterparty_name ?? '?'} />
         <div className="min-w-0 flex-1">
           <p className="truncate font-bold">{activityTitle(a)}</p>
-          <p className="truncate text-xs text-slate-600">{a.note ? `${a.note} · ` : a.order_reference ? `${a.order_reference} · ` : ''}{formatFeedTime(a.timestamp)}</p>
+          <p className="truncate text-xs text-slate-600">{a.note ? `${a.note} · ` : a.order_reference ? `${a.order_reference} · ` : ''}{formatFeedTime(a.timestamp)}{a.funding_source ? ` · from ${a.funding_source.split(' · ')[0]}` : ''}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           <Signed a={a} />

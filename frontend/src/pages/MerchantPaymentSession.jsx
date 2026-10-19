@@ -6,16 +6,16 @@ import QrCode from '../components/QrCode'
 import { Alert, Button, ButtonLink, Card, ConfirmPanel, Skeleton } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
 import { useToast } from '../hooks/useToast'
-import { cancelPaymentSession, getPaymentSession } from '../services/payments'
+import { cancelPaymentSession, getPaymentSession, setSessionDisplay } from '../services/payments'
 import { POLL } from '../utils/authTiming'
 import { formatDateTime, isPayable } from '../utils/format'
 import { merchantTimeline } from '../utils/timeline'
 import { DASHBOARD_PATH, NEW_PAYMENT_PATH, RECEIPT_PATH } from '../utils/roles'
 
 const HEADLINE = {
-  CREATED: 'Awaiting customer',
-  AUTHENTICATED: 'Customer authenticated, awaiting confirmation',
-  PAID: 'Payment completed',
+  CREATED: 'Awaiting payment',
+  AUTHENTICATED: 'Customer authenticated, awaiting their confirmation',
+  PAID: 'Paid',
   FAILED: 'Payment failed after too many face attempts',
   EXPIRED: 'Request expired',
   CANCELLED: 'Request cancelled',
@@ -57,7 +57,27 @@ export default function MerchantPaymentSession() {
     }
   }
 
+  const toggleDisplay = async () => {
+    setBusy(true)
+    try {
+      setSession(await setSessionDisplay(token, sessionId, !session.discoverable))
+      notify(session.discoverable ? 'Hidden from FacePay nearby' : 'Showing in FacePay nearby (demo)')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const link = session ? `${window.location.origin}${session.checkout_path}` : ''
+  const share = async () => {
+    if (typeof navigator.share !== 'function') return copy()
+    try {
+      await navigator.share({ title: `Pay ${session.order_reference ?? 'this request'} with FacePay`, url: link })
+    } catch (err) {
+      if (err?.name !== 'AbortError') copy()
+    }
+  }
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(link)
@@ -76,7 +96,7 @@ export default function MerchantPaymentSession() {
     )
   }
 
-  const ok = session.status === 'PAID'
+  const ok = session.status === 'PAID' && Boolean(session.transaction_id) // paid only once the backend transaction exists
   const stopped = ['FAILED', 'EXPIRED', 'CANCELLED'].includes(session.status)
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-5">
@@ -88,7 +108,7 @@ export default function MerchantPaymentSession() {
         <p aria-live="polite" className={`mt-2 inline-flex items-center gap-2 text-base font-bold ${ok ? 'text-emerald-800' : stopped ? 'text-rose-800' : 'text-slate-900'}`}>
           {!ok && !stopped && <span aria-hidden="true" className="h-2.5 w-2.5 animate-pulse rounded-full bg-brand-600" />}
           {ok && <Icon name="check" className="h-5 w-5" strokeWidth="2.6" />}
-          {HEADLINE[session.status]}
+          {session.status === 'PAID' && !ok ? HEADLINE.AUTHENTICATED : HEADLINE[session.status]}
         </p>
         <p className="mt-1 font-mono text-sm text-slate-700">{session.order_reference}</p>
         <div><SimulatedTag className="mt-3" /></div>
@@ -104,13 +124,14 @@ export default function MerchantPaymentSession() {
           <Row label="Status"><StatusBadge status={session.status} /></Row>
           <Row label="Created">{formatDateTime(session.created_at)}</Row>
           <Row label="Expires">{formatDateTime(session.expires_at)}</Row>
+          {session.paid_at && <Row label="Paid at">{formatDateTime(session.paid_at)}</Row>}
           {session.transaction_id && <Row label="Transaction"><span className="font-mono">{session.transaction_id}</span></Row>}
         </dl>
       </Card>
 
       {open && (
         <Card aria-label="Checkout link">
-          <p className="text-sm text-slate-700">Send this link to the customer. They sign in to a FacePay customer account and pay with their face.</p>
+          <p className="text-sm text-slate-700">This is the active request. Send the link to the customer. They sign in to a FacePay customer account, verify their face and confirm. This page shows Paid only after the payment is recorded.</p>
           <code className="mt-2 block break-all rounded-xl bg-slate-100 px-3 py-2 text-xs">{link}</code>
           {isPayable(session.status) && (
             <div className="mt-4 flex flex-col items-center gap-2">
@@ -120,8 +141,16 @@ export default function MerchantPaymentSession() {
           )}
           <div className="mt-3 flex flex-wrap gap-2">
             <Button onClick={copy}><Icon name="link" className="h-4 w-4" />Copy link</Button>
+            <Button variant="secondary" onClick={share}><Icon name="share" className="h-4 w-4" />Share</Button>
             <Button variant="secondary" onClick={() => setConfirmCancel(true)} loading={busy} disabled={confirmCancel}>Cancel request</Button>
           </div>
+          <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3.5">
+            <input type="checkbox" checked={Boolean(session.discoverable)} onChange={toggleDisplay} disabled={busy} className="mt-0.5 h-4 w-4 accent-brand-700" />
+            <span className="text-sm">
+              <span className="block font-semibold">Show in FacePay nearby (demo)</span>
+              <span className="block text-slate-600">Simulated discovery for signed-in customers. It uses no location. It stops showing when the request is paid, cancelled or expired.</span>
+            </span>
+          </label>
           {confirmCancel && (
             <div className="mt-4">
               <ConfirmPanel title="Cancel this payment request?" confirmLabel="Cancel request" cancelLabel="Keep request" onConfirm={cancel} onCancel={() => setConfirmCancel(false)}>

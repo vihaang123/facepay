@@ -18,12 +18,24 @@ def b64(data: bytes) -> str:
     return base64.b64encode(data).decode()
 
 
-def new_customer(client, name="Test Customer"):
+def connect_bank(client, cust, bank_code="hdfc", account_type="SAVINGS"):
+    """Connects a simulated bank account (the funding source every payment needs). Returns its JSON."""
+    r = client.post("/banks", json={"bank_code": bank_code, "account_type": account_type}, headers=cust["headers"])
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+def new_customer(client, name="Test Customer", bank=True):
+    """A registered, signed-in customer. By default they have connected one demo bank (HDFC Bank), because a payment needs a
+    funding source; pass bank=False for a customer with none."""
     email = unique_email("c")
     r = client.post("/auth/register", json={"name": name, "email": email, "password": STRONG_PASSWORD})
     assert r.status_code == 201
     tok = client.post("/auth/login", json={"email": email, "password": STRONG_PASSWORD}).json()["access_token"]
-    return {"id": r.json()["id"], "name": name, "email": email, "headers": {"Authorization": f"Bearer {tok}"}}
+    cust = {"id": r.json()["id"], "name": name, "email": email, "headers": {"Authorization": f"Bearer {tok}"}}
+    if bank:
+        cust["bank"] = connect_bank(client, cust)
+    return cust
 
 
 def new_merchant(client, business="SuperGrocery"):

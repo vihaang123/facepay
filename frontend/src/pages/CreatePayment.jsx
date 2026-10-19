@@ -9,11 +9,12 @@ import { validatePayment } from '../utils/validation'
 export default function CreatePayment() {
   const { token } = useAuth()
   const navigate = useNavigate()
-  const [form, setForm] = useState({ amount: '', orderReference: '', description: '', expiresInMinutes: '15' })
+  const [form, setForm] = useState({ amount: '', orderReference: '', description: '', expiresInMinutes: '15', discoverable: false })
   const [errors, setErrors] = useState({})
   const [submitError, setSubmitError] = useState(null)
   const [busy, setBusy] = useState(false)
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+  const toggle = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.checked }))
 
   const submit = async (e) => {
     e.preventDefault()
@@ -28,6 +29,7 @@ export default function CreatePayment() {
         orderReference: form.orderReference.trim(),
         description: form.description.trim(),
         expiresInMinutes: Number(form.expiresInMinutes),
+        discoverable: form.discoverable,
       })
       navigate(MERCHANT_SESSION_PATH(s.session_id))
     } catch (err) {
@@ -40,7 +42,7 @@ export default function CreatePayment() {
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-5">
-      <PageHeader title="New payment request" subtitle="Creates a checkout link for one customer. Simulated payment: no real money moves." />
+      <PageHeader title="New payment request" subtitle="Creates a secure payment link for one amount and one order. Simulated payment: no real money moves." />
       <Card>
         <form onSubmit={submit} noValidate className="flex flex-col gap-4">
           {submitError && <Alert tone="error">{submitError}</Alert>}
@@ -53,6 +55,13 @@ export default function CreatePayment() {
               {[5, 15, 30, 60].map((m) => <option key={m} value={m}>{m} minutes</option>)}
             </select>
           </div>
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3.5">
+            <input type="checkbox" checked={form.discoverable} onChange={toggle('discoverable')} className="mt-0.5 h-4 w-4 accent-brand-700" />
+            <span className="text-sm">
+              <span className="block font-semibold">Show in FacePay nearby (demo)</span>
+              <span className="block text-slate-600">Lists this request for signed-in customers in the simulated nearby view. You can hide it again at any time. Customers can always pay from the link.</span>
+            </span>
+          </label>
           <div className="flex flex-col gap-2">
             <Button type="submit" loading={busy} size="lg">Create payment request</Button>
             <ButtonLink to={DASHBOARD_PATH.merchant} variant="ghost">Cancel</ButtonLink>

@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models import PaymentRequest, PaymentSession, User
-from app.services import facepay_service, ledger_service, request_service
+from app.services import facepay_service, request_service
 from app.services import payment_service as pay
 from app.services import security_service as sec
 
@@ -78,8 +78,6 @@ def create_intent(
                 return pay.checkout_view(db, payer, open_ps.session_id)
 
     sec.check_amount_limits(db, payer, amount)  # per-payment and 24-hour limits (backend-enforced)
-    if payer.balance < amount:
-        raise ledger_service.insufficient(payer.balance)
 
     expires = datetime.now(UTC) + timedelta(minutes=s.transfer_session_minutes)
     if request is not None:

@@ -15,12 +15,12 @@ from app.core.config import get_settings
 from app.models import LedgerEntry, PaymentAuthorization, PaymentSession, SecurityEvent, Transaction, User
 from app.services import ledger_service
 from tests.payment_helpers import authenticate, authorize, confirm, create_session, new_customer, set_threshold
-from tests.transfer_helpers import balance, code, pay_transfer, prepare, prepared
+from tests.transfer_helpers import net_moved, code, pay_transfer, prepare, prepared
 
 pytestmark = pytest.mark.usefixtures("scene_detector")  # camera frames in these tests are synthetic scenes
 
 
-OPENING = Decimal("10000")
+OPENING = Decimal("0")  # nobody holds a balance now: tests compare net movement with zero
 
 
 def dec(v):
@@ -37,22 +37,22 @@ def txns(db):
     return list(db.scalars(select(Transaction).order_by(Transaction.id)))
 
 
-# ============================================================ opening balance and wallet
+# ============================================================ no wallet
 
 
-def test_a_new_customer_starts_with_the_simulated_opening_balance_recorded_in_the_ledger(client, db):
-    c = new_customer(client, "Asha Rao")
-    w = client.get("/wallet", headers=c["headers"]).json()
-    assert dec(w["balance"]) == OPENING and w["currency"] == "INR" and w["simulated"] is True
-    assert [(e["direction"], e["kind"], dec(e["amount"])) for e in w["entries"]] == [("CREDIT", "OPENING_GRANT", OPENING)]
+def test_a_new_customer_has_no_wallet_balance_and_no_ledger_entries(client, db):
+    c = new_customer(client, "Asha Rao", bank=False)
+    assert client.get("/wallet", headers=c["headers"]).status_code == 404  # FacePay keeps no wallet
+    db.expire_all()
+    assert db.scalar(select(User.balance).where(User.id == c["id"])) == 0
+    assert db.scalar(select(func.count()).select_from(LedgerEntry)) == 0
     assert reconciled(db) == []
 
 
 def test_the_balance_cannot_be_set_from_the_outside(client, world):
     asha, _, _ = world
     assert client.patch("/users/me", json={"balance": "99999"}, headers=asha["headers"]).status_code == 422
-    assert client.put("/wallet", json={"balance": "99999"}, headers=asha["headers"]).status_code == 405
-    assert dec(balance(client, asha)) == OPENING
+    assert client.put("/wallet", json={"balance": "99999"}, headers=asha["headers"]).status_code in (404, 405)
 
 
 def test_the_database_refuses_a_negative_balance(world, db):
@@ -66,7 +66,7 @@ def test_the_database_refuses_a_negative_balance(world, db):
 # ============================================================ the happy path
 
 
-def test_a_verified_and_confirmed_transfer_moves_money_atomically_and_records_both_sides(client, world, db):
+def test_a_verified_and_confirmed_transfer_is_recorded_once_with_its_funding_source(client, world, db):
     asha, ravi, _ = world
     r = pay_transfer(client, asha, ravi, "1250.50", note="Dinner split")
     assert r.status_code == 200, r.text
@@ -74,13 +74,14 @@ def test_a_verified_and_confirmed_transfer_moves_money_atomically_and_records_bo
     assert receipt["kind"] == "TRANSFER" and receipt["status"] == "SUCCESS" and dec(receipt["amount"]) == dec("1250.50")
     assert receipt["payer_name"] == "Asha Rao" and receipt["recipient_name"] == "Ravi Shah" and receipt["note"] == "Dinner split"
     assert receipt["merchant_name"] is None and receipt["authentication"] == "Face + basic liveness check"
-    assert dec(balance(client, asha)) == OPENING - dec("1250.50") and dec(balance(client, ravi)) == OPENING + dec("1250.50")
+    assert dec(net_moved(client, asha)) == OPENING - dec("1250.50") and dec(net_moved(client, ravi)) == OPENING + dec("1250.50")
 
     (t,) = txns(db)
     assert (t.kind, t.payer_id, t.recipient_id, t.merchant_id, t.currency, t.note) == ("TRANSFER", asha["id"], ravi["id"], None, "INR", "Dinner split")
-    entries = list(db.scalars(select(LedgerEntry).where(LedgerEntry.transaction_id == t.id).order_by(LedgerEntry.id)))
-    assert [(e.account_id, e.direction, e.amount) for e in entries] == [(asha["id"], "DEBIT", dec("1250.50")), (ravi["id"], "CREDIT", dec("1250.50"))]
-    assert reconciled(db) == []
+    # the transaction row is the record; it names the payer's demo bank account, and no ledger line or balance is touched
+    assert (t.status, t.funding_bank_name, t.funding_account_ref) == ("SUCCESS", "HDFC Bank", asha["bank"]["account_ref"])
+    assert receipt["funding_source"] == {"bank_name": "HDFC Bank", "account_ref": asha["bank"]["account_ref"]}
+    assert db.scalar(select(func.count()).select_from(LedgerEntry)) == 0 and db.scalar(select(User.balance).where(User.id == asha["id"])) == 0
 
     # both participants can open the receipt; the history shows it from each side
     for who, direction in ((asha, "SENT"), (ravi, "RECEIVED")):
@@ -93,11 +94,11 @@ def test_a_verified_and_confirmed_transfer_moves_money_atomically_and_records_bo
 def test_nothing_is_debited_until_the_customer_confirms(client, world, db):
     asha, ravi, _ = world
     sid = prepared(client, asha, ravi, "700.00")
-    assert dec(balance(client, asha)) == OPENING and txns(db) == []
+    assert dec(net_moved(client, asha)) == OPENING and txns(db) == []
     token = authorize(client, asha, sid)  # a successful face check alone moves no money
-    assert dec(balance(client, asha)) == OPENING and txns(db) == []
+    assert dec(net_moved(client, asha)) == OPENING and txns(db) == []
     assert confirm(client, asha, sid, token).status_code == 200
-    assert dec(balance(client, asha)) == OPENING - 700
+    assert dec(net_moved(client, asha)) == OPENING - 700
 
 
 def test_the_review_screen_shows_the_resolved_recipient_amount_and_note(client, world):
@@ -106,7 +107,9 @@ def test_the_review_screen_shows_the_resolved_recipient_amount_and_note(client, 
     assert r.status_code == 201
     c = r.json()
     assert (c["kind"], c["recipient_name"], c["recipient_facepay_id"], c["note"], c["status"]) == ("TRANSFER", "Ravi Shah", ravi["facepay_id"], "Rent", "CREATED")
-    assert dec(c["amount"]) == 500 and c["merchant_name"] is None and dec(c["balance"]) == OPENING
+    assert dec(c["amount"]) == 500 and c["merchant_name"] is None and "balance" not in c
+    assert dec(c["fee"]) == 0 and dec(c["total"]) == 500
+    assert [f["connection_id"] for f in c["funding_sources"]] == [asha["bank"]["connection_id"]]  # her own accounts only
     assert "email" not in r.text.lower()
 
 
@@ -177,45 +180,47 @@ def test_face_payments_switched_off_block_preparing_a_transfer(client, world):
     assert r.status_code == 403 and code(r) == "BIOMETRIC_DISABLED"
 
 
-# ============================================================ balance
+# ============================================================ funding source instead of a balance
 
 
-def test_an_amount_above_the_balance_is_refused_when_preparing(client, world, db):
+def test_a_customer_with_no_connected_bank_can_review_and_verify_but_not_confirm(client, world, db):
     asha, ravi, _ = world
-    r = prepare(client, asha, ravi, "10000.01")
-    assert r.status_code == 409 and code(r) == "INSUFFICIENT_BALANCE"
-    assert dec(balance(client, asha)) == OPENING and txns(db) == []
-
-
-def test_the_whole_balance_can_be_sent_and_the_next_rupee_cannot(client, world, db, monkeypatch):
-    asha, ravi, _ = world
-    monkeypatch.setattr(get_settings(), "step_up_amount_threshold", Decimal("100000"))  # ₹10,000 would otherwise ask for a PIN
-    assert pay_transfer(client, asha, ravi, "10000.00").status_code == 200
-    assert dec(balance(client, asha)) == 0 and dec(balance(client, ravi)) == 2 * OPENING
-    r = prepare(client, asha, ravi, "0.01")
-    assert r.status_code == 409 and code(r) == "INSUFFICIENT_BALANCE"
-    assert reconciled(db) == []
-
-
-def test_balance_dropping_after_the_review_still_blocks_the_payment_and_debits_nothing(client, world, db):
-    asha, ravi, chitra = world
-    sid = prepared(client, asha, chitra, "800.00")
+    assert client.delete(f"/banks/{asha['bank']['connection_id']}", headers=asha["headers"]).status_code == 200
+    sid = prepared(client, asha, ravi, "300.00")
+    assert client.get(f"/payments/sessions/{sid}", headers=asha["headers"]).json()["funding_sources"] == []
     token = authorize(client, asha, sid)
-    # the money is spent elsewhere before the customer confirms
-    assert pay_transfer(client, asha, ravi, "9500.00").status_code == 200
     r = confirm(client, asha, sid, token)
-    assert r.status_code == 409 and code(r) == "INSUFFICIENT_BALANCE"
-    assert dec(balance(client, asha)) == 500 and dec(balance(client, chitra)) == OPENING
-    assert len(txns(db)) == 1 and reconciled(db) == []
-    ps = db.scalar(select(PaymentSession).where(PaymentSession.session_id == sid))
-    assert ps.status == "AUTHENTICATED"  # a failed payment leaves the payer's balance alone
+    assert r.status_code == 409 and code(r) == "NO_FUNDING_SOURCE"
+    assert txns(db) == []
+
+
+def test_there_is_no_balance_limit_only_the_payment_limits(client, world, db, monkeypatch):
+    asha, ravi, _ = world
+    monkeypatch.setattr(get_settings(), "step_up_amount_threshold", Decimal("100000"))  # large payments would otherwise ask for a PIN
+    assert pay_transfer(client, asha, ravi, "10000.00").status_code == 200
+    assert pay_transfer(client, asha, ravi, "10000.01").status_code == 200  # a wallet of 10,000 would have refused this
+    assert len(txns(db)) == 2 and reconciled(db) == []
+
+
+def test_disconnecting_the_bank_after_the_face_check_blocks_confirmation_and_moves_nothing(client, world, db):
+    asha, ravi, _ = world
+    sid = prepared(client, asha, ravi, "800.00")
+    token = authorize(client, asha, sid)
+    assert client.delete(f"/banks/{asha['bank']['connection_id']}", headers=asha["headers"]).status_code == 200
+    r = confirm(client, asha, sid, token)
+    assert r.status_code == 409 and code(r) == "NO_FUNDING_SOURCE"
+    assert txns(db) == [] and db.scalar(select(PaymentSession.status)) == "AUTHENTICATED"  # the ticket is not burned
+    again = client.post("/banks", json={"bank_code": "sbi", "account_type": "SALARY"}, headers=asha["headers"]).json()
+    ok = confirm(client, asha, sid, token)  # same ticket, new default account
+    assert ok.status_code == 200 and ok.json()["funding_source"]["bank_name"] == "State Bank of India"
+    assert ok.json()["funding_source"]["account_ref"] == again["account_ref"]
 
 
 def test_decimal_money_has_no_floating_point_drift(client, world, db):
     asha, ravi, _ = world
     for amount in ("0.10", "0.20", "0.30", "33.33", "0.01"):
         assert pay_transfer(client, asha, ravi, amount).status_code == 200
-    assert dec(balance(client, asha)) == OPENING - dec("33.94") and dec(balance(client, ravi)) == OPENING + dec("33.94")
+    assert dec(net_moved(client, asha)) == OPENING - dec("33.94") and dec(net_moved(client, ravi)) == OPENING + dec("33.94")
     assert reconciled(db) == []
 
 
@@ -247,7 +252,7 @@ def test_the_confirmation_must_name_the_recipient_and_amount_that_were_shown(cli
     assert missing.status_code == 422 and code(missing) == "EXPECTATION_MISSING"
     garbage = confirm(client, asha, sid, token, expected_recipient="not a valid id!!")
     assert garbage.status_code == 409 and code(garbage) == "RECIPIENT_MISMATCH"
-    assert txns(db) == [] and dec(balance(client, asha)) == OPENING
+    assert txns(db) == [] and dec(net_moved(client, asha)) == OPENING
     assert confirm(client, asha, sid, token).status_code == 200  # the right details still work: the ticket was not burned
 
 
@@ -258,7 +263,7 @@ def test_an_authorization_is_single_use_and_replay_is_rejected(client, world, db
     assert confirm(client, asha, sid, token).status_code == 200
     again = confirm(client, asha, sid, token)
     assert again.status_code in (403, 409) and code(again) in ("AUTHORIZATION_USED", "SESSION_ALREADY_PAID")
-    assert len(txns(db)) == 1 and dec(balance(client, asha)) == OPENING - 300
+    assert len(txns(db)) == 1 and dec(net_moved(client, asha)) == OPENING - 300
 
 
 def test_a_ticket_for_one_payment_cannot_pay_another(client, world, db):
@@ -298,7 +303,7 @@ def test_an_expired_authorization_is_refused(client, world, db):
     db.commit()
     r = confirm(client, asha, sid, token)
     assert r.status_code == 403 and code(r) in ("AUTHORIZATION_EXPIRED", "SESSION_EXPIRED") or code(r) == "AUTHORIZATION_INVALID"
-    assert txns(db) == [] and dec(balance(client, asha)) == OPENING
+    assert txns(db) == [] and dec(net_moved(client, asha)) == OPENING
 
 
 def test_an_expired_review_cannot_be_authenticated_or_confirmed(client, world, db):
@@ -318,7 +323,7 @@ def test_tampering_with_the_stored_recipient_after_authorization_voids_the_ticke
     db.commit()
     r = client.post(f"/payments/sessions/{sid}/confirm", json={"authorization_token": token, "expected_amount": "100.00", "expected_recipient": chitra["facepay_id"]}, headers=asha["headers"])
     assert r.status_code == 403 and code(r) == "AUTHORIZATION_INVALID"
-    assert txns(db) == [] and dec(balance(client, chitra)) == OPENING
+    assert txns(db) == [] and dec(net_moved(client, chitra)) == OPENING
 
 
 def test_tampering_with_the_stored_amount_after_authorization_voids_the_ticket(client, world, db):
@@ -362,7 +367,7 @@ def test_a_wrong_face_pays_nothing(client, world, db):
     sid = prepared(client, asha, ravi, "100.00")
     r = authenticate(client, asha, sid, identity=1)  # Ravi's face on Asha's session
     assert r.json()["result"] == "REJECTED" and r.json()["authorization"] is None
-    assert txns(db) == [] and dec(balance(client, asha)) == OPENING
+    assert txns(db) == [] and dec(net_moved(client, asha)) == OPENING
 
 
 # ============================================================ cancel, idempotency, duplicates
@@ -411,7 +416,7 @@ def test_a_retried_idempotent_payment_cannot_be_paid_twice(client, world, db):
     assert reopened.json()["session_id"] == sid and reopened.json()["status"] == "PAID"
     r = confirm(client, asha, sid, token)
     assert r.status_code in (403, 409)
-    assert len(txns(db)) == 1 and dec(balance(client, asha)) == OPENING - 250
+    assert len(txns(db)) == 1 and dec(net_moved(client, asha)) == OPENING - 250
 
 
 def test_simultaneous_confirmations_move_the_money_exactly_once(client, world, db):
@@ -424,11 +429,11 @@ def test_simultaneous_confirmations_move_the_money_exactly_once(client, world, d
     statuses = sorted(r.status_code for r in results)
     assert statuses.count(200) == 1 and all(s in (200, 403, 409) for s in statuses), statuses
     assert len(txns(db)) == 1
-    assert dec(balance(client, asha)) == OPENING - 400 and dec(balance(client, ravi)) == OPENING + 400
+    assert dec(net_moved(client, asha)) == OPENING - 400 and dec(net_moved(client, ravi)) == OPENING + 400
     assert reconciled(db) == []
 
 
-def test_two_payments_racing_for_one_balance_cannot_overdraw(client, world, db):
+def test_two_payments_confirmed_at_the_same_time_are_both_recorded_once(client, world, db):
     asha, ravi, chitra = world
     first, second = prepared(client, asha, ravi, "6000.00"), prepared(client, asha, chitra, "6000.00")
     tokens = {first: authorize(client, asha, first), second: authorize(client, asha, second)}
@@ -440,55 +445,51 @@ def test_two_payments_racing_for_one_balance_cannot_overdraw(client, world, db):
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(go, [first, second]))
-    assert sorted(r.status_code for r in results) == [200, 409]
-    assert [code(r) for r in results if r.status_code == 409] == ["INSUFFICIENT_BALANCE"]
-    assert dec(balance(client, asha)) == OPENING - 6000 and len(txns(db)) == 1 and reconciled(db) == []
+    assert sorted(r.status_code for r in results) == [200, 200]  # no balance to overdraw; each ticket belongs to its own payment
+    assert len(txns(db)) == 2 and dec(net_moved(client, asha)) == OPENING - 12000
 
 
-# ============================================================ ledger atomicity
+# ============================================================ atomicity
 
 
-def test_a_crash_while_posting_rolls_everything_back(client, world, db, monkeypatch):
+def test_a_crash_before_the_commit_rolls_everything_back(client, world, db, monkeypatch):
+    from app.services import payment_service as pay
+    from app.services import security_service as sec
+
     asha, ravi, _ = world
     sid = prepared(client, asha, ravi, "500.00")
     token = authorize(client, asha, sid)
-    real = ledger_service._entry
-    calls = {"n": 0}
+    real = sec.record_event
 
-    def flaky(*a, **kw):
-        calls["n"] += 1
-        if calls["n"] == 2:  # after the debit line, before the credit line
-            raise RuntimeError("simulated crash between the two ledger lines")
-        return real(*a, **kw)
+    def flaky(db_, user, kind, *a, **kw):
+        if kind == "PAYMENT_CONFIRMED":  # after the transaction row was added and the ticket consumed, before the commit
+            raise RuntimeError("simulated crash just before the payment was committed")
+        return real(db_, user, kind, *a, **kw)
 
-    monkeypatch.setattr(ledger_service, "_entry", flaky)
+    monkeypatch.setattr(sec, "record_event", flaky)
     with pytest.raises(RuntimeError):
         confirm(client, asha, sid, token)
     monkeypatch.undo()
     db.expire_all()
-    assert dec(balance(client, asha)) == OPENING and dec(balance(client, ravi)) == OPENING  # neither side moved
-    assert txns(db) == []
-    assert db.scalar(select(func.count()).select_from(LedgerEntry).where(LedgerEntry.kind == "TRANSFER")) == 0
+    assert txns(db) == []  # no transaction row, no consumed ticket, no PAID session
     assert db.scalar(select(PaymentAuthorization.status)) == "ACTIVE"
-    assert reconciled(db) == []
+    assert db.scalar(select(PaymentSession.status).where(PaymentSession.session_id == sid)) == "AUTHENTICATED"
     assert confirm(client, asha, sid, token).status_code == 200  # and the same ticket still works afterwards
-    assert dec(balance(client, ravi)) == OPENING + 500
+    assert len(txns(db)) == 1 and dec(net_moved(client, ravi)) == OPENING + 500
+    assert pay is not None
 
 
-def test_the_ledger_reconciles_after_many_mixed_payments(client, world, shop, db):
+def test_net_movement_is_conserved_after_many_mixed_payments(client, world, shop, db):
     asha, ravi, chitra = world
     pay_transfer(client, asha, ravi, "1200.00")
     pay_transfer(client, ravi, chitra, "300.25", identity=1)
     pay_transfer(client, ravi, asha, "75.75", identity=1)
     bill = create_session(client, shop, amount="480.00", ref="SG-77")["session_id"]
     assert confirm(client, asha, bill, authorize(client, asha, bill)).status_code == 200
-    total = sum(dec(balance(client, c)) for c in (asha, ravi, chitra))
-    assert total + dec(db.scalar(select(func.sum(User.balance)).where(User.id.notin_([asha["id"], ravi["id"], chitra["id"]])) ) or 0) == 3 * OPENING - 480  # money is conserved
-    assert reconciled(db) == []
-    # a debit always has a credit of the same amount
-    debits = db.scalar(select(func.sum(LedgerEntry.amount)).where(LedgerEntry.direction == "DEBIT"))
-    credits = db.scalar(select(func.sum(LedgerEntry.amount)).where(LedgerEntry.direction == "CREDIT", LedgerEntry.kind != "OPENING_GRANT"))
-    assert debits == credits
+    # transfers only move money between customers; the 480 went to the merchant
+    assert sum(dec(net_moved(client, c)) for c in (asha, ravi, chitra)) == -480
+    assert len(txns(db)) == 4 and reconciled(db) == []
+    assert db.scalar(select(func.count()).select_from(LedgerEntry)) == 0
 
 
 def test_reconcile_notices_a_balance_that_does_not_match_its_ledger(client, world, db):
@@ -518,30 +519,19 @@ def test_the_database_refuses_a_transaction_with_neither_or_both_payees(client, 
         db.rollback()
 
 
-# ============================================================ merchant payments use the same ledger
+# ============================================================ merchant payments
 
 
-def test_a_merchant_payment_debits_the_customer_and_credits_the_merchant(client, world, shop, db):
+def test_a_merchant_payment_is_recorded_for_the_customer_and_the_merchant(client, world, shop, db):
     asha, _, _ = world
     sid = create_session(client, shop, amount="950.00", ref="SG-10492")["session_id"]
     r = confirm(client, asha, sid, authorize(client, asha, sid))
     assert r.status_code == 200 and r.json()["kind"] == "MERCHANT_PAYMENT" and r.json()["merchant_name"] == "SuperGrocery"
-    assert dec(balance(client, asha)) == OPENING - 950
-    db.expire_all()
-    from app.models import Merchant
-
-    assert db.get(Merchant, shop["id"]).balance == dec("950.00")
+    assert dec(net_moved(client, asha)) == OPENING - 950
+    (t,) = txns(db)
+    assert (t.merchant_id, t.payer_id, t.amount, t.status) == (shop["id"], asha["id"], dec("950.00"), "SUCCESS")
     assert reconciled(db) == []
     assert client.get("/merchant/summary", headers=shop["headers"]).json()["total_revenue"] in ("950.00", 950, "950")
-
-
-def test_a_merchant_bill_above_the_balance_is_refused_and_leaves_everything_alone(client, world, shop, db):
-    asha, _, _ = world
-    sid = create_session(client, shop, amount="10500.00", ref="SG-BIG")["session_id"]
-    token = authorize(client, asha, sid)
-    r = confirm(client, asha, sid, token)
-    assert r.status_code == 409 and code(r) == "INSUFFICIENT_BALANCE"
-    assert dec(balance(client, asha)) == OPENING and txns(db) == []
 
 
 # ============================================================ audit trail

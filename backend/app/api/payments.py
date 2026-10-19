@@ -17,6 +17,7 @@ from app.schemas.payments import (
     ConfirmRequest,
     CustomerSummary,
     CustomerTransactionOut,
+    NearbyRequestOut,
     PaymentAuthResult,
     PaymentVerifyRequest,
     ReceiptOut,
@@ -48,6 +49,12 @@ def _auth_limit(request: Request, user: User = Depends(get_customer_any_status))
 def _pay_limit(request: Request, user: User = Depends(get_customer_any_status)) -> None:
     if not payment_limiter.allow(f"payments:user{user.id}"):
         raise _too_many(payment_limiter, "Too many requests. Please wait a minute.")
+
+
+@router.get("/nearby", response_model=list[NearbyRequestOut], dependencies=[Depends(_pay_limit)])
+def nearby(user: User = Depends(get_current_customer), db: Session = Depends(get_db)):
+    """SIMULATED discovery: open merchant requests that merchants chose to display. No location or proximity is used."""
+    return svc.nearby(db, user)
 
 
 @router.get("/sessions/{session_id}", response_model=CheckoutOut, dependencies=[Depends(_pay_limit)])
@@ -86,7 +93,14 @@ def confirm(session_id: str, data: ConfirmRequest, user: User = Depends(get_curr
         expected_order_reference=data.expected_order_reference,
         expected_recipient=data.expected_recipient,
         pin=data.pin,
+        funding_source_id=data.funding_source_id,
     )
+
+
+@router.post("/sessions/{session_id}/authorization/cancel", dependencies=[Depends(_pay_limit)])
+def cancel_authorization(session_id: str, user: User = Depends(get_current_customer), db: Session = Depends(get_db)):
+    """Cancel at the confirmation screen: the live authorization is voided and nothing is paid."""
+    return svc.revoke_authorization(db, user, session_id)
 
 
 @router.get("/transactions", response_model=list[CustomerTransactionOut])

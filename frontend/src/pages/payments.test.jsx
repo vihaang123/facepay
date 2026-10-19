@@ -8,9 +8,11 @@ const ORIGINAL = { timing: { ...TIMING }, poll: { ...POLL } }
 const inSeconds = (s) => new Date(Date.now() + s * 1000).toISOString()
 
 const SID = 'ps_abc123'
+const BANK = { connection_id: 'bk_hdfc1', bank_code: 'hdfc', bank_name: 'HDFC Bank', account_type_label: 'Savings account', account_ref: 'DEMO-••••-4821', is_default: true }
 const checkout = (over = {}) => ({
   session_id: SID, merchant_name: 'SuperGrocery', order_reference: 'SG-10492', description: null,
-  amount: '950.00', currency: 'INR', status: 'CREATED', expires_at: inSeconds(900), max_auth_attempts: 5, attempts_remaining: 5, ...over,
+  amount: '950.00', currency: 'INR', status: 'CREATED', expires_at: inSeconds(900), max_auth_attempts: 5, attempts_remaining: 5,
+  fee: '0.00', total: '950.00', funding_sources: [BANK], ...over,
 })
 const challenge = { challenge_id: 'c'.repeat(43), challenge: 'turn_right', instruction: 'Slowly turn your head to your right', expires_in_seconds: 60, baseline_frames: 2, min_frames: 5, max_frames: 10 }
 const stages = (a, b, c) => [{ stage: 'FACE_DETECTION', status: a }, { stage: 'LIVENESS', status: b }, { stage: 'IDENTITY', status: c }]
@@ -30,6 +32,7 @@ const receipt = {
   transaction_id: 'FP-7K3M9Q2XA4', status: 'SUCCESS', amount: '950.00', currency: 'INR', payment_method: 'FACE_PAY', timestamp: '2026-10-07T12:30:00Z',
   payer_name: 'Asha Rao', merchant_name: 'SuperGrocery', order_reference: 'SG-10492', description: null, session_id: SID,
   authentication: 'Face + basic liveness check',
+  funding_source: { bank_name: 'HDFC Bank', account_ref: 'DEMO-••••-4821' }, fee: '0.00', total: '950.00',
 }
 
 let stopTrack
@@ -92,7 +95,7 @@ describe('checkout', () => {
     expect(within(summary).getByText('SG-10492')).toBeInTheDocument()
     expect(within(summary).getByText('₹950.00')).toBeInTheDocument()
     expect(within(summary).getByText('Simulated payment')).toBeInTheDocument()
-    expect(within(summary).getByText('Waiting for customer')).toBeInTheDocument()
+    expect(within(summary).getByText('Awaiting payment')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Pay with Face' })).toBeEnabled()
     expect(screen.getByText(/5 of 5 face checks left/)).toBeInTheDocument()
   })
@@ -170,20 +173,24 @@ describe('paying with FacePay', () => {
     expect(within(stagesList).getByText('Payment authorization created').closest('li')).toHaveTextContent('done')
     expect(within(stagesList).getByText('Customer confirmation').closest('li')).toHaveTextContent('in progress') // the customer has not confirmed yet
     expect(within(stagesList).getByText('Payment processed').closest('li')).toHaveTextContent('not yet')
-    expect(within(section).getByText('Face + basic liveness check')).toBeInTheDocument()
+    expect(within(section).getByText('Face + basic liveness check passed')).toBeInTheDocument()
     expect(within(section).getByText('Asha Rao')).toBeInTheDocument()
     expect(section.textContent).not.toMatch(/\d+\.\d%|distance|threshold/i) // no scores for customers
-    expect(within(section).getByText('₹950.00')).toBeInTheDocument()
+    expect(within(section).getByTestId('confirm-amount')).toHaveTextContent('₹950.00')
+    expect(within(section).getByTestId('confirm-total')).toHaveTextContent('₹950.00')
+    expect(within(section).getByText('Fee (simulated)')).toBeInTheDocument()
+    expect(within(section).getByText('HDFC Bank · Savings account')).toBeInTheDocument() // the selected funding source
+    expect(within(section).getByText('Demo connection only. No real bank account is accessed and no money is transferred.')).toBeInTheDocument()
     expect(within(section).getByText(/stays valid for/)).toBeInTheDocument()
     expect(stopTrack).toHaveBeenCalled() // the camera is released once authentication is over
 
-    await user.click(within(section).getByRole('button', { name: /Confirm payment of ₹950\.00/ }))
+    await user.click(within(section).getByRole('button', { name: /Confirm and Pay ₹950\.00/ }))
     expect(await screen.findByRole('heading', { name: 'Payment successful' })).toBeInTheDocument()
 
     const confirmCall = api.callsTo(`POST /payments/sessions/${SID}/confirm`)[0]
     // Exactly what the customer was shown: the server compares each one with the session and with the authorization itself.
     expect(confirmCall.body).toEqual({
-      authorization_token: 'T'.repeat(43), expected_amount: '950.00', expected_merchant: 'SuperGrocery', expected_order_reference: 'SG-10492',
+      authorization_token: 'T'.repeat(43), expected_amount: '950.00', expected_merchant: 'SuperGrocery', expected_order_reference: 'SG-10492', funding_source_id: 'bk_hdfc1',
     })
     expect(confirmCall.headers.Authorization).toBe('Bearer token-for-customer')
 
@@ -193,6 +200,7 @@ describe('paying with FacePay', () => {
     expect(within(done).getByText('FP-7K3M9Q2XA4')).toBeInTheDocument()
     expect(within(done).getByText('Simulated payment')).toBeInTheDocument()
     expect(within(done).getByText('Authenticated: Face + basic liveness check')).toBeInTheDocument()
+    expect(within(done).getByText(/Paid from HDFC Bank/)).toBeInTheDocument()
     expect(within(done).getByRole('list', { name: 'Payment stages' })).toHaveTextContent('Payment processed: done')
     expect(screen.getByRole('link', { name: 'View receipt' })).toHaveAttribute('href', '/receipts/FP-7K3M9Q2XA4')
     expect(screen.getByRole('link', { name: 'Done' })).toHaveAttribute('href', '/dashboard')
@@ -214,7 +222,7 @@ describe('paying with FacePay', () => {
     await screen.findByRole('heading', { name: 'Confirm payment' })
     const ok = globalThis.fetch
     vi.stubGlobal('fetch', vi.fn(async (url, init) => (String(url).endsWith('/confirm') ? (await gate, ok(url, init)) : ok(url, init))))
-    await user.click(screen.getByRole('button', { name: /Confirm payment of ₹950\.00/ }))
+    await user.click(screen.getByRole('button', { name: /Confirm and Pay ₹950\.00/ }))
     expect(screen.getByRole('status', { name: 'Processing payment' })).toHaveTextContent('Payment processed')
     release()
     expect(await screen.findByRole('heading', { name: 'Payment successful' })).toBeInTheDocument()
@@ -299,7 +307,7 @@ describe('confirmation failures', () => {
   async function toConfirm(extra) {
     const out = await payWithFace(extra)
     await screen.findByRole('heading', { name: 'Confirm payment' })
-    await out.user.click(screen.getByRole('button', { name: /Confirm payment of ₹950\.00/ }))
+    await out.user.click(screen.getByRole('button', { name: /Confirm and Pay ₹950\.00/ }))
     return out
   }
 
@@ -357,10 +365,10 @@ describe('confirmation failures', () => {
       }
       return ok(url, init)
     }))
-    await user.click(screen.getByRole('button', { name: /Confirm payment of ₹950\.00/ }))
+    await user.click(screen.getByRole('button', { name: /Confirm and Pay ₹950\.00/ }))
     expect(await screen.findByRole('alert')).toHaveTextContent(/Your payment was not confirmed/)
     fail = false
-    await user.click(screen.getByRole('button', { name: /Confirm payment of ₹950\.00/ }))
+    await user.click(screen.getByRole('button', { name: /Confirm and Pay ₹950\.00/ }))
     expect(await screen.findByRole('heading', { name: 'Payment successful' })).toBeInTheDocument()
     expect(calls).toHaveLength(2)
     expect(calls[0].authorization_token).toBe(calls[1].authorization_token)
@@ -369,7 +377,7 @@ describe('confirmation failures', () => {
   it('a server error keeps the authorization and says the payment was not confirmed', async () => {
     await toConfirm({ [`POST /payments/sessions/${SID}/confirm`]: { status: 500, body: { detail: 'boom' } } })
     expect(await screen.findByRole('alert')).toHaveTextContent(/went wrong on our side.*Your payment was not confirmed/)
-    expect(screen.getByRole('button', { name: /Confirm payment of ₹950\.00/ })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Confirm and Pay ₹950\.00/ })).toBeEnabled()
   })
 
   it('rate limiting on confirm', async () => {
@@ -384,11 +392,13 @@ describe('confirmation failures', () => {
     expect(screen.getByRole('button', { name: 'Verify again' })).toBeInTheDocument()
   })
 
-  it('cancelling the confirmation discards the authorization', async () => {
-    const { user, api } = await payWithFace()
+  it('cancelling the confirmation voids the authorization on the server and pays nothing', async () => {
+    const { user, api } = await payWithFace({ [`POST /payments/sessions/${SID}/authorization/cancel`]: { body: { session_id: SID, status: 'CREATED' } } })
     await screen.findByRole('heading', { name: 'Confirm payment' })
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(await screen.findByRole('button', { name: 'Pay with Face' })).toBeInTheDocument()
+    expect(screen.getByText(/Nothing was paid/)).toBeInTheDocument()
+    expect(api.callsTo(`POST /payments/sessions/${SID}/authorization/cancel`)).toHaveLength(1)
     expect(api.callsTo(`POST /payments/sessions/${SID}/confirm`)).toHaveLength(0)
   })
 })
@@ -415,7 +425,7 @@ describe('receipts and history', () => {
     const base = { kind: 'MERCHANT_PAYMENT', direction: 'SENT', status: 'SUCCESS', counterparty_masked_id: null, currency: 'INR', note: null }
     mockApi({
       'GET /users/me': { body: { ...customerProfile, facepay_id: 'asha.rao@facepay' } },
-      'GET /wallet': { body: { balance: '8929.50', currency: 'INR', simulated: true, entries: [] } },
+      'GET /banks': { body: [] },
       'GET /activity/counts': { body: { pending_incoming_requests: 0 } },
       'GET /faces/enrollment': { status: 500, body: {} }, 'GET /faces/model': { body: { model: null } }, 'GET /face-auth/attempts': { body: [] },
       'GET /activity': { body: [
@@ -424,7 +434,7 @@ describe('receipts and history', () => {
       ] },
     })
     renderApp('/dashboard')
-    const table = await screen.findByRole('list', { name: 'Recent activity' })
+    const table = await screen.findByRole('list', { name: 'Recent payments' })
     const rows = within(table).getAllByRole('listitem')
     expect(rows).toHaveLength(2)
     expect(within(rows[0]).getByText('Paid SuperGrocery')).toBeInTheDocument()
@@ -436,7 +446,7 @@ describe('receipts and history', () => {
   })
 
   it('shows an empty state and an error state for activity', async () => {
-    const quiet = { 'GET /wallet': { body: { balance: '1.00', currency: 'INR', simulated: true, entries: [] } }, 'GET /activity/counts': { body: { pending_incoming_requests: 0 } }, 'GET /faces/enrollment': { status: 500, body: {} }, 'GET /faces/model': { body: { model: null } }, 'GET /face-auth/attempts': { body: [] } }
+    const quiet = { 'GET /banks': { body: [] }, 'GET /activity/counts': { body: { pending_incoming_requests: 0 } }, 'GET /faces/enrollment': { status: 500, body: {} }, 'GET /faces/model': { body: { model: null } }, 'GET /face-auth/attempts': { body: [] } }
     mockApi({ 'GET /users/me': { body: customerProfile }, 'GET /activity': { body: [] }, ...quiet })
     const { unmount } = renderApp('/dashboard')
     expect(await screen.findByText('No activity yet')).toBeInTheDocument()
@@ -469,7 +479,7 @@ describe('merchant', () => {
     renderApp('/merchant/dashboard')
     expect(await screen.findByText('₹2,450.50')).toBeInTheDocument()
     expect(screen.getByText('Revenue today')).toBeInTheDocument()
-    for (const [label, value] of [['Successful payments', '2'], ['Waiting for customer', '1'], ['Failed payments', '1']]) {
+    for (const [label, value] of [['Successful payments', '2'], ['Awaiting payment', '1'], ['Failed payments', '1']]) {
       expect(screen.getByText(label, { selector: 'p' }).parentElement).toHaveTextContent(value)
     }
     const tx = await screen.findByRole('list', { name: 'Recent transactions' })
@@ -518,7 +528,7 @@ describe('merchant', () => {
     await user.type(await screen.findByLabelText('Amount (₹)'), '950')
     await user.type(screen.getByLabelText('Order / reference'), ' SG-10492 ')
     await user.click(screen.getByRole('button', { name: 'Create payment request' }))
-    expect(await screen.findByText('Awaiting customer')).toBeInTheDocument()
+    expect(within(await screen.findByRole('region', { name: 'Session details' })).getByText('Awaiting payment')).toBeInTheDocument()
     expect(api.callsTo('POST /merchant/payment-sessions')[0].body).toEqual({ amount: '950', order_reference: 'SG-10492', expires_in_minutes: 15 })
     expect(screen.getByText(`${window.location.origin}/checkout/${SID}`)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Copy link' })).toBeInTheDocument()
@@ -557,9 +567,9 @@ describe('merchant', () => {
     let status = 'CREATED'
     mockApi(merchantRoutes({ [`GET /merchant/payment-sessions/${SID}`]: () => ({ body: sessionBody({ status, transaction_id: status === 'PAID' ? 'FP-AAAAAAAAAA' : null }) }) }))
     renderApp(`/merchant/payments/${SID}`)
-    expect(await screen.findByText('Awaiting customer')).toBeInTheDocument()
+    expect(within(await screen.findByRole('region', { name: 'Session details' })).getByText('Awaiting payment')).toBeInTheDocument()
     status = 'AUTHENTICATED'
-    expect(await screen.findByText(/Customer authenticated, awaiting confirmation/)).toBeInTheDocument()
+    expect(await screen.findByText(/Customer authenticated, awaiting their confirmation/)).toBeInTheDocument()
     status = 'PAID'
     expect(await screen.findByRole('link', { name: 'View transaction' })).toHaveAttribute('href', '/merchant/receipts/FP-AAAAAAAAAA')
     expect(screen.queryByRole('region', { name: 'Checkout link' })).not.toBeInTheDocument() // finished: no more link, no more polling
@@ -622,7 +632,7 @@ describe('risk-based step-up and safety messages', () => {
     expect(screen.getByText(/needs your payment PIN/)).toBeInTheDocument()
     expect(screen.getByText(/because of a larger amount/i)).toBeInTheDocument()
     expect(screen.getByText('Risk-based authorization prototype')).toBeInTheDocument()
-    const confirm = screen.getByRole('button', { name: /Confirm payment of ₹950\.00/ })
+    const confirm = screen.getByRole('button', { name: /Confirm and Pay ₹950\.00/ })
     expect(confirm).toBeDisabled()
     await user.type(screen.getByLabelText('Payment PIN'), '12a3456789')
     expect(screen.getByLabelText('Payment PIN')).toHaveValue('123456') // digits only, six at most
@@ -636,7 +646,7 @@ describe('risk-based step-up and safety messages', () => {
     const { user, api } = await payWithFace()
     await screen.findByRole('heading', { name: 'Confirm payment' })
     expect(screen.queryByLabelText('Payment PIN')).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /Confirm payment of ₹950\.00/ }))
+    await user.click(screen.getByRole('button', { name: /Confirm and Pay ₹950\.00/ }))
     await screen.findByRole('heading', { name: 'Payment successful' })
     expect(api.callsTo(`POST /payments/sessions/${SID}/confirm`)[0].body).not.toHaveProperty('pin')
   })
@@ -645,7 +655,7 @@ describe('risk-based step-up and safety messages', () => {
     const { user, api } = await payWithFace({ ...stepUp(), ...failConfirm(403, 'PIN_INCORRECT', 'That payment PIN is not correct.') })
     await screen.findByRole('heading', { name: 'Confirm payment' })
     await user.type(screen.getByLabelText('Payment PIN'), '000000')
-    await user.click(screen.getByRole('button', { name: /Confirm payment of/ }))
+    await user.click(screen.getByRole('button', { name: /Confirm and Pay/ }))
     expect(await screen.findByRole('alert')).toHaveTextContent('That payment PIN is not correct.')
     expect(screen.getByRole('heading', { name: 'Confirm payment' })).toBeInTheDocument()
     expect(api.callsTo(`POST /payments/sessions/${SID}/authenticate`)).toHaveLength(1) // no new face check was needed
@@ -655,7 +665,7 @@ describe('risk-based step-up and safety messages', () => {
     await payWithFace(stepUp({ pin_set: false }))
     await screen.findByRole('heading', { name: 'Confirm payment' })
     expect(screen.getByRole('link', { name: 'Set one in Security' })).toHaveAttribute('href', '/security')
-    expect(screen.getByRole('button', { name: /Confirm payment of/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Confirm and Pay/ })).toBeDisabled()
   })
 
   it.each([
@@ -665,7 +675,7 @@ describe('risk-based step-up and safety messages', () => {
   ])('%s is shown in the server’s own words and ends the attempt', async (code, status, message) => {
     const { user } = await payWithFace(failConfirm(status, code, message))
     await screen.findByRole('heading', { name: 'Confirm payment' })
-    await user.click(screen.getByRole('button', { name: /Confirm payment of/ }))
+    await user.click(screen.getByRole('button', { name: /Confirm and Pay/ }))
     expect(await screen.findByText(message)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Pay with Face' })).toBeInTheDocument()
   })
@@ -676,7 +686,7 @@ describe('risk-based step-up and safety messages', () => {
   ])('%s asks the customer to review and verify again', async (code, text) => {
     const { user } = await payWithFace(failConfirm(409, code, 'm'))
     await screen.findByRole('heading', { name: 'Confirm payment' })
-    await user.click(screen.getByRole('button', { name: /Confirm payment of/ }))
+    await user.click(screen.getByRole('button', { name: /Confirm and Pay/ }))
     expect(await screen.findByText(text)).toBeInTheDocument()
   })
 

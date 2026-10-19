@@ -11,12 +11,12 @@ from sqlalchemy import func, select, update
 from app.models import PaymentAuthorization, PaymentRequest, PaymentSession, Transaction
 from app.services import request_service
 from tests.payment_helpers import authorize, confirm
-from tests.transfer_helpers import balance, code
+from tests.transfer_helpers import net_moved, code
 
 pytestmark = pytest.mark.usefixtures("scene_detector")  # camera frames in these tests are synthetic scenes
 
 
-OPENING = Decimal("10000")
+OPENING = Decimal("0")  # nobody holds a balance now: tests compare net movement with zero
 
 
 def dec(v):
@@ -59,7 +59,7 @@ def test_a_request_moves_no_money_and_waits_for_the_payer(client, world, db):
     assert out["status"] == "PENDING" and out["direction"] == "OUTGOING" and dec(out["amount"]) == 600
     assert out["counterparty_name"] == "Ravi Shah" and out["payable"] is False  # the sender cannot pay their own request
     assert out["qr_payload"] == f"facepay://request/{out['request_id']}"
-    assert dec(balance(client, asha)) == OPENING and dec(balance(client, ravi)) == OPENING
+    assert dec(net_moved(client, asha)) == OPENING and dec(net_moved(client, ravi)) == OPENING
     assert db.scalar(select(func.count()).select_from(Transaction)) == 0
 
     seen = client.get(f"/requests/{out['request_id']}", headers=ravi["headers"]).json()
@@ -119,7 +119,7 @@ def test_scanning_a_request_code_shows_the_request_to_the_payer_only(client, wor
     body = r.json()
     assert body["type"] == "REQUEST" and body["recipient"] is None and body["request"]["request_id"] == ref
     assert body["request"]["payable"] is True and dec(body["request"]["amount"]) == 600
-    assert dec(balance(client, ravi)) == OPENING  # scanning charged nothing
+    assert dec(net_moved(client, ravi)) == OPENING  # scanning charged nothing
 
 
 # ============================================================ paying a request
@@ -134,7 +134,7 @@ def test_the_asked_customer_pays_a_request_with_their_own_face_and_confirmation(
     # the amount, recipient and note come from the stored request: the payer never types them
     assert checkout["kind"] == "TRANSFER" and dec(checkout["amount"]) == 600 and checkout["recipient_name"] == "Asha Rao"
     assert checkout["recipient_facepay_id"] == asha["facepay_id"] and checkout["note"] == "Cab" and checkout["request_id"] == ref
-    assert dec(balance(client, ravi)) == OPENING and request_row(db, ref).status == "PENDING"  # starting to pay debits nothing
+    assert dec(net_moved(client, ravi)) == OPENING and request_row(db, ref).status == "PENDING"  # starting to pay debits nothing
 
     sid = checkout["session_id"]
     token = authorize(client, ravi, sid, identity=1)
@@ -145,7 +145,7 @@ def test_the_asked_customer_pays_a_request_with_their_own_face_and_confirmation(
     row = request_row(db, ref)
     txn = db.scalar(select(Transaction).where(Transaction.id == row.transaction_id))
     assert row.status == "PAID" and row.resolved_at is not None and txn.payer_id == ravi["id"] and txn.recipient_id == asha["id"]
-    assert dec(balance(client, ravi)) == OPENING - 600 and dec(balance(client, asha)) == OPENING + 600
+    assert dec(net_moved(client, ravi)) == OPENING - 600 and dec(net_moved(client, asha)) == OPENING + 600
     assert client.get(f"/requests/{ref}", headers=asha["headers"]).json()["transaction_id"] == txn.transaction_id
     # the paid request is shown once, as its transaction
     refs = [i["ref"] for i in client.get("/activity", headers=ravi["headers"]).json()]
@@ -168,7 +168,7 @@ def test_paying_twice_is_impossible(client, world, db):
     again = start_paying(client, ravi, ref)
     assert again.status_code == 409 and code(again) == "REQUEST_NOT_PENDING"
     assert confirm(client, ravi, sid, token).status_code in (403, 409)
-    assert dec(balance(client, ravi)) == OPENING - 600 and db.scalar(select(func.count()).select_from(Transaction)) == 1
+    assert dec(net_moved(client, ravi)) == OPENING - 600 and db.scalar(select(func.count()).select_from(Transaction)) == 1
 
 
 def test_starting_twice_reopens_the_same_payment(client, world, db):
@@ -188,15 +188,15 @@ def test_simultaneous_starts_still_make_one_payment(client, world, db):
     assert db.scalar(select(func.count()).select_from(PaymentSession)) == 1
 
 
-def test_a_request_cannot_be_paid_without_enough_balance(client, world, db):
+def test_a_request_can_be_paid_without_any_balance_check_and_needs_a_funding_source(client, world, db):
     asha, ravi, _ = world
     from tests.transfer_helpers import pay_transfer
 
-    assert pay_transfer(client, ravi, asha, "9500.00", identity=1).status_code == 200  # Ravi now has ₹500
+    assert pay_transfer(client, ravi, asha, "9500.00", identity=1).status_code == 200  # there is no wallet to run down
     ref = asked(client, asha, ravi, "600.00")
     r = start_paying(client, ravi, ref)
-    assert r.status_code == 409 and code(r) == "INSUFFICIENT_BALANCE"
-    assert request_row(db, ref).status == "PENDING" and dec(balance(client, ravi)) == 500
+    assert r.status_code == 201, r.text
+    assert request_row(db, ref).status == "PENDING"  # starting to pay changes nothing
 
 
 def test_a_request_cannot_be_paid_a_different_amount(client, world):
@@ -223,7 +223,7 @@ def test_the_payer_can_decline_and_it_is_final(client, world, db):
         assert again.status_code == 409 and code(again) == "REQUEST_NOT_PENDING"
     pay = start_paying(client, ravi, ref)
     assert pay.status_code == 409 and code(pay) == "REQUEST_NOT_PENDING"
-    assert dec(balance(client, ravi)) == OPENING
+    assert dec(net_moved(client, ravi)) == OPENING
 
 
 def test_the_sender_can_cancel_and_the_payer_cannot_cancel_or_the_sender_decline(client, world):
@@ -246,7 +246,7 @@ def test_cancelling_while_the_payer_is_mid_payment_kills_the_payment(client, wor
     assert r.status_code == 409 and code(r) in ("SESSION_CANCELLED", "REQUEST_NOT_PENDING")
     db.expire_all()
     assert db.scalar(select(func.count()).select_from(Transaction)) == 0
-    assert dec(balance(client, ravi)) == OPENING and dec(balance(client, asha)) == OPENING
+    assert dec(net_moved(client, ravi)) == OPENING and dec(net_moved(client, asha)) == OPENING
     assert db.scalar(select(PaymentAuthorization.status)) == "REVOKED"
     assert db.scalar(select(PaymentSession.status)) == "CANCELLED"
 
@@ -258,7 +258,7 @@ def test_declining_while_mid_payment_also_stops_it(client, world, db):
     token = authorize(client, ravi, sid, identity=1)
     assert client.post(f"/requests/{ref}/decline", headers=ravi["headers"]).status_code == 200
     assert confirm(client, ravi, sid, token).status_code == 409
-    assert dec(balance(client, ravi)) == OPENING
+    assert dec(net_moved(client, ravi)) == OPENING
 
 
 # ============================================================ expiry and the state machine
@@ -286,7 +286,7 @@ def test_expiry_while_the_payer_is_mid_payment_blocks_the_confirmation(client, w
     db.execute(update(PaymentRequest).values(expires_at=datetime.now(UTC) - timedelta(minutes=1)))
     db.commit()
     r = confirm(client, ravi, sid, token)
-    assert r.status_code == 409 and dec(balance(client, ravi)) == OPENING and db.scalar(select(func.count()).select_from(Transaction)) == 0
+    assert r.status_code == 409 and dec(net_moved(client, ravi)) == OPENING and db.scalar(select(func.count()).select_from(Transaction)) == 0
 
 
 def test_a_payment_started_on_a_request_never_outlives_the_request(client, world, db):

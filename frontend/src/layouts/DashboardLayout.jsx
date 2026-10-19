@@ -3,7 +3,7 @@ import Icon from '../components/Icon'
 import { Avatar, Button, Logo } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
 import {
-  ACTIVITY_PATH, ADMIN_PATH, DASHBOARD_PATH, FACE_PATH, LOGIN_PATH, MY_QR_PATH, NEW_PAYMENT_PATH, PROFILE_PATH, REQUESTS_PATH,
+  ACTIVITY_PATH, ADMIN_PATH, BANKS_PATH, DASHBOARD_PATH, FACE_PATH, LOGIN_PATH, MY_QR_PATH, NEW_PAYMENT_PATH, PAY_PATH, PROFILE_PATH, REQUESTS_PATH,
   SCAN_PATH, SECURITY_PATH, SEND_PATH, TRANSACTIONS_PATH,
 } from '../utils/roles'
 
@@ -11,9 +11,11 @@ import {
 const NAV = {
   customer: [
     ['Home', DASHBOARD_PATH.customer, 'home', true],
+    ['Pay', PAY_PATH, 'face'],
     ['Send', SEND_PATH, 'send'],
-    ['Scan', SCAN_PATH, 'scan'],
     ['Activity', ACTIVITY_PATH, 'receipt'],
+    ['Banks', BANKS_PATH, 'bank', false, 'desktop'],
+    ['Scan', SCAN_PATH, 'scan', false, 'desktop'],
     ['Requests', REQUESTS_PATH, 'request', false, 'desktop'], // phones reach these from Home and Profile; five items is the most a thumb bar holds
     ['My QR', MY_QR_PATH, 'qr', false, 'desktop'],
     ['Face profile', FACE_PATH, 'face', false, 'desktop'],

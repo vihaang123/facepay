@@ -39,8 +39,17 @@ def code(r):
     return r.json()["detail"]["code"]
 
 
-def balance(client, cust):
-    return client.get("/wallet", headers=cust["headers"]).json()["balance"]
+def net_moved(client, cust):
+    """Money this customer has received minus money they have sent, from their own successful payments (there is no
+    wallet balance any more, so this is the net movement the history shows). Returned as a string like an API amount."""
+    from decimal import Decimal
+
+    total = Decimal("0")
+    items = client.get("/activity?limit=51", headers=cust["headers"]).json()
+    for i in items:
+        if i["status"] == "SUCCESS" and i["kind"] in ("TRANSFER", "MERCHANT_PAYMENT"):
+            total += Decimal(i["amount"]) * (1 if i["direction"] == "RECEIVED" else -1)
+    return str(total)
 
 
 def prepare(client, payer, to, amount="500.00", note=None, key=None):
