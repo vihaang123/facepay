@@ -177,6 +177,17 @@ describe('customer dashboard', () => {
     expect(screen.getByRole('link', { name: 'View all' })).toHaveAttribute('href', '/activity')
   })
 
+  it('keeps the header short and puts every other page on Home', async () => {
+    storeSession('customer')
+    mockApi(homeRoutes())
+    renderApp('/dashboard')
+    const more = await screen.findByRole('list', { name: 'More options' })
+    expect(within(more).getAllByRole('link').map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+      ['Bank accounts', '/banks'], ['Request money', '/request'], ['Scan QR', '/scan'], ['My QR', '/my-qr'], ['Face profile', '/face'], ['Security and PIN', '/security'],
+    ])
+    expect(within(screen.getByRole('navigation', { name: 'Main' })).getAllByRole('link')).toHaveLength(5)
+  })
+
   it('has no wallet balance, top-up or balance toggle', async () => {
     storeSession('customer')
     mockApi(homeRoutes())

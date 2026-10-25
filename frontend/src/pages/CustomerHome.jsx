@@ -12,7 +12,7 @@ import { getActivity, getActivityCounts } from '../services/transfers'
 import { faceStatus } from '../utils/faceStatus'
 import { DEMO_DISCLAIMER } from '../utils/demo'
 import { formatFeedTime, greeting } from '../utils/format'
-import { ACTIVITY_PATH, AUTHENTICATE_PATH, BANKS_PATH, FACE_PATH, MY_QR_PATH, PAY_PATH, PROFILE_PATH, REQUESTS_PATH, REQUEST_PATH, SCAN_PATH, SECURITY_PATH, SEND_PATH } from '../utils/roles'
+import { ACTIVITY_PATH, AUTHENTICATE_PATH, BANKS_PATH, FACE_PATH, MY_QR_PATH, PAY_PATH, REQUESTS_PATH, REQUEST_PATH, SCAN_PATH, SECURITY_PATH, SEND_PATH } from '../utils/roles'
 
 const linkClass = 'text-sm font-semibold text-brand-700 underline-offset-2 hover:underline'
 
@@ -64,6 +64,33 @@ function Tiles() {
         </Link>
       ))}
     </nav>
+  )
+}
+
+// Everything that used to crowd the header. The header keeps five daily actions; the rest is one tap from here.
+const MORE = [
+  ['Bank accounts', BANKS_PATH, 'bank'],
+  ['Request money', REQUEST_PATH, 'request'],
+  ['Scan QR', SCAN_PATH, 'scan'],
+  ['My QR', MY_QR_PATH, 'qr'],
+  ['Face profile', FACE_PATH, 'face'],
+  ['Security and PIN', SECURITY_PATH, 'shield'],
+]
+
+function MoreLinks() {
+  return (
+    <Card title="More" aria-label="More">
+      <ul aria-label="More options" className="grid grid-cols-2 gap-2">
+        {MORE.map(([label, to, icon]) => (
+          <li key={to}>
+            <Link to={to} className="flex min-h-12 items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold transition hover:border-brand-200 hover:bg-brand-50/40 active:scale-[0.98] motion-reduce:transition-none">
+              <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-700"><Icon name={icon} className="h-4 w-4" /></span>
+              <span className="min-w-0 flex-1 leading-tight">{label}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </Card>
   )
 }
 
@@ -204,12 +231,7 @@ export default function CustomerHome() {
       <RecentActivity />
       <ConnectedBanks />
       <SecurityStatus />
-      <nav aria-label="More" className="flex flex-wrap justify-center gap-x-5 gap-y-1">
-        <Link className={linkClass} to={REQUEST_PATH}>Request money</Link>
-        <Link className={linkClass} to={SCAN_PATH}>Scan QR</Link>
-        <Link className={linkClass} to={MY_QR_PATH}>My QR</Link>
-        <Link className={linkClass} to={PROFILE_PATH.customer}>Profile</Link>
-      </nav>
+      <MoreLinks />
       <p className="text-center text-sm">
         <Link className={linkClass} to={AUTHENTICATE_PATH}>Try a test face check</Link>
         <span className="text-slate-600"> without making a payment</span>

@@ -60,7 +60,7 @@ describe('role separation in the app', () => {
     renderApp('/dashboard')
     const main = await screen.findByRole('navigation', { name: 'Main' })
     expect(within(main).queryByText(/ML Lab/)).not.toBeInTheDocument()
-    expect(within(main).getAllByRole('link').map((a) => a.textContent)).toEqual(['Home', 'Pay', 'Send', 'Activity', 'Banks', 'Scan', 'Requests', 'My QR', 'Face profile', 'Security', 'Profile'])
+    expect(within(main).getAllByRole('link').map((a) => a.textContent)).toEqual(['Home', 'Pay', 'Send', 'Activity', 'Profile'])
   })
 
   it('signing in as an administrator lands on the ML Lab', async () => {

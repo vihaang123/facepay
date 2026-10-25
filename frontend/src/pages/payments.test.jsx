@@ -496,7 +496,7 @@ describe('merchant', () => {
     const user = userEvent.setup()
     mockApi(merchantRoutes())
     renderApp('/merchant/dashboard')
-    await user.click(await screen.findByRole('button', { name: 'View as table' }))
+    await user.click(await screen.findByRole('button', { name: 'View as table' }, { timeout: 8000 })) // the chart library loads lazily; allow for a slow first load
     const chart = screen.getByRole('region', { name: 'Revenue by day' })
     expect(within(chart).getAllByRole('row')).toHaveLength(15)
     expect(within(chart).getByText('₹2,450.50')).toBeInTheDocument()
