@@ -5,6 +5,7 @@ import { Alert, Button, Card, ConfirmPanel, ErrorState, FeedSkeleton, FormField,
 import { useAuth } from '../hooks/useAuth'
 import { useLoad } from '../hooks/useLoad'
 import { deleteSamples } from '../services/faces'
+import { setFaceLookup } from '../services/faceLookup'
 import { getSecurityOverview, removePaymentPin, setBiometricEnabled, setPaymentPin } from '../services/security'
 import { formatDateTime, formatMoney } from '../utils/format'
 import { FACE_PATH, RECEIPT_PATH } from '../utils/roles'
@@ -21,6 +22,12 @@ const EVENT_LABELS = {
   PIN_FAILED: 'Incorrect payment PIN',
   PIN_LOCKED: 'Payment PIN locked after repeated mistakes',
   DAILY_LIMIT_HIT: 'Daily limit reached',
+  FACE_LOOKUP_ENABLED: 'Find me by face turned on',
+  FACE_LOOKUP_DISABLED: 'Find me by face turned off',
+  FACE_LOOKUP_MATCH: 'Someone found you by face scan',
+  MONEY_REQUEST_RECEIVED: 'Someone asked you for money',
+  PAYMENT_REQUEST_RECEIVED: 'A shop asked you to pay',
+  PAYMENT_REQUEST_DECLINED: 'You declined a shop’s request',
 }
 
 const minutes = (s) => Math.max(1, Math.ceil(s / 60))
@@ -144,6 +151,25 @@ export default function Security() {
         {o.biometric_locked_seconds > 0 && (
           <div className="mt-3"><Alert tone="error">Too many unsuccessful attempts. Please try again in about {minutes(o.biometric_locked_seconds)} minutes or use another verification method.</Alert></div>
         )}
+      </Card>
+
+      <Card title="Find me by face">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="font-semibold" id="lookup-label">Let shops and friends find me by face</p>
+            <p className="mt-1 text-sm text-slate-700" id="lookup-help">
+              {o.face_lookup_enabled
+                ? 'On. Someone who points their camera at you can see your name and a masked FacePay ID, and send you a payment request.'
+                : 'Off. Nobody can find you with a camera. People can still ask you for money with your FacePay ID.'}
+            </p>
+            <p className="mt-1 text-sm text-slate-700">Finding you never takes money. Every request needs your own face check and your confirmation, and you can decline any of them.</p>
+          </div>
+          <Switch
+            checked={Boolean(o.face_lookup_enabled)} disabled={busy !== null || !o.face_enrolled} label="Let shops and friends find me by face" describedBy="lookup-help"
+            onChange={() => act('lookup', () => setFaceLookup(token, !o.face_lookup_enabled), o.face_lookup_enabled ? 'You can no longer be found by face.' : 'People can now find you by face.')}
+          />
+        </div>
+        {!o.face_enrolled && <p className="mt-3 text-sm text-slate-700">Finish face setup first.</p>}
       </Card>
 
       <PinCard overview={o} token={token} onChanged={reload} />

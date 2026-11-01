@@ -47,6 +47,8 @@ class User(Base):
 
     # Security controls. Turning biometric payments off blocks face authentication for payments.
     biometric_payments_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    # The customer chose to be findable by a camera ("Let shops and friends find me by face"). Off until they switch it on.
+    face_lookup_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     # Optional payment PIN (argon2 hash), used as the second factor when a payment is higher risk.
     payment_pin_hash: Mapped[str | None] = mapped_column(String(255))
     pin_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -224,6 +226,7 @@ class PaymentSession(Base):
     currency: Mapped[str] = mapped_column(String(3), default="INR", server_default="INR")
     order_reference: Mapped[str | None] = mapped_column(String(80))
     description: Mapped[str | None] = mapped_column(String(255))  # for a TRANSFER this is the payer's note
+    purpose: Mapped[str | None] = mapped_column(String(24))  # category from app.core.purposes (merchant requests made by face)
     status: Mapped[str] = mapped_column(String(20), default="CREATED", server_default="CREATED")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -388,7 +391,9 @@ class PaymentRequest(Base):
     payer_id: Mapped[int] = mapped_column(ForeignKey("users.id"))  # who is asked to pay
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     currency: Mapped[str] = mapped_column(String(3), default="INR", server_default="INR")
-    note: Mapped[str | None] = mapped_column(String(255))
+    note: Mapped[str | None] = mapped_column(String(255))  # the reference: what the money is for (required for new requests)
+    purpose: Mapped[str | None] = mapped_column(String(24))  # category from app.core.purposes
+    source: Mapped[str | None] = mapped_column(String(16))  # ID (FacePay ID typed or scanned) | FACE (found by face)
     status: Mapped[str] = mapped_column(String(20), default="PENDING", server_default="PENDING")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -396,6 +401,30 @@ class PaymentRequest(Base):
     transaction_id: Mapped[int | None] = mapped_column(
         ForeignKey("transactions.id", use_alter=True, name="fk_payment_requests_transaction")  # breaks the table-creation cycle
     )
+
+
+class FaceLookup(Base):
+    """A single-use ticket: "this requester found this customer by face". Lets the requester send ONE request without
+    learning the customer's FacePay ID. Only a hash of the ticket is stored. Exactly one of the two requester columns is set."""
+
+    __tablename__ = "face_lookups"
+    __table_args__ = (
+        CheckConstraint(
+            "(requester_user_id IS NOT NULL AND requester_merchant_id IS NULL)"
+            " OR (requester_user_id IS NULL AND requester_merchant_id IS NOT NULL)",
+            name="ck_face_lookups_one_requester",
+        ),
+        Index("ix_face_lookups_target", "target_user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    requester_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    requester_merchant_id: Mapped[int | None] = mapped_column(ForeignKey("merchants.id", ondelete="CASCADE"))
+    target_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class BankConnection(Base):

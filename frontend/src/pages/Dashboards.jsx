@@ -7,7 +7,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useLoad } from '../hooks/useLoad'
 import { getMerchantSecuritySummary, getMerchantSummary, getMerchantTransactions, getReconciliation, listPaymentSessions } from '../services/payments'
 import { formatFeedTime, formatMoney, greeting, isPayable } from '../utils/format'
-import { MERCHANT_SESSION_PATH, NEW_PAYMENT_PATH, RECEIPT_PATH, TRANSACTIONS_PATH } from '../utils/roles'
+import { MERCHANT_SESSION_PATH, NEW_PAYMENT_PATH, RECEIPT_PATH, REQUEST_BY_FACE_PATH, TRANSACTIONS_PATH } from '../utils/roles'
 
 // The chart library is the heaviest dependency; it loads only when a merchant opens their dashboard.
 const RevenueChart = lazy(() => import('../components/RevenueChart'))
@@ -183,7 +183,12 @@ export function MerchantDashboard() {
       <PageHeader
         title={profile.business_name}
         subtitle={`${greeting()}, ${String(profile.name).trim().split(/\s+/)[0]}. Payments are simulated.`}
-        actions={<ButtonLink to={NEW_PAYMENT_PATH} size="lg" className="!w-auto px-6"><Icon name="plus" className="h-4 w-4" strokeWidth="2.4" />Create payment</ButtonLink>}
+        actions={(
+          <div className="flex flex-wrap gap-2">
+            <ButtonLink to={REQUEST_BY_FACE_PATH} size="lg" className="!w-auto px-6"><Icon name="face" className="h-4 w-4" />Request by face</ButtonLink>
+            <ButtonLink to={NEW_PAYMENT_PATH} variant="secondary" size="lg" className="!w-auto px-6"><Icon name="plus" className="h-4 w-4" strokeWidth="2.4" />Create payment</ButtonLink>
+          </div>
+        )}
       />
       <TodayOverview />
       <div className="grid gap-6 lg:grid-cols-2">

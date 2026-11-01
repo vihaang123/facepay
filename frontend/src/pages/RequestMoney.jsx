@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import FaceFinder from '../components/FaceFinder'
 import { PersonCard } from '../components/money'
-import RecipientPicker from '../components/RecipientPicker'
 import { Row, SimulatedTag } from '../components/payUi'
-import { Alert, Button, ButtonLink, FormField } from '../components/ui'
+import RecipientPicker from '../components/RecipientPicker'
+import RequestDetails from '../components/RequestDetails'
+import { ButtonLink } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
 import { createRequest } from '../services/transfers'
 import { formatDateTime, formatMoney } from '../utils/format'
-import { MAX_AMOUNT, toAmountString, validateAmount } from '../utils/money'
 import { REQUESTS_PATH } from '../utils/roles'
 
 function Sent({ request }) {
@@ -15,10 +16,11 @@ function Sent({ request }) {
     <section aria-label="Request sent" className="flex flex-col gap-4 rounded-[1.5rem] border border-slate-200/80 bg-white p-6 text-center shadow-card">
       <h2 className="text-xl font-extrabold">Request sent</h2>
       <p className="amount text-4xl font-extrabold">{formatMoney(request.amount, request.currency)}</p>
-      <p className="text-sm text-slate-700">{request.counterparty_name} will see it under Requests. Nothing has been taken from anyone; they choose whether to pay.</p>
+      <p className="text-sm text-slate-700">{request.counterparty_name} gets it as a pop-up in FacePay and sees it under Requests. Nothing has been taken from anyone; they choose whether to pay, with their own face check.</p>
       <dl className="text-left">
         <Row label="From">{request.counterparty_name}</Row>
-        {request.note && <Row label="Note">{request.note}</Row>}
+        <Row label="For">{request.purpose_label}</Row>
+        <Row label="Reference">{request.note}</Row>
         <Row label="Status">Pending</Row>
         <Row label="Expires">{formatDateTime(request.expires_at)}</Row>
       </dl>
@@ -28,43 +30,47 @@ function Sent({ request }) {
   )
 }
 
-function AmountStep({ payer, onBack, onSent }) {
+function DetailsStep({ payer, onBack, onSent }) {
   const { token } = useAuth()
-  const [amount, setAmount] = useState('')
-  const [note, setNote] = useState('')
-  const [error, setError] = useState(null)
-  const [formError, setFormError] = useState(null)
-  const [busy, setBusy] = useState(false)
-
-  const submit = async (e) => {
-    e.preventDefault()
-    const problem = validateAmount(amount, { max: MAX_AMOUNT })
-    setError(problem)
-    setFormError(null)
-    if (problem) return
-    setBusy(true)
-    try {
-      onSent(await createRequest(token, { payer: payer.id, amount: toAmountString(amount), note: note.trim() }))
-    } catch (err) {
-      if (err.fieldErrors?.amount) setError(err.fieldErrors.amount)
-      else setFormError(err.message)
-      setBusy(false)
-    }
+  const submit = async ({ amount, purpose, reference }) => {
+    onSent(await createRequest(token, { payer: payer.id, lookupToken: payer.lookupToken, amount, purpose, note: reference }))
   }
-
   return (
-    <form onSubmit={submit} noValidate className="flex flex-col gap-5">
+    <div className="flex flex-col gap-5">
       <PersonCard name={payer.display_name} maskedId={payer.masked_id} caption="Requesting from" />
-      <div className="flex flex-col gap-4 rounded-[1.25rem] border border-slate-200/80 bg-white p-5 shadow-card">
-        {formError && <Alert tone="error">{formError}</Alert>}
-        <FormField label="Amount (₹)" id="amount" value={amount} onChange={(e) => { setAmount(e.target.value); setError(null) }} error={error} inputMode="decimal" autoComplete="off" placeholder="0.00" />
-        <FormField label="Note (optional)" id="note" value={note} onChange={(e) => setNote(e.target.value.slice(0, 140))} maxLength={140} autoComplete="off" placeholder="What is it for?" hint={`${note.length} of 140`} />
+      <RequestDetails onSubmit={submit} onBack={onBack} />
+    </div>
+  )
+}
+
+function PickPerson({ initialId, onPick }) {
+  const [mode, setMode] = useState(initialId ? 'id' : 'face')
+  const tab = (key, label) => (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={mode === key}
+      onClick={() => setMode(key)}
+      className={`min-h-11 flex-1 rounded-lg px-3 text-sm font-semibold transition ${mode === key ? 'bg-white text-brand-800 shadow-sm' : 'text-slate-700'}`}
+    >
+      {label}
+    </button>
+  )
+  return (
+    <div className="flex flex-col gap-4">
+      <div role="tablist" aria-label="How to find the person" className="flex gap-1 rounded-xl bg-slate-100 p-1">
+        {tab('face', 'Scan their face')}
+        {tab('id', 'FacePay ID')}
       </div>
-      <div className="flex flex-col gap-2">
-        <Button size="lg" type="submit" loading={busy}>Send request</Button>
-        <Button variant="ghost" onClick={onBack} disabled={busy}>Change person</Button>
-      </div>
-    </form>
+      {mode === 'face' ? (
+        <FaceFinder
+          actionLabel="Continue"
+          onFound={({ lookupToken, person }) => onPick({ lookupToken, display_name: person.display_name, masked_id: person.masked_id })}
+        />
+      ) : (
+        <RecipientPicker onPick={onPick} initial={initialId} prompt="Who should pay you?" actionLabel="Continue" />
+      )}
+    </div>
   )
 }
 
@@ -76,10 +82,10 @@ export default function RequestMoney() {
     <div className="mx-auto flex max-w-md flex-col gap-5">
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight">Request money</h1>
-        <p className="mt-1 text-sm text-slate-600">Ask another FacePay customer to pay you. They approve it themselves.</p>
+        <p className="mt-1 text-sm text-slate-600">Ask another FacePay customer to pay you, and say what it is for. They approve it themselves.</p>
       </div>
-      {sent ? <Sent request={sent} /> : payer ? <AmountStep payer={payer} onBack={() => setPayer(null)} onSent={setSent} /> : (
-        <RecipientPicker onPick={setPayer} initial={params.get('from') ?? ''} prompt="Who should pay you?" actionLabel="Continue" />
+      {sent ? <Sent request={sent} /> : payer ? <DetailsStep payer={payer} onBack={() => setPayer(null)} onSent={setSent} /> : (
+        <PickPerson initialId={params.get('from') ?? ''} onPick={setPayer} />
       )}
       {!sent && <p className="text-center text-sm"><Link className="font-semibold text-brand-700 underline" to={REQUESTS_PATH}>See your requests</Link></p>}
     </div>

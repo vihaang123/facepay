@@ -35,6 +35,7 @@ class Limits(BaseModel):
 
 
 class SecurityOverview(BaseModel):
+    face_lookup_enabled: bool = False  # others may find this customer with a camera to send them a request
     biometric_enabled: bool
     face_enrolled: bool
     samples_stored: int

@@ -24,9 +24,8 @@ def dec(v):
 
 
 def ask(client, requester, payer, amount="600.00", note=None):
-    body = {"payer_facepay_id": payer["facepay_id"], "amount": amount}
-    if note is not None:
-        body["note"] = note
+    """Every request states a purpose and a reference; tests that do not care get a neutral one."""
+    body = {"payer_facepay_id": payer["facepay_id"], "amount": amount, "purpose": "OTHER", "note": note if note is not None else "Test reference"}
     return client.post("/requests", json=body, headers=requester["headers"])
 
 
@@ -72,11 +71,11 @@ def test_a_request_moves_no_money_and_waits_for_the_payer(client, world, db):
 
 def test_asking_an_unknown_person_yourself_or_for_a_bad_amount_is_refused(client, world, db):
     asha, ravi, _ = world
-    assert client.post("/requests", json={"payer_facepay_id": "ghost.user", "amount": "5"}, headers=asha["headers"]).status_code == 404
+    assert client.post("/requests", json={"payer_facepay_id": "ghost.user", "amount": "5", "purpose": "OTHER", "note": "Test reference"}, headers=asha["headers"]).status_code == 404
     r = ask(client, asha, asha)
     assert r.status_code == 422 and code(r) == "SELF_REQUEST"
     for amount in ("0", "-1", "1.005", "abc", None, "1000001"):
-        assert client.post("/requests", json={"payer_facepay_id": ravi["facepay_id"], "amount": amount}, headers=asha["headers"]).status_code == 422
+        assert client.post("/requests", json={"payer_facepay_id": ravi["facepay_id"], "amount": amount, "purpose": "OTHER", "note": "Test reference"}, headers=asha["headers"]).status_code == 422
     big = ask(client, asha, ravi, "50000.01")
     assert big.status_code == 422 and code(big) == "PER_TRANSACTION_LIMIT"
     assert db.scalar(select(func.count()).select_from(PaymentRequest)) == 0
@@ -92,7 +91,7 @@ def test_a_requester_cannot_flood_one_person(client, world):
 
 def test_requests_cannot_be_created_on_someone_elses_behalf(client, world):
     asha, ravi, chitra = world
-    r = client.post("/requests", json={"payer_facepay_id": ravi["facepay_id"], "amount": "5", "requester_id": chitra["id"]}, headers=asha["headers"])
+    r = client.post("/requests", json={"payer_facepay_id": ravi["facepay_id"], "amount": "5", "purpose": "OTHER", "note": "Test reference", "requester_id": chitra["id"]}, headers=asha["headers"])
     assert r.status_code == 422
 
 

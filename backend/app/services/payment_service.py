@@ -21,6 +21,7 @@ from sqlalchemy import exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import purposes
 from app.core.config import get_settings
 from app.ml import registry
 from app.ml.preprocessing import FaceDetector
@@ -141,8 +142,11 @@ def _attempts_remaining(ps: PaymentSession) -> int:
 
 
 def create_session(
-    db: Session, merchant: Merchant, *, amount: Decimal, order_reference: str, description: str | None, expires_in_minutes: int, discoverable: bool = False
+    db: Session, merchant: Merchant, *, amount: Decimal, order_reference: str, description: str | None, expires_in_minutes: int,
+    discoverable: bool = False, payer: User | None = None, purpose: str | None = None,
 ) -> PaymentSession:
+    """A merchant bill. With `payer` it is addressed to that one customer (found by face): nobody else can open it, and it
+    appears in their incoming requests. Without, it is the usual link / QR / nearby bill that any customer may pay."""
     limit = get_settings().per_transaction_limit
     if amount > limit:
         raise _err(422, "PER_TRANSACTION_LIMIT", f"The simulated limit is ₹{limit:,.0f} per payment.")
@@ -154,17 +158,26 @@ def create_session(
         order_reference=order_reference,
         description=description or None,
         status="CREATED",
-        discoverable=discoverable,
+        discoverable=discoverable and payer is None,  # a bill addressed to one customer is never listed for others
+        payer_user_id=payer.id if payer is not None else None,
+        purpose=purpose,
         expires_at=_now() + timedelta(minutes=expires_in_minutes),
     )
     db.add(ps)
+    if payer is not None:
+        db.flush()
+        sec.record_event(db, payer, "PAYMENT_REQUEST_RECEIVED", ps.session_id)
     db.commit()
     db.refresh(ps)
     return ps
 
 
-def _session_out(ps: PaymentSession, paid: tuple[str, datetime] | None = None) -> dict:
+def _session_out(ps: PaymentSession, paid: tuple[str, datetime] | None = None, payer: User | None = None) -> dict:
     return {
+        "purpose": ps.purpose,
+        "purpose_label": purposes.purpose_label(ps.purpose),
+        "requested_from": payer.name if payer is not None else None,
+        "requested_from_masked_id": fid.mask(payer.facepay_id) if payer is not None else None,
         "session_id": ps.session_id,
         "amount": ps.amount,
         "currency": ps.currency,
@@ -200,7 +213,8 @@ def merchant_sessions(db: Session, merchant: Merchant, *, limit: int, offset: in
         q = q.where(PaymentSession.status == status)
     rows = list(db.scalars(q.order_by(PaymentSession.id.desc()).limit(limit).offset(offset)))
     paid = _paid_transactions(db, [r.id for r in rows])
-    return [_session_out(r, paid.get(r.id)) for r in rows]
+    payers = _payers(db, rows)
+    return [_session_out(r, paid.get(r.id), payers.get(r.payer_user_id)) for r in rows]
 
 
 def merchant_session(db: Session, merchant: Merchant, session_id: str) -> dict:
@@ -211,7 +225,13 @@ def merchant_session(db: Session, merchant: Merchant, session_id: str) -> dict:
     _sweep(db, session_pk=ps.id)
     db.commit()
     db.refresh(ps)
-    return _session_out(ps, _paid_transactions(db, [ps.id]).get(ps.id))
+    return _session_out(ps, _paid_transactions(db, [ps.id]).get(ps.id), _payers(db, [ps]).get(ps.payer_user_id))
+
+
+def _payers(db: Session, rows) -> dict[int, User]:
+    """The customers that bills were addressed to (only those found by face have one)."""
+    ids = {r.payer_user_id for r in rows if r.payer_user_id is not None}
+    return {u.id: u for u in db.scalars(select(User).where(User.id.in_(ids)))} if ids else {}
 
 
 def cancel_session(db: Session, merchant: Merchant, session_id: str) -> dict:
@@ -225,7 +245,7 @@ def cancel_session(db: Session, merchant: Merchant, session_id: str) -> dict:
     _sweep(db, session_pk=ps.id)  # revokes any live authorization
     db.commit()
     db.refresh(ps)
-    return _session_out(ps)
+    return _session_out(ps, payer=_payers(db, [ps]).get(ps.payer_user_id))
 
 
 def set_display(db: Session, merchant: Merchant, session_id: str, discoverable: bool) -> dict:
@@ -289,7 +309,10 @@ def checkout_view(db: Session, user: User, session_id: str) -> dict:
     merchant = db.get(Merchant, ps.merchant_id) if ps.merchant_id else None
     payee = db.get(User, ps.payee_user_id) if ps.payee_user_id else None
     request_ref = db.scalar(select(PaymentRequest.request_id).where(PaymentRequest.id == ps.payment_request_id)) if ps.payment_request_id else None
+    purpose = ps.purpose or (db.scalar(select(PaymentRequest.purpose).where(PaymentRequest.id == ps.payment_request_id)) if ps.payment_request_id else None)
     return {
+        "purpose": purpose,
+        "purpose_label": purposes.purpose_label(purpose),
         "session_id": ps.session_id,
         "kind": ps.kind,
         "merchant_name": merchant.business_name if merchant else None,
@@ -623,6 +646,23 @@ def revoke_authorization(db: Session, user: User, session_id: str) -> dict:
     )
     if ps.status == "AUTHENTICATED":
         ps.status = "CREATED"
+    db.commit()
+    return {"session_id": ps.session_id, "status": ps.status}
+
+
+def decline_addressed_request(db: Session, user: User, session_id: str) -> dict:
+    """The customer a shop's request was addressed to says no. Only the addressee can; the session is closed, any live
+    authorization is voided, and the shop sees it as cancelled. A bill for anyone to pay (no addressee) cannot be declined here."""
+    ps = _locked_session(db, session_id)
+    _check_participant(db, ps, user)
+    if ps.kind != "MERCHANT" or ps.payer_user_id != user.id:
+        db.commit()
+        raise _err(404, "SESSION_NOT_FOUND", "Payment session not found.")
+    if ps.status not in PAYABLE:
+        _reject(db, 409, "SESSION_NOT_CANCELLABLE", f"A request that is {ps.status} cannot be declined.")
+    ps.status = "CANCELLED"
+    _sweep(db, session_pk=ps.id)  # voids a live authorization
+    sec.record_event(db, user, "PAYMENT_REQUEST_DECLINED", ps.session_id)
     db.commit()
     return {"session_id": ps.session_id, "status": ps.status}
 

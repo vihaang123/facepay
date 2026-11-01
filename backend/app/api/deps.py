@@ -84,3 +84,26 @@ def get_current_admin(
     if user.role != "admin" or user.status != "active":
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Administrator access required")
     return user
+
+
+def get_customer_or_merchant(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    db: Session = Depends(get_db),
+) -> tuple[str, User | Merchant]:
+    """("customer", user) or ("merchant", merchant), for the few routes both may use (finding a customer by face).
+    An administrator, or a customer whose account is disabled, is refused."""
+    claims = _claims(credentials)
+    role = claims["role"]
+    if role == "merchant":
+        merchant = db.get(Merchant, _subject_id(claims))
+        if merchant is None:
+            raise _UNAUTHORIZED
+        return "merchant", merchant
+    if role == "customer":
+        user = db.get(User, _subject_id(claims))
+        if user is None:
+            raise _UNAUTHORIZED
+        if user.status != "active":
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Account is disabled")
+        return "customer", user
+    raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Customer or merchant access required")

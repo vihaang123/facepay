@@ -157,6 +157,9 @@ function SecurityStatus() {
                 </div>
                 <Link className={`${linkClass} shrink-0`} to={FACE_PATH}>{status.cta}</Link>
               </div>
+              {ready && (
+                <p className="text-xs text-slate-600">Want shops and friends to find you with a camera? <Link className={linkClass} to={SECURITY_PATH}>Turn on “find me by face”</Link>. It is off until you do.</p>
+              )}
               {!ready && (
                 <div>
                   <div className="flex justify-between text-xs font-semibold text-slate-700">

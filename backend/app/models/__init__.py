@@ -2,6 +2,7 @@ from app.models.entities import (  # noqa: F401
     AuthenticationLog,
     BankConnection,
     FaceAuthChallenge,
+    FaceLookup,
     FacePayIdHistory,
     FaceProfile,
     FaceSample,

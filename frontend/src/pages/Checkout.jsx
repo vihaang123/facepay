@@ -133,7 +133,8 @@ function Authorized({ session, auth, outcome, error, pinError, busy, onConfirm, 
             {session.recipient_facepay_id && <span className="block font-mono text-xs font-normal text-slate-600">{session.recipient_facepay_id}</span>}
             {!session.recipient_facepay_id && session.recipient_masked_id && <span className="block font-mono text-xs font-normal text-slate-600">{session.recipient_masked_id}</span>}
           </Row>
-          {session.kind === 'TRANSFER' ? (session.note && <Row label="Description">{session.note}</Row>) : (
+          {session.purpose_label && <Row label="For">{session.purpose_label}</Row>}
+          {session.kind === 'TRANSFER' ? (session.note && <Row label="Reference">{session.note}</Row>) : (
             <>
               <Row label="Order">{session.order_reference ?? '—'}</Row>
               {session.description && <Row label="Description">{session.description}</Row>}
@@ -245,11 +246,13 @@ function Summary({ session, payable, attempts, onPay, onCancel, cancelling }) {
       <dl className="mt-5">
         {transfer ? (
           <>
-            {session.note && <Row label="Note">{session.note}</Row>}
+            {session.purpose_label && <Row label="For">{session.purpose_label}</Row>}
+            {session.note && <Row label="Reference">{session.note}</Row>}
             {session.request_id && <Row label="Answers request"><span className="font-mono text-[0.8rem]">{session.request_id}</span></Row>}
           </>
         ) : (
           <>
+            {session.purpose_label && <Row label="For">{session.purpose_label}</Row>}
             <Row label="Order">{session.order_reference ?? '—'}</Row>
             {session.description && <Row label="Details">{session.description}</Row>}
           </>

@@ -15,9 +15,10 @@ from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core import facepay_id as fid
+from app.core import purposes
 from app.core.config import get_settings
 from app.models import PaymentAuthorization, PaymentRequest, PaymentSession, Transaction, User
-from app.services import facepay_service
+from app.services import face_lookup_service, facepay_service
 from app.services import security_service as sec
 
 PAYABLE_SESSION = ("CREATED", "AUTHENTICATED")
@@ -97,6 +98,9 @@ def _out(db: Session, req: PaymentRequest, viewer: User) -> dict:
         "amount": req.amount,
         "currency": req.currency,
         "note": req.note,
+        "purpose": req.purpose,
+        "purpose_label": purposes.purpose_label(req.purpose),
+        "source": req.source,
         "created_at": req.created_at,
         "expires_at": req.expires_at,
         "resolved_at": req.resolved_at,
@@ -147,9 +151,21 @@ def pending_incoming_count(db: Session, user: User) -> int:
 # ------------------------------------------------------------------ actions
 
 
-def create(db: Session, requester: User, *, payer_facepay_id: str, amount: Decimal, note: str | None) -> dict:
+def create(
+    db: Session, requester: User, *, amount: Decimal, purpose: str, note: str,
+    payer_facepay_id: str | None = None, lookup_token: str | None = None,
+) -> dict:
+    """Asks a customer for money. The customer is named either by FacePay ID or by a face-scan ticket (exactly one), and
+    every request states its purpose and a reference. Nothing is debited."""
     s = get_settings()
-    payer = facepay_service.find_active(db, payer_facepay_id)
+    if (payer_facepay_id is None) == (lookup_token is None):
+        raise _err(422, "RECIPIENT_REQUIRED", "Say who to ask: a FacePay ID or a face scan.")
+    if lookup_token is not None:
+        payer = face_lookup_service.redeem(db, lookup_token, requester_user=requester)  # spent only if the request is saved
+        source = "FACE"
+    else:
+        payer = facepay_service.find_active(db, payer_facepay_id)
+        source = "ID"
     if payer is None:
         raise _err(404, "RECIPIENT_NOT_FOUND", "No FacePay account matches that ID. Check it and try again.")
     if payer.id == requester.id:
@@ -167,12 +183,15 @@ def create(db: Session, requester: User, *, payer_facepay_id: str, amount: Decim
         payer_id=payer.id,
         amount=amount,
         currency="INR",
-        note=note or None,
+        note=note,
+        purpose=purpose,
+        source=source,
         status="PENDING",
         expires_at=now() + timedelta(days=s.request_ttl_days),
     )
     db.add(req)
     sec.record_event(db, requester, "MONEY_REQUESTED", req.request_id)
+    sec.record_event(db, payer, "MONEY_REQUEST_RECEIVED", req.request_id)
     db.commit()
     db.refresh(req)
     return _out(db, req, requester)

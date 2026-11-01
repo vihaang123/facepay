@@ -8,3 +8,6 @@ export const TIMING = {
 
 // Merchant payment-session page: how often it asks the server for the status while the session is open.
 export const POLL = { intervalMs: 3000 }
+
+// Finding someone by face: how many still frames are taken and how far apart. Mutable on purpose so tests can run it instantly.
+export const SCAN = { frames: 3, gapMs: 250 }

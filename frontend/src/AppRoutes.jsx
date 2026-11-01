@@ -12,6 +12,7 @@ import ActivityDetail from './pages/ActivityDetail'
 import AdminLab from './pages/AdminLab'
 import CustomerHome from './pages/CustomerHome'
 import MyQr from './pages/MyQr'
+import RequestByFace from './pages/RequestByFace'
 import RequestMoney from './pages/RequestMoney'
 import Requests from './pages/Requests'
 import Scan from './pages/Scan'
@@ -80,6 +81,7 @@ export default function AppRoutes() {
           <Route path="/merchant/profile" element={<Profile />} />
           <Route path="/merchant/transactions" element={<Transactions />} />
           <Route path="/merchant/payments/new" element={<CreatePayment />} />
+          <Route path="/merchant/payments/face" element={<RequestByFace />} />
           <Route path="/merchant/payments/:sessionId" element={<MerchantPaymentSession />} />
           <Route path="/merchant/receipts/:transactionId" element={<ReceiptPage />} />
         </Route>

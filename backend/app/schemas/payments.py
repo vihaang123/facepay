@@ -2,7 +2,9 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+
+from app.core import purposes
 
 from app.schemas.face_auth import AuthResult, VerifyRequest
 
@@ -24,6 +26,30 @@ class SessionCreate(BaseModel):
     discoverable: bool = False
 
 
+class FaceSessionCreate(BaseModel):
+    """A shop's request to the one customer it found by face. The customer comes from the single-use scan ticket, never from
+    anything typed. The purpose and the reference are required."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    lookup_token: str = Field(min_length=10, max_length=80)
+    amount: Money
+    purpose: str
+    order_reference: str  # the reference
+    description: Description | None = None
+    expires_in_minutes: int = Field(default=10, ge=1, le=60)
+
+    @field_validator("purpose")
+    @classmethod
+    def _purpose(cls, v: str) -> str:
+        return purposes.clean_purpose(v)
+
+    @field_validator("order_reference")
+    @classmethod
+    def _reference(cls, v: str) -> str:
+        return purposes.clean_reference(v)
+
+
 class DisplayRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -43,6 +69,10 @@ class MerchantSessionOut(BaseModel):
     transaction_id: str | None = None  # set once paid
     discoverable: bool = False
     paid_at: datetime | None = None  # the backend transaction's timestamp: the only proof a request was paid
+    purpose: str | None = None
+    purpose_label: str | None = None
+    requested_from: str | None = None  # the customer a request found by face was addressed to
+    requested_from_masked_id: str | None = None
 
 
 class FundingSourceOut(BaseModel):
@@ -66,6 +96,8 @@ class CheckoutOut(BaseModel):
     recipient_masked_id: str | None = None
     note: str | None = None
     request_id: str | None = None  # set when this payment answers a money request
+    purpose: str | None = None  # why the money is being asked for (category) ...
+    purpose_label: str | None = None
     fee: Decimal = Decimal("0.00")  # simulated; FacePay charges nothing
     total: Decimal | None = None  # amount + fee
     funding_sources: list["FundingSourceOut"] = []  # the signed-in customer's OWN demo bank accounts

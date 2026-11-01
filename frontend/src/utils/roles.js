@@ -32,6 +32,7 @@ export const PAY_PATH = '/pay'
 export const CHECKOUT_PATH = (sessionId) => `/checkout/${sessionId}`
 export const RECEIPT_PATH = { customer: (id) => `/receipts/${id}`, merchant: (id) => `/merchant/receipts/${id}` }
 export const NEW_PAYMENT_PATH = '/merchant/payments/new'
+export const REQUEST_BY_FACE_PATH = '/merchant/payments/face'
 export const MERCHANT_SESSION_PATH = (sessionId) => `/merchant/payments/${sessionId}`
 
 // ---- customer money screens

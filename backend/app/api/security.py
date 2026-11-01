@@ -42,6 +42,17 @@ def set_biometric(data: BiometricToggle, user: User = Depends(get_current_custom
     return sec.overview(db, user)
 
 
+@router.put("/face-lookup", response_model=SecurityOverview, dependencies=[Depends(_limit)])
+def set_face_lookup(data: BiometricToggle, user: User = Depends(get_current_customer), db: Session = Depends(get_db)):
+    """Let shops and friends find you with a camera, to send you a payment request. Off until you turn it on. Finding you
+    never takes money: every request still needs your own face check and confirmation."""
+    if user.face_lookup_enabled != data.enabled:
+        user.face_lookup_enabled = data.enabled
+        sec.record_event(db, user, "FACE_LOOKUP_ENABLED" if data.enabled else "FACE_LOOKUP_DISABLED")
+        db.commit()
+    return sec.overview(db, user)
+
+
 @router.put("/pin", response_model=SecurityOverview, dependencies=[Depends(_limit)])
 def set_pin(data: SetPin, user: User = Depends(get_current_customer), db: Session = Depends(get_db)):
     sec.set_pin(db, user, data.password, data.new_pin)

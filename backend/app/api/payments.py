@@ -103,6 +103,12 @@ def cancel_authorization(session_id: str, user: User = Depends(get_current_custo
     return svc.revoke_authorization(db, user, session_id)
 
 
+@router.post("/sessions/{session_id}/decline", dependencies=[Depends(_pay_limit)])
+def decline_request(session_id: str, user: User = Depends(get_current_customer), db: Session = Depends(get_db)):
+    """Say no to a bill a shop addressed to you. Closes it; nothing is paid."""
+    return svc.decline_addressed_request(db, user, session_id)
+
+
 @router.get("/transactions", response_model=list[CustomerTransactionOut])
 def my_transactions(
     limit: int = Query(20, ge=1, le=101),  # 101 lets a client ask for a page plus one row to know if there is a next page

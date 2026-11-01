@@ -254,7 +254,7 @@ def test_contacts_are_only_people_you_actually_dealt_with(client, customer):
     stranger = new_customer(client, "Stranger Danger")
     asked = new_customer(client, "Ravi Shah")
     assert client.get("/facepay/contacts", headers=customer["headers"]).json() == []
-    r = client.post("/requests", json={"payer_facepay_id": me(client, asked)["facepay_id"], "amount": "100.00"}, headers=customer["headers"])
+    r = client.post("/requests", json={"payer_facepay_id": me(client, asked)["facepay_id"], "amount": "100.00", "purpose": "OTHER", "note": "Test reference"}, headers=customer["headers"])
     assert r.status_code == 201
     names = [c["display_name"] for c in client.get("/facepay/contacts", headers=customer["headers"]).json()]
     assert names == ["Ravi Shah"] and "Stranger Danger" not in names

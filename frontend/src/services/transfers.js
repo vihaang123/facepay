@@ -25,8 +25,12 @@ export const prepareTransfer = (token, { recipient, amount, note }, idempotencyK
 export const cancelTransfer = (token, sessionId) => apiFetch(`/transfers/${enc(sessionId)}/cancel`, { method: 'POST', token })
 
 // ---- requests
-export const createRequest = (token, { payer, amount, note }) =>
-  apiFetch('/requests', { method: 'POST', token, json: { payer_facepay_id: payer, amount, ...(note ? { note } : {}) } })
+// Name the person by FacePay ID (`payer`) or by a face-scan ticket (`lookupToken`). Purpose and reference are required.
+export const createRequest = (token, { payer, lookupToken, amount, purpose, note }) =>
+  apiFetch('/requests', {
+    method: 'POST', token,
+    json: { ...(lookupToken ? { lookup_token: lookupToken } : { payer_facepay_id: payer }), amount, purpose, note },
+  })
 export const listRequests = (token, params) => apiFetch(`/requests${query(params)}`, { token })
 export const getRequest = (token, id) => apiFetch(`/requests/${enc(id)}`, { token })
 export const payRequest = (token, id, idempotencyKey) =>

@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import admin, auth, banks, face_auth, faces, health, merchant_payments, payments, profile, security, transfers
+from app.api import admin, auth, banks, face_auth, face_lookup, faces, health, merchant_payments, payments, profile, security, transfers
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging_config import configure_logging
@@ -51,6 +51,7 @@ app.include_router(auth.router)
 app.include_router(profile.router)
 app.include_router(faces.router)
 app.include_router(face_auth.router)
+app.include_router(face_lookup.router)
 app.include_router(payments.router)
 app.include_router(security.router)
 app.include_router(merchant_payments.router)

@@ -9,6 +9,7 @@ from app.models import Merchant
 from app.api.payments import TX_SORT, TX_STATUS
 from app.schemas.payments import (
     DisplayRequest,
+    FaceSessionCreate,
     MerchantSecuritySummary,
     MerchantSessionOut,
     MerchantSummary,
@@ -17,6 +18,7 @@ from app.schemas.payments import (
     ReconciliationOut,
     SessionCreate,
 )
+from app.services import face_lookup_service
 from app.services import payment_service as svc
 
 router = APIRouter(prefix="/merchant", tags=["merchant-payments"])
@@ -29,6 +31,18 @@ def create_session(data: SessionCreate, merchant: Merchant = Depends(get_current
     ps = svc.create_session(
         db, merchant, amount=data.amount, order_reference=data.order_reference,
         description=data.description, expires_in_minutes=data.expires_in_minutes, discoverable=data.discoverable,
+    )
+    return svc.merchant_session(db, merchant, ps.session_id)
+
+
+@router.post("/payment-sessions/by-face", response_model=MerchantSessionOut, status_code=201)
+def create_session_for_found_customer(data: FaceSessionCreate, merchant: Merchant = Depends(get_current_merchant), db: Session = Depends(get_db)):
+    """A request to the one customer this shop just found by face (the single-use ticket from POST /face-lookup). The customer
+    gets it as a pop-up and approves it with their own face check; nobody else can open it."""
+    payer = face_lookup_service.redeem(db, data.lookup_token, requester_merchant=merchant)  # spent only if the request is saved
+    ps = svc.create_session(
+        db, merchant, amount=data.amount, order_reference=data.order_reference, description=data.description,
+        expires_in_minutes=data.expires_in_minutes, payer=payer, purpose=data.purpose,
     )
     return svc.merchant_session(db, merchant, ps.session_id)
 

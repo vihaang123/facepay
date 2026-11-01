@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     facepay_id_change_cooldown_days: int = 30  # a customer may rename their FacePay ID this rarely
     resolve_rate_limit_per_minute: int = 20  # FacePay ID lookups per customer (limits guessing which IDs exist)
     transfer_rate_limit_per_minute: int = 20  # creating transfers and money requests per customer
+    face_lookup_rate_limit_per_minute: int = 8  # "find a customer by face" scans per signed-in requester (customer or shop)
+    face_lookup_ttl_seconds: int = 180  # how long a found customer can be asked for money before the scan must be repeated
 
     # Rebuild a model trained with an older recipe from the stored samples, in the background, when someone starts a face
     # check or opens face setup. Nothing is captured again. Turn off to retrain only by hand (Face setup > Prepare the model).

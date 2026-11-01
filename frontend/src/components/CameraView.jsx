@@ -18,8 +18,9 @@ const EDGE = { neutral: 'border-scan-edge', ok: 'border-emerald-400', bad: 'bord
  * a fixed shape, so it scales to a phone without distortion. `overlay` is a short live instruction, `scanning` shows
  * the moving scan line (only while a capture is really under way), `tone` colours the frame by the real outcome.
  */
-export default function CameraView({ camera, busy = false, overlay = null, scanning = false, tone = 'neutral', guide = true, controls = true, flash = false, footnote = null, guideTone = null }) {
-  const { videoRef, status, start, stop } = camera
+export default function CameraView({ camera, busy = false, flippable = false, overlay = null, scanning = false, tone = 'neutral', guide = true, controls = true, flash = false, footnote = null, guideTone = null }) {
+  const { videoRef, status, start, stop, flip, facing } = camera
+  const mirrored = camera.mirrored ?? true // cameras that do not report it are the front camera used for your own face
   const on = status === 'active'
   return (
     <div className="flex flex-col gap-3">
@@ -30,7 +31,7 @@ export default function CameraView({ camera, busy = false, overlay = null, scann
           playsInline
           muted
           aria-label="Camera preview"
-          className={`h-full w-full -scale-x-100 object-cover ${on ? '' : 'invisible'}`}
+          className={`h-full w-full ${mirrored ? '-scale-x-100' : ''} object-cover ${on ? '' : 'invisible'}`}
         />
         {!on && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center text-slate-300">
@@ -60,9 +61,12 @@ export default function CameraView({ camera, busy = false, overlay = null, scann
       {CAMERA_MESSAGES[status] && <Alert tone="error">{CAMERA_MESSAGES[status]}</Alert>}
       {controls && <div className="flex justify-center">
         {on ? (
-          <Button variant="secondary" onClick={stop} disabled={busy}>Turn camera off</Button>
+          <>
+            <Button variant="secondary" onClick={stop} disabled={busy}>Turn camera off</Button>
+            {flippable && <Button variant="ghost" onClick={flip} disabled={busy}>{facing === 'environment' ? 'Use front camera' : 'Use rear camera'}</Button>}
+          </>
         ) : (
-          <Button onClick={start} loading={status === 'requesting'} disabled={status === 'unsupported'}>
+          <Button onClick={() => start()} loading={status === 'requesting'} disabled={status === 'unsupported'}>
             {status === 'denied' || status === 'error' ? 'Try the camera again' : 'Turn camera on'}
           </Button>
         )}

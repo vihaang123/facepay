@@ -263,6 +263,7 @@ def overview(db: Session, user: User) -> dict:
     events = list(db.scalars(select(SecurityEvent).where(SecurityEvent.user_id == user.id).order_by(SecurityEvent.id.desc()).limit(10)))
     enrolment = enrollment_status(db, user)
     return {
+        "face_lookup_enabled": bool(user.face_lookup_enabled),
         "biometric_enabled": user.biometric_payments_enabled,
         "face_enrolled": active_profile(db, user.id) is not None,
         "samples_stored": enrolment["total_samples"],

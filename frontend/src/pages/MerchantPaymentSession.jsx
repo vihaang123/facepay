@@ -120,6 +120,8 @@ export default function MerchantPaymentSession() {
 
       <Card aria-label="Details" className="!py-2">
         <dl>
+          {session.requested_from && <Row label="Requested from">{session.requested_from}<span className="ml-2 font-mono text-xs text-slate-600">{session.requested_from_masked_id}</span></Row>}
+          {session.purpose_label && <Row label="For">{session.purpose_label}</Row>}
           {session.description && <Row label="Details">{session.description}</Row>}
           <Row label="Status"><StatusBadge status={session.status} /></Row>
           <Row label="Created">{formatDateTime(session.created_at)}</Row>
@@ -129,7 +131,26 @@ export default function MerchantPaymentSession() {
         </dl>
       </Card>
 
-      {open && (
+      {open && session.requested_from && (
+        <Card aria-label="Waiting for the customer">
+          <p className="text-sm text-slate-700">
+            {session.requested_from} has this request as a pop-up in FacePay. They check the amount and reference, verify their own face and confirm.
+            This page shows Paid only after the payment is recorded. If they say no, it shows Cancelled.
+          </p>
+          <div className="mt-3">
+            <Button variant="secondary" onClick={() => setConfirmCancel(true)} loading={busy} disabled={confirmCancel}>Cancel request</Button>
+          </div>
+          {confirmCancel && (
+            <div className="mt-4">
+              <ConfirmPanel title="Cancel this request?" confirmLabel="Cancel request" cancelLabel="Keep request" onConfirm={cancel} onCancel={() => setConfirmCancel(false)}>
+                The customer will no longer be able to pay it.
+              </ConfirmPanel>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {open && !session.requested_from && (
         <Card aria-label="Checkout link">
           <p className="text-sm text-slate-700">This is the active request. Send the link to the customer. They sign in to a FacePay customer account, verify their face and confirm. This page shows Paid only after the payment is recorded.</p>
           <code className="mt-2 block break-all rounded-xl bg-slate-100 px-3 py-2 text-xs">{link}</code>

@@ -2,9 +2,10 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 from typing import Annotated
 
+from app.core import purposes
 from app.schemas.payments import Money
 
 Note = Annotated[str, StringConstraints(strip_whitespace=True, max_length=140)]
@@ -41,6 +42,9 @@ class RequestOut(BaseModel):
     amount: Decimal
     currency: str
     note: str | None
+    purpose: str | None = None
+    purpose_label: str | None = None
+    source: str | None = None  # ID | FACE
     created_at: datetime
     expires_at: datetime
     resolved_at: datetime | None
@@ -82,11 +86,32 @@ class TransferCreate(BaseModel):
 
 
 class RequestCreate(BaseModel):
+    """Ask a customer for money. Name them by FacePay ID OR by a face-scan ticket (exactly one). The purpose and the
+    reference are required: they are what the person asked sees first, and they make scam requests harder."""
+
     model_config = ConfigDict(extra="forbid")
 
-    payer_facepay_id: IdText
+    payer_facepay_id: IdText | None = None
+    lookup_token: str | None = Field(default=None, min_length=10, max_length=80)
     amount: Money
-    note: Note | None = None
+    purpose: str
+    note: str  # the reference
+
+    @field_validator("purpose")
+    @classmethod
+    def _purpose(cls, v: str) -> str:
+        return purposes.clean_purpose(v)
+
+    @field_validator("note")
+    @classmethod
+    def _note(cls, v: str) -> str:
+        return purposes.clean_reference(v)
+
+    @model_validator(mode="after")
+    def _exactly_one_recipient(self):
+        if (self.payer_facepay_id is None) == (self.lookup_token is None):
+            raise ValueError("Say who to ask: a FacePay ID or a face scan.")
+        return self
 
 
 class CancelOut(BaseModel):
@@ -131,3 +156,20 @@ class AdminJson(BaseModel):
 
 
 AdminPayload = dict[str, Any]
+
+
+class IncomingItem(BaseModel):
+    """One thing waiting for the signed-in customer to approve: a customer's money request (REQUEST) or a bill a shop addressed
+    to them (SHOP). `reference` is what the sender wrote it is for."""
+
+    kind: str  # REQUEST | SHOP
+    ref: str  # request_id for REQUEST, session_id for SHOP
+    from_name: str
+    from_detail: str  # masked FacePay ID, or "Shop"
+    amount: Decimal
+    currency: str
+    purpose: str | None
+    purpose_label: str | None
+    reference: str | None
+    created_at: datetime
+    expires_at: datetime

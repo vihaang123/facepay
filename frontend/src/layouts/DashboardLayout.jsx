@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import Icon from '../components/Icon'
+import IncomingRequestPrompt from '../components/IncomingRequestPrompt'
 import { Avatar, Button, Logo } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
 import {
@@ -79,6 +80,8 @@ export default function DashboardLayout() {
           <Outlet />
         </div>
       </main>
+
+      {role === 'customer' && <IncomingRequestPrompt />}
 
       <footer className="no-print border-t border-slate-200/80 px-4 py-4 text-center text-xs text-slate-600">
         FacePay is an academic prototype. Payments are simulated; no real money moves.

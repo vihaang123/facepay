@@ -16,6 +16,7 @@ from app.schemas.transfers import (
     ActivityItem,
     CancelOut,
     ChangeIdRequest,
+    IncomingItem,
     ContactOut,
     FacePayProfile,
     QrResolveOut,
@@ -25,12 +26,13 @@ from app.schemas.transfers import (
     ResolveOut,
     TransferCreate,
 )
-from app.services import activity_service, facepay_service, request_service, transfer_service
+from app.services import activity_service, facepay_service, prompt_service, request_service, transfer_service
 
 _s = get_settings()
 resolve_limiter = RateLimiter(_s.resolve_rate_limit_per_minute, enabled=_s.rate_limit_enabled)
 transfer_limiter = RateLimiter(_s.transfer_rate_limit_per_minute, enabled=_s.rate_limit_enabled)
 read_limiter = RateLimiter(120, enabled=_s.rate_limit_enabled)
+poll_limiter = RateLimiter(240, enabled=_s.rate_limit_enabled)  # the pop-up check runs every few seconds while the app is open
 
 REQUEST_STATUS = "^(PENDING|PAID|DECLINED|CANCELLED|EXPIRED)$"
 BOX = "^(incoming|outgoing|all)$"
@@ -57,6 +59,7 @@ def _limit(limiter: RateLimiter, name: str, message: str):
 _resolve = _limit(resolve_limiter, "resolve", "Too many lookups. Please wait a minute.")
 _create = _limit(transfer_limiter, "transfer", "Too many payments or requests. Please wait a minute.")
 _read = _limit(read_limiter, "read", "Too many requests. Please wait a minute.")
+_poll = _limit(poll_limiter, "poll", "Too many requests. Please wait a minute.")
 
 router = APIRouter(tags=["transfers"])
 
@@ -117,7 +120,9 @@ def cancel_transfer(session_id: str, user: User = Depends(get_current_customer),
 @router.post("/requests", response_model=RequestOut, status_code=201, dependencies=[Depends(_create)])
 def create_request(data: RequestCreate, user: User = Depends(get_current_customer), db: Session = Depends(get_db)):
     """Asks another customer for money. Creates a request only: nobody is debited."""
-    return request_service.create(db, user, payer_facepay_id=data.payer_facepay_id, amount=data.amount, note=data.note)
+    return request_service.create(
+        db, user, payer_facepay_id=data.payer_facepay_id, lookup_token=data.lookup_token, amount=data.amount, purpose=data.purpose, note=data.note
+    )
 
 
 @router.get("/requests", response_model=list[RequestOut], dependencies=[Depends(_read)])
@@ -130,6 +135,14 @@ def list_requests(
     db: Session = Depends(get_db),
 ):
     return request_service.list_requests(db, user, box=box, status=status, limit=limit, offset=offset)
+
+
+@router.get("/requests/incoming/prompts", response_model=list[IncomingItem], dependencies=[Depends(_poll)])
+def incoming_prompts(user: User = Depends(get_current_customer), db: Session = Depends(get_db)):
+    """What is waiting for this customer to approve (customer requests and shop bills addressed to them), newest first.
+    The app polls this to show the pop-up. Read-only."""
+    request_service.expire_overdue(db)
+    return prompt_service.incoming(db, user)
 
 
 @router.get("/requests/{request_id}", response_model=RequestOut, dependencies=[Depends(_read)])
