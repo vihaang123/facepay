@@ -16,3 +16,5 @@ scikit-learn>=1.5
 opencv-python-headless>=4.9,<5
 cryptography>=43
 pandas>=2.2
+dlib-bin>=20.0
+face_recognition_models>=0.3

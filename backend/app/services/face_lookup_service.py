@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from app.core import facepay_id as fid
 from app.core.config import get_settings
 from app.ml import config as cfg
+from app.ml import embedding as emb
 from app.ml import registry
 from app.ml.preprocessing import FaceDetector, FaceImageError, decode_image, process_gray, vectorize
 from app.ml.serialization import ModelLoadError
@@ -79,8 +80,55 @@ def _miss(reason: str, message: str) -> dict:
     return {"matched": False, "reason": reason, "message": message, "lookup_token": None, "expires_in_seconds": None, "person": None}
 
 
+def _candidate_or_refusal(user: User | None, confidence: float, distance: float, requester_user_id: int | None) -> tuple[_Candidate | None, str, str]:
+    """A face has been recognised as `user`. Eligibility is checked only now and answered with the same "no match", so a refusal
+    never says that a face belongs to a FacePay customer who has not opted in."""
+    if user is None or user.status != "active" or not user.face_lookup_enabled or not user.biometric_payments_enabled:
+        return None, "NO_MATCH", NO_MATCH_MESSAGE
+    if requester_user_id is not None and user.id == requester_user_id:
+        return None, "SELF", "That is your own face. Point the camera at the person you are asking."
+    return _Candidate(user, confidence, distance), "MATCH", ""
+
+
+def _identify_embedding(db: Session, grays: list[np.ndarray], requester_user_id: int | None) -> tuple[_Candidate | None, str, str]:
+    """1:N with deep embeddings: the nearest enrolled customer wins only if every frame agrees, they are close enough, and they beat
+    the runner-up clearly. The search covers EVERY enrolled customer (opted in or not), so a stranger who resembles a customer who
+    opted in cannot be mistaken for the one who did not."""
+    profiles = face_service.embedding_profiles(db)
+    if not profiles:
+        raise _err(503, "LOOKUP_UNAVAILABLE", "Finding people by face is not available yet. Customers need to finish face setup first.")
+    ids = list(profiles)
+    templates = np.stack([np.asarray(profiles[i]["template"], np.float64) for i in ids])
+    vectors, first_error = [], None
+    for gray in grays:
+        try:
+            vectors.append(emb.get_embedder().embed(gray, second_face_ratio=cfg.AUTH_SECOND_FACE_RATIO))
+        except FaceImageError as exc:
+            first_error = first_error or exc.code
+        except emb.EmbeddingUnavailable:
+            raise _err(503, "LOOKUP_UNAVAILABLE", "Finding people by face is temporarily unavailable.") from None
+    if len(vectors) < MIN_USABLE_FRAMES:
+        code = first_error or "NO_FACE"
+        return None, "CAMERA_" + code, _CAMERA_MESSAGE.get(code, _CAMERA_MESSAGE["NO_FACE"])
+    frames = np.stack(vectors).astype(np.float64)
+    dist = np.linalg.norm(frames[:, None, :] - templates[None, :, :], axis=2)  # frames x customers
+    nearest = dist.argmin(axis=1)
+    if len(set(nearest.tolist())) != 1:  # the frames disagree about who it is
+        return None, "NO_MATCH", NO_MATCH_MESSAGE
+    j = int(nearest[0])
+    mine = dist[:, j]
+    mean_d = float(mine.mean())
+    runner_up = float(np.delete(dist.mean(axis=0), j).min()) if len(ids) > 1 else float("inf")
+    log.info("lookup(embedding) frames=%d customers=%d mean_distance=%.3f margin=%s", len(vectors), len(ids), mean_d, "n/a" if runner_up == float("inf") else round(runner_up - mean_d, 3))
+    if mean_d > cfg.EMBED_LOOKUP_THRESHOLD or float(mine.max()) > cfg.EMBED_FRAME_CAP * cfg.EMBED_LOOKUP_THRESHOLD or runner_up - mean_d < cfg.EMBED_LOOKUP_MARGIN:
+        return None, "NO_MATCH", NO_MATCH_MESSAGE
+    return _candidate_or_refusal(db.get(User, ids[j]), emb.score(mean_d, cfg.EMBED_LOOKUP_THRESHOLD), mean_d, requester_user_id)
+
+
 def _identify(db: Session, grays: list[np.ndarray], detector: FaceDetector, requester_user_id: int | None) -> tuple[_Candidate | None, str, str]:
     """(candidate, reason, message). candidate is None unless the scan is accepted."""
+    if face_service.embedding_mode():
+        return _identify_embedding(db, grays, requester_user_id)
     try:
         loaded = registry.load_active(db)
     except ModelLoadError:
@@ -137,13 +185,7 @@ def _identify(db: Session, grays: list[np.ndarray], detector: FaceDetector, requ
     log.info("lookup frames=%d accepted=%s", len(crops), decision.authenticated)
     if not decision.authenticated:
         return None, "NO_MATCH", NO_MATCH_MESSAGE
-    # Eligibility is checked AFTER recognition and answered with the same "no match", so a refusal never says that a face
-    # belongs to a FacePay customer who has not opted in.
-    if user.status != "active" or not user.face_lookup_enabled or not user.biometric_payments_enabled:
-        return None, "NO_MATCH", NO_MATCH_MESSAGE
-    if requester_user_id is not None and user.id == requester_user_id:
-        return None, "SELF", "That is your own face. Point the camera at the person you are asking."
-    return _Candidate(user, min(confidences), max(distances)), "MATCH", ""
+    return _candidate_or_refusal(user, min(confidences), max(distances), requester_user_id)
 
 
 def lookup(

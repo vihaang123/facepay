@@ -125,3 +125,19 @@ MAX_LOST_RUN = 2  # no more than two consecutive turn frames without exactly one
 # A second person must be seen in at least this many frames (and this fraction of the sequence) to reject the attempt.
 MULTI_FACE_MIN_FRAMES = 2
 MULTI_FACE_FRAME_FRACTION = 0.3
+
+# ---------------------------------------------------------------- deep face embeddings (optional engine, FACE_ENGINE=embedding)
+# A pretrained network (dlib ResNet) turns each face into 128 numbers. Two photos of one person land close together; photos of
+# different people land far apart. No model is trained here, so a new customer works the moment they finish setup, and the
+# engine needs only one enrolled person. PCA-LDA stays as the default engine and as the baseline in the evaluation.
+EMBED_ENGINE_VERSION = "dlib-resnet-v1"
+EMBED_DIM = 128
+# Distances are Euclidean in the 128-d space. The library's usual cut-off (0.6) was tuned on large colour photo sets; on the
+# small grayscale ORL faces it accepted ~70% of strangers, so these are deliberately stricter. They come from ml/results/
+# embedding_calibration.json (ORL, genuine frame vs template: p99 0.40; closest other person: p1 0.47). PROVISIONAL: they must be
+# re-measured on real phone captures before any real-money use.
+EMBED_VERIFY_THRESHOLD = 0.42  # mean distance of the frames to the customer's own template must be within this
+EMBED_FRAME_CAP = 1.25  # ... and no single frame may be further than this multiple of it
+EMBED_LOOKUP_THRESHOLD = 0.40  # finding a stranger by face (1:N) is held to a stricter bar than checking an account owner (1:1)
+EMBED_LOOKUP_MARGIN = 0.05  # and the best match must beat the runner-up by this much, or the scan is "no match"
+EMBED_MIN_FRAME_SIDE = 40  # px, smallest face the detector is asked to find (after one upsample)

@@ -149,6 +149,7 @@ Render's free tier sleeps, so the first request after idle can be slow.
 | [`docs/final/guided-enrollment-and-payment-hardening.md`](docs/final/guided-enrollment-and-payment-hardening.md) | Guided auto-capture enrollment, authorization binding, PIN step-up, limits, Security page |
 | [`docs/final/face-first-payments.md`](docs/final/face-first-payments.md) | The face-first payment experience: connected demo banks, funding source at confirmation, payment requests, nearby (demo) discovery, merchant reconciliation, migration 0008, security rules |
 | [`docs/final/find-by-face-requests.md`](docs/final/find-by-face-requests.md) | Find a customer by face with the rear camera, mandatory purpose and reference on requests, the incoming-request pop-up, migration 0009, safeguards and limits |
+| [`docs/final/deep-embedding-engine.md`](docs/final/deep-embedding-engine.md) | The optional deep-embedding recognition engine (`FACE_ENGINE=embedding`): no retraining, rejects strangers, PCA-LDA vs embeddings on the same photos, thresholds, how to switch on, limits |
 | [`docs/final/upi-style-payments.md`](docs/final/upi-style-payments.md) | FacePay IDs, wallet and ledger, send, request, QR, activity, roles, admin ML Lab, migration 0007, creating an admin |
 | [`docs/final/deployment-guide.md`](docs/final/deployment-guide.md) | Deployment preparation and checks |
 | [`docs/final/demo-script.md`](docs/final/demo-script.md) | Eight-minute demo walkthrough |

@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     # Rebuild a model trained with an older recipe from the stored samples, in the background, when someone starts a face
     # check or opens face setup. Nothing is captured again. Turn off to retrain only by hand (Face setup > Prepare the model).
     auto_retrain_models: bool = True
+    # Which engine decides who a face belongs to: "pca_lda" (the original, trained per deployment; default) or "embedding" (a
+    # pretrained deep network, see app/ml/embedding.py). Switching needs customers to repeat face setup once.
+    face_engine: str = "pca_lda"
 
     # --- Account-level biometric lockout: this many counted failures inside the window blocks further biometric
     # attempts until the oldest of them leaves the window.

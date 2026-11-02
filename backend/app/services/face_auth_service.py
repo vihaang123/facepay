@@ -14,11 +14,12 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.ml import config as cfg
+from app.ml import embedding as emb
 from app.ml import liveness, recipe
 from app.ml.preprocessing import FaceDetector, FaceImageError, decode_image, process_gray
 from app.models import AuthenticationLog, FaceAuthChallenge, User
 from app.services import auth_policy as policy
-from app.services.face_service import decode_upload, inspect_model, schedule_retrain
+from app.services.face_service import decode_upload, embedding_mode, inspect_model, schedule_retrain
 
 
 def issue_challenge(db: Session, user: User) -> dict:
@@ -152,8 +153,12 @@ def authenticate(db: Session, user: User, token: str, frames_b64: list[str], det
             ctx["model_version"] = state.row.version
         if not state.ready:
             return finish(policy.Evidence(model_issue=state.code))
-        model = state.model
-        centroid, threshold = np.array(state.payload["centroid"]), float(state.payload["distance_threshold"])
+        embed_mode = embedding_mode()
+        if embed_mode:  # deep-embedding engine: compare against the customer's own reference, no trained model involved
+            template, threshold = np.array(state.payload["template"]), cfg.EMBED_VERIFY_THRESHOLD
+        else:
+            model = state.model
+            centroid, threshold = np.array(state.payload["centroid"]), float(state.payload["distance_threshold"])
         ctx["distance_threshold"] = threshold
 
         # --- decode + detect every frame
@@ -175,6 +180,17 @@ def authenticate(db: Session, user: User, token: str, frames_b64: list[str], det
                 break  # the spare baseline frame exists only to recover from a bad one; the decision is on exactly this many
             if obs.faces != 1:
                 first_error = first_error or "NO_FACE"
+                continue
+            if embed_mode:
+                try:
+                    vector = emb.get_embedder().embed(g, second_face_ratio=cfg.AUTH_SECOND_FACE_RATIO)
+                except FaceImageError as exc:
+                    first_error = first_error or exc.code
+                    continue
+                except emb.EmbeddingUnavailable:
+                    return finish(policy.Evidence(model_issue="MODEL_LOAD_FAILED", distance_threshold=threshold))
+                d = emb.distance(vector, template)
+                identities.append(policy.FrameIdentity(d <= cfg.EMBED_FRAME_CAP * threshold, emb.score(d, threshold), d))
                 continue
             try:
                 face = process_gray(g, detector, second_face_ratio=cfg.AUTH_SECOND_FACE_RATIO, reject_multiple=False)

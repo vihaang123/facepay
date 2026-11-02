@@ -152,6 +152,8 @@ class FaceSample(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     pose: Mapped[str] = mapped_column(String(20))
     crop_encrypted: Mapped[bytes] = mapped_column(LargeBinary)
+    # The deep-embedding engine's 128 numbers for this sample (AES-GCM encrypted). NULL for samples taken before that engine was on.
+    embedding_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     sharpness: Mapped[float] = mapped_column()
     brightness: Mapped[float] = mapped_column()
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

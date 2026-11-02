@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 from app.core import crypto
 from app.core.config import get_settings
 from app.ml import config as cfg
+from app.ml import embedding as emb
 from app.ml import registry
 from app.ml.analysis import scatter_analysis
 from app.ml.evaluation import strip_private
@@ -76,8 +77,17 @@ def decode_upload(image_base64: str) -> bytes:
         raise FaceImageError(INVALID_IMAGE, "The image data is not valid base64.") from None
 
 
+def embedding_mode() -> bool:
+    """True when the deep-embedding engine (FACE_ENGINE=embedding) decides who a face belongs to."""
+    return get_settings().face_engine == "embedding"
+
+
 def _sample_context(sample_id: int, user_id: int) -> str:
     return f"face_sample:{user_id}:{sample_id}"
+
+
+def _embedding_context(sample_id: int, user_id: int) -> str:
+    return f"face_embedding:{user_id}:{sample_id}"
 
 
 def _profile_context(user_id: int, version: str) -> str:
@@ -85,10 +95,10 @@ def _profile_context(user_id: int, version: str) -> str:
 
 
 def _sample_stats(db: Session, user_id: int) -> dict[str, int]:
-    rows = db.execute(
-        select(FaceSample.pose, func.count()).where(FaceSample.user_id == user_id).group_by(FaceSample.pose)
-    ).all()
-    return {pose: n for pose, n in rows}
+    q = select(FaceSample.pose, func.count()).where(FaceSample.user_id == user_id)
+    if embedding_mode():  # only samples that carry an embedding count: earlier ones cannot be used by this engine
+        q = q.where(FaceSample.embedding_encrypted.is_not(None))
+    return {pose: n for pose, n in db.execute(q.group_by(FaceSample.pose)).all()}
 
 
 def load_profile_payload(profile: FaceProfile, user_id: int, version: str) -> dict:
@@ -111,7 +121,10 @@ def active_profile(db: Session, user_id: int) -> FaceProfile | None:
 def _eligible_rows(db: Session) -> dict[int, list[tuple[int, str]]]:
     """user_id -> [(sample_id, pose)] for users with enough varied samples."""
     by_user: dict[int, list[tuple[int, str]]] = defaultdict(list)
-    for sid, uid, pose in db.execute(select(FaceSample.id, FaceSample.user_id, FaceSample.pose)).all():
+    q = select(FaceSample.id, FaceSample.user_id, FaceSample.pose)
+    if embedding_mode():
+        q = q.where(FaceSample.embedding_encrypted.is_not(None))
+    for sid, uid, pose in db.execute(q).all():
         by_user[uid].append((sid, pose))
     return {
         uid: rows
@@ -181,6 +194,7 @@ def add_sample(db: Session, user: User, pose: str, image: bytes, detector: FaceD
     face = extract_face(image, detector)  # raises FaceImageError
     if _is_duplicate(db, user, face.crop):
         raise FaceServiceError("DUPLICATE_SAMPLE", "That frame is almost identical to one already captured. Move slightly and hold still again.", 409)
+    vector = _embed_for_enrolment(image) if embedding_mode() else None  # raises FaceImageError (no face / several faces)
     sample = FaceSample(
         user_id=user.id,
         pose=pose,
@@ -191,7 +205,11 @@ def add_sample(db: Session, user: User, pose: str, image: bytes, detector: FaceD
     db.add(sample)
     db.flush()  # need the id to bind the ciphertext to this row
     sample.crop_encrypted = crypto.encrypt(face.crop.tobytes(), _sample_context(sample.id, user.id))
+    if vector is not None:
+        sample.embedding_encrypted = crypto.encrypt(vector.astype("<f4").tobytes(), _embedding_context(sample.id, user.id))
     db.commit()
+    if vector is not None:
+        refresh_embedding_profile(db, user)  # a customer is usable as soon as setup is complete: there is nothing to train
     status = enrollment_status(db, user)
     guided = status["guided"]
     return {
@@ -253,6 +271,117 @@ def _retire_model(db: Session, model_id: int) -> None:
     )
 
 
+# ---------------------------------------------------------------- deep-embedding engine
+
+
+def _embed_for_enrolment(image: bytes) -> np.ndarray:
+    gray = decode_image(image)
+    try:
+        return emb.get_embedder().embed(gray, second_face_ratio=cfg.SECOND_FACE_RATIO)
+    except emb.EmbeddingUnavailable:
+        log.error("embedding engine selected but the embedding library is not available")
+        raise FaceServiceError("EMBEDDING_UNAVAILABLE", "Face recognition is temporarily unavailable on this server.", 503) from None
+
+
+class EngineRow:
+    """Stands in for a trained model's row when the embedding engine is active: only a version string, the same value that an
+    authorization records and that confirmation compares against."""
+
+    id = None
+
+    def __init__(self) -> None:
+        self.version = cfg.EMBED_ENGINE_VERSION
+
+
+def active_version(db: Session) -> str | None:
+    """The identifier of the recognition engine/model in force. A payment authorization is only honoured while it is unchanged."""
+    if embedding_mode():
+        return cfg.EMBED_ENGINE_VERSION
+    row = registry.active_model_row(db)
+    return row.version if row is not None else None
+
+
+def _user_embeddings(db: Session, user_id: int) -> list[np.ndarray]:
+    rows = db.scalars(
+        select(FaceSample).where(FaceSample.user_id == user_id, FaceSample.embedding_encrypted.is_not(None)).order_by(FaceSample.id)
+    ).all()
+    return [np.frombuffer(crypto.decrypt(s.embedding_encrypted, _embedding_context(s.id, s.user_id)), dtype="<f4") for s in rows]
+
+
+def refresh_embedding_profile(db: Session, user: User) -> bool:
+    """(Re)builds the customer's reference (the mean of their enrolment embeddings) once their setup is complete. Returns True if a
+    profile exists afterwards."""
+    if not _is_eligible(_sample_stats(db, user.id)):
+        return False
+    vectors = _user_embeddings(db, user.id)
+    reference = emb.template(vectors)
+    spread = [emb.distance(v, reference) for v in vectors]
+    payload = {
+        "engine": cfg.EMBED_ENGINE_VERSION,
+        "template": [float(x) for x in reference],
+        "n": len(vectors),
+        "distance_threshold": cfg.EMBED_VERIFY_THRESHOLD,
+        "train_distance_mean": float(np.mean(spread)),
+        "train_distance_max": float(np.max(spread)),
+    }
+    blob = crypto.encrypt(json.dumps(payload).encode(), _profile_context(user.id, cfg.EMBED_ENGINE_VERSION))
+    profile = active_profile(db, user.id)
+    if profile is None:
+        db.add(FaceProfile(user_id=user.id, model_version_id=None, feature_data=blob, sample_count=len(vectors), status="active"))
+    else:
+        profile.model_version_id, profile.feature_data, profile.sample_count = None, blob, len(vectors)
+        profile.created_at = datetime.now(UTC)
+    db.commit()
+    return True
+
+
+def embedding_profiles(db: Session) -> dict[int, dict]:
+    """user_id -> decrypted profile payload for every customer enrolled with the embedding engine. A profile that cannot be read
+    is skipped (it can never produce a match)."""
+    out: dict[int, dict] = {}
+    for profile in db.scalars(select(FaceProfile).where(FaceProfile.status == "active", FaceProfile.model_version_id.is_(None), FaceProfile.feature_data.is_not(None))):
+        try:
+            payload = load_profile_payload(profile, profile.user_id, cfg.EMBED_ENGINE_VERSION)
+        except Exception:
+            log.warning("an embedding profile could not be read user_id=%s", profile.user_id)
+            continue
+        if payload.get("engine") == cfg.EMBED_ENGINE_VERSION:
+            out[profile.user_id] = payload
+    return out
+
+
+def _inspect_embedding(db: Session, user: User) -> "ModelState":
+    counts = _sample_stats(db, user.id)
+    own_ok = _is_eligible(counts)
+    profile = active_profile(db, user.id)
+    people = len(_eligible_rows(db))
+    mine = profile is not None and profile.model_version_id is None and profile.feature_data is not None
+    facts = {
+        "your_samples": sum(counts.values()), "required_samples": cfg.MIN_SAMPLES_PER_USER,
+        "your_poses": len(counts), "required_poses": cfg.MIN_POSES_PER_USER,
+        "people_ready": people, "people_required": 1, "model_active": True, "in_model": mine,
+    }
+    row = EngineRow()
+
+    def fail(code: str, cause: str | None = None) -> "ModelState":
+        log.log(logging.WARNING if code in _TECHNICAL else logging.INFO, "face engine not ready user_id=%s code=%s cause=%s facts=%s", user.id, code, cause, facts)
+        return ModelState(code, row=row, profile=profile, facts=facts)
+
+    if not own_ok:
+        return fail("ENROLLMENT_INSUFFICIENT")
+    if not mine:
+        return fail("MODEL_NOT_TRAINED")
+    try:
+        payload = load_profile_payload(profile, user.id, cfg.EMBED_ENGINE_VERSION)
+    except crypto.BiometricCryptoError:
+        return fail("BIOMETRIC_DECRYPTION_FAILED", cause="profile")
+    except Exception as exc:
+        return fail("MODEL_LOAD_FAILED", cause=type(exc).__name__)
+    if payload.get("engine") != cfg.EMBED_ENGINE_VERSION:
+        return fail("MODEL_NOT_TRAINED", cause="engine")
+    return ModelState(None, row=row, model=None, profile=profile, payload=payload, stale=False, facts=facts)
+
+
 # ---------------------------------------------------------------- training
 
 
@@ -273,6 +402,14 @@ def _load_training_data(db: Session, eligible: dict[int, list[tuple[int, str]]])
 
 
 def train(db: Session, user: User) -> dict:
+    if embedding_mode():  # nothing is trained: the customer's reference is built from their own samples
+        if not refresh_embedding_profile(db, user):
+            raise FaceServiceError(
+                "NOT_ENOUGH_SAMPLES",
+                f"Capture at least {cfg.MIN_SAMPLES_PER_USER} samples across {cfg.MIN_POSES_PER_USER}+ poses first.",
+                422,
+            )
+        return model_summary(db, user)["model"]
     if not _train_lock.acquire(blocking=False):
         raise FaceServiceError("TRAINING_BUSY", "A training run is already in progress. Try again shortly.", 409)
     try:
@@ -302,6 +439,8 @@ def schedule_retrain(db: Session) -> bool:
     """Start retraining in the background if the active model is from an older recipe. Never blocks the request and never
     raises: until the new model is deployed, face checks keep using the existing one. Returns True if a run was started."""
     global _retrain_failed_at
+    if embedding_mode():
+        return False  # no model to rebuild
     try:
         if not get_settings().auto_retrain_models or not recipe_outdated(registry.active_model_row(db)):
             return False
@@ -418,6 +557,11 @@ def _fit_and_store(db: Session, actor_id: int, eligible: dict[int, list[tuple[in
         db.add(row)
         db.flush()
 
+        db.execute(  # profiles made by the embedding engine have no model row: revoke them before the new ones are written
+            update(FaceProfile)
+            .where(FaceProfile.model_version_id.is_(None), FaceProfile.status == "active", FaceProfile.user_id.in_([int(u) for u in model.classes_]))
+            .values(status="revoked", feature_data=None)
+        )
         z = model.transform(X)
         for uid in model.classes_:
             uid = int(uid)
@@ -449,6 +593,11 @@ def _fit_and_store(db: Session, actor_id: int, eligible: dict[int, list[tuple[in
 
 
 def model_summary(db: Session, user: User) -> dict:
+    if embedding_mode():
+        profile = active_profile(db, user.id)
+        if profile is None or profile.model_version_id is not None:
+            return {"model": None}
+        return {"model": {"version": cfg.EMBED_ENGINE_VERSION, "trained_at": profile.created_at, "includes_you": True, "stale": False}}
     row = registry.active_model_row(db)
     if row is None:
         return {"model": None}
@@ -525,6 +674,8 @@ class ModelState:
 def inspect_model(db: Session, user: User) -> ModelState:
     """Looks at the enrolment, the active model and this customer's profile, and says which one is the problem.
     Database errors are NOT converted into a model problem: they propagate and surface as a server error."""
+    if embedding_mode():
+        return _inspect_embedding(db, user)
     counts = _sample_stats(db, user.id)
     own_ok = _is_eligible(counts)
     eligible = _eligible_rows(db)
@@ -613,6 +764,19 @@ def recognize(db: Session, user: User, image: bytes, detector: FaceDetector) -> 
     row, model = state.row, state.model
 
     face = extract_face(image, detector)
+    if embedding_mode():
+        try:
+            vector = emb.get_embedder().embed(decode_image(image))
+        except emb.EmbeddingUnavailable:
+            raise FaceServiceError("EMBEDDING_UNAVAILABLE", "Face recognition is temporarily unavailable on this server.", 503) from None
+        distance = emb.distance(vector, np.array(state.payload["template"]))
+        matched = distance <= cfg.EMBED_VERIFY_THRESHOLD
+        return {
+            "matched": matched, "reason": "MATCH" if matched else "TOO_FAR_FROM_PROFILE", "predicted_is_you": matched,
+            "user_id": user.id if matched else None, "confidence": round(emb.score(distance, cfg.EMBED_VERIFY_THRESHOLD), 4),
+            "distance_to_you": round(distance, 4), "distance_threshold": round(cfg.EMBED_VERIFY_THRESHOLD, 4),
+            "model_version": row.version, "quality": face.quality.as_dict(),
+        }
     x = vectorize(face.crop)[None, :]
     z = model.transform(x)
     label = model.clf_.predict(z)[0]

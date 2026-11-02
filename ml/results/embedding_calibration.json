@@ -1,0 +1,61 @@
+{
+  "dataset": "ORL (AT&T) 40 people x 10 photos; NOT webcam or phone footage",
+  "protocol": "20 random splits; 30 enrolled (6 reference photos), 10 held-out strangers",
+  "detected": "399/400 photos had a face found by the embedding detector",
+  "methods": {
+    "pca_lda_knn": {
+      "identification_accuracy": 0.8868,
+      "equal_error_rate": 0.2041,
+      "strangers_accepted_when_90pct_of_genuine_pass": 0.6109
+    },
+    "dlib_embedding": {
+      "identification_accuracy": 1.0,
+      "equal_error_rate": 0.0,
+      "strangers_accepted_when_90pct_of_genuine_pass": 0.0
+    }
+  },
+  "embedding_distances": {
+    "genuine_p50": 0.23,
+    "genuine_p90": 0.317,
+    "genuine_p99": 0.396,
+    "genuine_max": 0.448,
+    "closest_other_enrolled_min": 0.441,
+    "closest_other_enrolled_p1": 0.467,
+    "stranger_min": 0.452,
+    "stranger_p1": 0.47
+  },
+  "acceptance_by_threshold": {
+    "0.40": {
+      "genuine": 0.9912,
+      "other_enrolled": 0.0,
+      "stranger": 0.0
+    },
+    "0.42": {
+      "genuine": 0.995,
+      "other_enrolled": 0.0,
+      "stranger": 0.0
+    },
+    "0.45": {
+      "genuine": 1.0,
+      "other_enrolled": 0.0013,
+      "stranger": 0.0
+    },
+    "0.50": {
+      "genuine": 1.0,
+      "other_enrolled": 0.06,
+      "stranger": 0.0626
+    },
+    "0.55": {
+      "genuine": 1.0,
+      "other_enrolled": 0.2496,
+      "stranger": 0.2856
+    },
+    "0.60": {
+      "genuine": 1.0,
+      "other_enrolled": 0.6401,
+      "stranger": 0.6979
+    }
+  },
+  "chosen": "verify 0.42 (1:1), lookup 0.40 with a 0.05 margin over the runner-up (1:N); the library's usual 0.6 accepted ~70% of strangers here",
+  "caveat": "provisional: re-measure on real phone captures (colour, varied light, glasses, ageing) before any real-money use"
+}

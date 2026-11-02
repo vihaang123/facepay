@@ -23,11 +23,10 @@ from sqlalchemy.orm import Session
 
 from app.core import purposes
 from app.core.config import get_settings
-from app.ml import registry
 from app.ml.preprocessing import FaceDetector
 from app.core import facepay_id as fid
 from app.models import AuthenticationLog, Merchant, PaymentAuthorization, PaymentRequest, PaymentSession, Transaction, User
-from app.services import bank_service, face_auth_service, request_service
+from app.services import bank_service, face_auth_service, face_service, request_service
 from app.services import security_service as sec
 from app.services.security_service import COUNTED_REASONS  # rejections that count against the session (and the account)
 
@@ -551,7 +550,7 @@ def confirm_payment(
         raise invalid
     # The ticket must match the payment as it is now. A missing snapshot (an authorization issued before it existed)
     # or any difference makes the ticket worthless, and so does a model retrained since the face check.
-    active = registry.active_model_row(db)
+    active_version = face_service.active_version(db)
     snapshot_ok = (
         auth.merchant_id == ps.merchant_id
         and auth.payee_user_id == ps.payee_user_id
@@ -560,8 +559,8 @@ def confirm_payment(
         and auth.currency == ps.currency
         and auth.order_reference == ps.order_reference
         and auth.model_version is not None
-        and active is not None
-        and auth.model_version == active.version
+        and active_version is not None
+        and auth.model_version == active_version
     )
     if not snapshot_ok:
         auth.status = "REVOKED"
