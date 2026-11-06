@@ -56,10 +56,10 @@ export default function FaceFinder({ onFound, actionLabel = 'Continue' }) {
 
   if (match) {
     return (
-      <section aria-label="Confirm the person found" className="flex flex-col gap-3 rounded-[1.25rem] border border-brand-200 bg-brand-50/50 p-5">
-        <p className="text-sm font-semibold text-slate-800">Found a FacePay customer. Is this who you meant?</p>
+      <section aria-label="Confirm the person found" className="flex flex-col gap-3 rounded-2xl border border-brand-200 bg-brand-50/50 p-5">
+        <p className="text-sm font-semibold text-fg">Found a FacePay customer. Is this who you meant?</p>
         <PersonCard name={match.person.display_name} maskedId={match.person.masked_id} />
-        <p className="text-xs text-slate-600">This only lets you send them a request. They approve it themselves with their own face check.</p>
+        <p className="text-xs text-muted">This only lets you send them a request. They approve it themselves with their own face check.</p>
         <Button size="lg" onClick={() => onFound({ lookupToken: match.lookup_token, person: match.person, expiresInSeconds: match.expires_in_seconds })}>{actionLabel}</Button>
         <Button variant="ghost" onClick={() => { setMatch(null); setProblem(null) }}>Not them, scan again</Button>
       </section>

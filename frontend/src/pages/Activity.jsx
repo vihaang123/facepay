@@ -59,12 +59,12 @@ export default function Activity() {
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-extrabold tracking-tight">Activity</h1>
-        <p className="mt-1 text-sm text-slate-600">Payments you made and received, and your money requests.</p>
+        <h1 className="text-2xl font-bold tracking-tight">Activity</h1>
+        <p className="mt-1 text-sm text-muted">Payments you made and received, and your money requests.</p>
       </div>
       <div className="relative">
         <label htmlFor="activity-search" className="sr-only">Search activity</label>
-        <Icon name="search" className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
+        <Icon name="search" className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-muted" />
         <input
           id="activity-search"
           type="search"
@@ -72,7 +72,7 @@ export default function Activity() {
           onChange={(e) => setText(e.target.value)}
           placeholder="Search by name, note or reference"
           autoComplete="off"
-          className="min-h-12 w-full rounded-xl border border-slate-300 bg-white pl-11 pr-3 text-base focus:border-brand-700"
+          className="min-h-12 w-full rounded-xl border border-line-strong bg-surface pl-11 pr-3 text-base focus:border-brand-700"
         />
       </div>
       <div role="group" aria-label="Filter activity" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
@@ -82,18 +82,18 @@ export default function Activity() {
             type="button"
             aria-pressed={filter === id}
             onClick={() => setFilter(id)}
-            className={`min-h-10 shrink-0 rounded-full px-4 text-sm font-semibold ring-1 ring-inset transition ${filter === id ? 'bg-brand-700 text-white ring-brand-700' : 'bg-white text-slate-800 ring-slate-300 hover:bg-slate-50'}`}
+            className={`min-h-10 shrink-0 rounded-full px-4 text-sm font-semibold ring-1 ring-inset transition ${filter === id ? 'bg-brand-700 text-on-accent ring-brand-700' : 'bg-surface text-fg ring-line-strong hover:bg-sunken'}`}
           >
             {label}
           </button>
         ))}
       </div>
-      <section aria-label="Activity list" className="rounded-[1.25rem] border border-slate-200/80 bg-white p-4 shadow-card">
+      <section aria-label="Activity list" className="rounded-2xl border border-line/80 bg-surface p-4 shadow-card">
         {error && !rows ? <ErrorState message={error} onRetry={load} /> : rows === null ? <FeedSkeleton label="Loading activity" rows={4} /> : rows.length === 0 ? <NoActivity filtered={filter !== 'all' || q !== ''} /> : (
           <>
             <ActivityList rows={rows} />
             {more && <Button variant="secondary" className="mt-3 w-full" onClick={loadMore} loading={loadingMore}>Load more</Button>}
-            {error && <p role="alert" className="mt-3 text-sm text-rose-800">{error}</p>}
+            {error && <p role="alert" className="mt-3 text-sm text-danger-ink">{error}</p>}
           </>
         )}
       </section>

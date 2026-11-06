@@ -18,8 +18,8 @@ export default class ErrorBoundary extends Component {
     return (
       <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 px-6 text-center">
         <h1 className="text-2xl font-bold">Something went wrong</h1>
-        <p className="text-sm text-slate-600">This page hit an unexpected problem. Your payments and data are not affected.</p>
-        <a href="/" className="rounded-lg bg-brand-700 px-4 py-2.5 text-sm font-semibold text-white">Back to FacePay</a>
+        <p className="text-sm text-muted">This page hit an unexpected problem. Your payments and data are not affected.</p>
+        <a href="/" className="rounded-lg bg-brand-700 px-4 py-2.5 text-sm font-semibold text-on-accent">Back to FacePay</a>
       </main>
     )
   }

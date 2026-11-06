@@ -2,10 +2,10 @@ import { Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, LineChart, R
 
 // Two categorical colours, picked to stay apart for common colour-vision differences, plus a text legend on every
 // multi-series chart so colour is never the only cue.
-const TEAL = '#0a6f68'
-const AMBER = '#b45309'
-const GRID = '#e2e8f0'
-const tick = { fontSize: 11, fill: '#475569' }
+const TEAL = 'var(--brand-700)'
+const AMBER = 'var(--warning)'
+const GRID = 'var(--line)'
+const tick = { fontSize: 11, fill: 'var(--muted)' }
 const pctText = (v) => `${(Number(v) * 100).toFixed(1)}%`
 
 /** PCA: bars are each component's share of variance, the line is the running total. Both come from the trained model. */
@@ -15,7 +15,7 @@ export function VarianceChart({ explained, cumulative }) {
     <ResponsiveContainer width="100%" height={260} initialDimension={{ width: 600, height: 260 }}>
       <ComposedChart data={data} margin={{ top: 4, right: 8, bottom: 16, left: 0 }}>
         <CartesianGrid vertical={false} stroke={GRID} />
-        <XAxis dataKey="component" tick={tick} tickLine={false} axisLine={false} interval="preserveStartEnd" label={{ value: 'Principal component', position: 'insideBottom', offset: -10, fontSize: 11, fill: '#475569' }} />
+        <XAxis dataKey="component" tick={tick} tickLine={false} axisLine={false} interval="preserveStartEnd" label={{ value: 'Principal component', position: 'insideBottom', offset: -10, fontSize: 11, fill: 'var(--muted)' }} />
         <YAxis tick={tick} tickLine={false} axisLine={false} width={44} domain={[0, 1]} tickFormatter={(v) => `${Math.round(v * 100)}%`} />
         <Tooltip formatter={(v, n) => [pctText(v), n]} labelFormatter={(l) => `Component ${l}`} />
         <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 12 }} />
@@ -33,7 +33,7 @@ export function ErrorRateChart({ rows }) {
     <ResponsiveContainer width="100%" height={260} initialDimension={{ width: 600, height: 260 }}>
       <LineChart data={data} margin={{ top: 4, right: 8, bottom: 16, left: 0 }}>
         <CartesianGrid vertical={false} stroke={GRID} />
-        <XAxis dataKey="percentile" tick={tick} tickLine={false} axisLine={false} label={{ value: 'Threshold percentile of genuine distances', position: 'insideBottom', offset: -10, fontSize: 11, fill: '#475569' }} />
+        <XAxis dataKey="percentile" tick={tick} tickLine={false} axisLine={false} label={{ value: 'Threshold percentile of genuine distances', position: 'insideBottom', offset: -10, fontSize: 11, fill: 'var(--muted)' }} />
         <YAxis tick={tick} tickLine={false} axisLine={false} width={44} domain={[0, 1]} tickFormatter={(v) => `${Math.round(v * 100)}%`} />
         <Tooltip formatter={(v, n) => [pctText(v), n]} labelFormatter={(l) => `Percentile ${l}`} />
         <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 12 }} />

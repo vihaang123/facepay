@@ -15,8 +15,8 @@ export function Brackets({ className = '', color = 'border-scan-edge' }) {
 export function FaceGuide({ className = '' }) {
   return (
     <svg aria-hidden="true" viewBox="0 0 120 150" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className={className}>
-      <ellipse cx="60" cy="58" rx="27" ry="34" strokeDasharray="4 5" />
-      <path d="M12 150c3-30 22-44 48-44s45 14 48 44" strokeDasharray="4 5" />
+      <ellipse cx="60" cy="58" rx="27" ry="34" />
+      <path d="M12 150c3-30 22-44 48-44s45 14 48 44" />
     </svg>
   )
 }

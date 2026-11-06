@@ -23,24 +23,28 @@ const TILES = [
   ['FacePay nearby', PAY_PATH, 'nearby', 'Demo discovery'],
 ]
 
-/** The face-first action: the most prominent thing on the screen. */
+/** The face-first action: the most prominent thing on the screen, with Request money beside it. */
 function FaceHero() {
   return (
-    <section aria-label="Pay with your face" className="relative overflow-hidden rounded-[1.75rem] bg-brand-800 p-6 text-white shadow-card">
-      <span aria-hidden="true" className="pointer-events-none absolute -right-8 -top-8 h-36 w-36 rounded-full bg-white/10" />
-      <span aria-hidden="true" className="pointer-events-none absolute -bottom-10 right-10 h-24 w-24 rounded-full bg-white/5" />
-      <div className="relative">
-        <span aria-hidden="true" className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15"><Icon name="face" className="h-8 w-8" /></span>
-        <h2 className="mt-4 text-2xl font-extrabold leading-tight tracking-tight">Pay with your face.<br />Confirm with confidence.</h2>
-        <p className="mt-2 max-w-sm text-sm text-white/85">Open a payment, check who and how much, verify your face, then confirm. Nothing is paid until you say so.</p>
+    <section aria-label="Pay with your face" className="rounded-3xl bg-brand-700 p-6 text-on-accent">
+      <span aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-2xl bg-on-accent/15"><Icon name="face" className="h-7 w-7" /></span>
+      <h2 className="mt-4 text-2xl font-bold leading-tight tracking-tight">Pay with your face.<br />Confirm with confidence.</h2>
+      <p className="mt-2 max-w-sm text-sm opacity-90">Open a payment, check who and how much, verify your face, then confirm. Nothing is paid until you say so.</p>
+      <div className="mt-5 flex flex-col gap-2 sm:flex-row">
         <Link
           to={PAY_PATH}
-          className="mt-5 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 text-base font-bold text-brand-800 shadow-sm transition hover:bg-brand-50 active:scale-[0.98] motion-reduce:transition-none"
+          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-surface px-6 text-base font-semibold text-brand-800 transition hover:opacity-95 active:scale-[0.98] motion-reduce:transition-none"
         >
           <Icon name="face" className="h-5 w-5" />Pay with Face
         </Link>
-        <p className="mt-3 text-xs text-white/80">Simulated payments. No real bank account is accessed and no money is transferred.</p>
+        <Link
+          to={REQUEST_PATH}
+          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-on-accent/40 px-6 text-base font-semibold transition hover:bg-on-accent/10 active:scale-[0.98] motion-reduce:transition-none"
+        >
+          <Icon name="request" className="h-5 w-5" />Request money
+        </Link>
       </div>
+      <p className="mt-4 text-xs opacity-80">Simulated payments. No real bank account is accessed and no money is transferred.</p>
     </section>
   )
 }
@@ -52,14 +56,14 @@ function Tiles() {
   return (
     <nav aria-label="Payment options" className="grid grid-cols-2 gap-3">
       {TILES.map(([label, to, icon, hint]) => (
-        <Link key={label} to={to} className="relative flex min-h-[6.5rem] flex-col items-start justify-between gap-3 rounded-[1.25rem] border border-slate-200/80 bg-white p-4 shadow-card transition hover:border-brand-200 active:scale-[0.98] motion-reduce:transition-none">
+        <Link key={label} to={to} className="relative flex min-h-24 flex-col items-start justify-between gap-3 rounded-2xl border border-line bg-surface p-4 transition hover:border-brand-200 active:scale-[0.98] motion-reduce:transition-none">
           <span aria-hidden="true" className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-50 text-brand-700"><Icon name={icon} className="h-5 w-5" /></span>
           <span>
             <span className="block text-sm font-bold leading-tight">{label}</span>
-            <span className="block text-xs text-slate-600">{hint}</span>
+            <span className="block text-xs text-muted">{hint}</span>
           </span>
           {to === REQUESTS_PATH && waiting > 0 && (
-            <span aria-label={`${waiting} waiting for you`} className="absolute right-3 top-3 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1 text-[0.7rem] font-bold text-white">{waiting > 9 ? '9+' : waiting}</span>
+            <span aria-label={`${waiting} waiting for you`} className="absolute right-3 top-3 flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1 text-[0.7rem] font-bold text-on-accent">{waiting > 9 ? '9+' : waiting}</span>
           )}
         </Link>
       ))}
@@ -70,7 +74,6 @@ function Tiles() {
 // Everything that used to crowd the header. The header keeps five daily actions; the rest is one tap from here.
 const MORE = [
   ['Bank accounts', BANKS_PATH, 'bank'],
-  ['Request money', REQUEST_PATH, 'request'],
   ['Scan QR', SCAN_PATH, 'scan'],
   ['My QR', MY_QR_PATH, 'qr'],
   ['Face profile', FACE_PATH, 'face'],
@@ -79,11 +82,11 @@ const MORE = [
 
 function MoreLinks() {
   return (
-    <Card title="More" aria-label="More">
+    <Card title="More" aria-label="More" className="lg:hidden">
       <ul aria-label="More options" className="grid grid-cols-2 gap-2">
         {MORE.map(([label, to, icon]) => (
           <li key={to}>
-            <Link to={to} className="flex min-h-12 items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold transition hover:border-brand-200 hover:bg-brand-50/40 active:scale-[0.98] motion-reduce:transition-none">
+            <Link to={to} className="flex min-h-12 items-center gap-2.5 rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold transition hover:border-brand-200 hover:bg-brand-50/40 active:scale-[0.98] motion-reduce:transition-none">
               <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-700"><Icon name={icon} className="h-4 w-4" /></span>
               <span className="min-w-0 flex-1 leading-tight">{label}</span>
             </Link>
@@ -105,25 +108,25 @@ function ConnectedBanks() {
         <ErrorState message={state.error} onRetry={state.reload} />
       ) : state.data.length === 0 ? (
         <div className="flex flex-col gap-3">
-          <p className="text-sm text-slate-700">Connect a demo bank account to choose where your payments come from. You need one to confirm a payment.</p>
+          <p className="text-sm text-fg">Connect a demo bank account to choose where your payments come from. You need one to confirm a payment.</p>
           <ButtonLink to={BANKS_PATH} variant="secondary"><Icon name="bank" className="h-4 w-4" />Connect a demo bank</ButtonLink>
         </div>
       ) : (
         <ul aria-label="Connected banks" className="flex flex-col gap-2">
           {state.data.slice(0, 3).map((c) => (
             <li key={c.connection_id} className="flex items-center gap-3">
-              <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-700"><Icon name="bank" className="h-5 w-5" /></span>
+              <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-sunken text-fg"><Icon name="bank" className="h-5 w-5" /></span>
               <div className="min-w-0 flex-1">
-                <p className="truncate font-semibold leading-tight">{c.bank_name} · {c.account_type_label}</p>
-                <p className="font-mono text-xs text-slate-600">{c.account_ref}</p>
+                <p className="line-clamp-2 break-words font-semibold leading-tight">{c.bank_name} · {c.account_type_label}</p>
+                <p className="font-mono text-xs text-muted">{c.account_ref}</p>
               </div>
               {c.is_default && <span className="shrink-0 rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-semibold text-brand-800 ring-1 ring-inset ring-brand-200">Default</span>}
             </li>
           ))}
-          {state.data.length > 3 && <li className="text-xs text-slate-600">and {state.data.length - 3} more</li>}
+          {state.data.length > 3 && <li className="text-xs text-muted">and {state.data.length - 3} more</li>}
         </ul>
       )}
-      <p className="mt-3 text-xs text-slate-600">{DEMO_DISCLAIMER}</p>
+      <p className="mt-3 text-xs text-muted">{DEMO_DISCLAIMER}</p>
     </Card>
   )
 }
@@ -148,30 +151,30 @@ function SecurityStatus() {
           return (
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-3">
-                <span aria-hidden="true" className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${ready ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}>
+                <span aria-hidden="true" className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${ready ? 'bg-success-soft text-success-ink' : 'bg-warning-soft text-warning-ink'}`}>
                   <Icon name={ready ? 'shield' : 'face'} className="h-6 w-6" />
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="font-bold leading-tight">{ready ? 'Face authentication ready' : status.label}</p>
-                  <p className="mt-0.5 text-xs text-slate-600">{ready ? 'You can approve payments with your face.' : status.text}</p>
+                  <p className="mt-0.5 text-xs text-muted">{ready ? 'You can approve payments with your face.' : status.text}</p>
                 </div>
                 <Link className={`${linkClass} shrink-0`} to={FACE_PATH}>{status.cta}</Link>
               </div>
               {ready && (
-                <p className="text-xs text-slate-600">Want shops and friends to find you with a camera? <Link className={linkClass} to={SECURITY_PATH}>Turn on “find me by face”</Link>. It is off until you do.</p>
+                <p className="text-xs text-muted">Want shops and friends to find you with a camera? <Link className={linkClass} to={SECURITY_PATH}>Turn on “find me by face”</Link>. It is off until you do.</p>
               )}
               {!ready && (
                 <div>
-                  <div className="flex justify-between text-xs font-semibold text-slate-700">
+                  <div className="flex justify-between text-xs font-semibold text-fg">
                     <span>Face setup</span>
                     <span>{Math.min(enrollment.total_samples, enrollment.min_samples_to_train)} of {enrollment.min_samples_to_train} photos</span>
                   </div>
-                  <div role="progressbar" aria-label="Face setup progress" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} className="mt-1 h-2 overflow-hidden rounded-full bg-slate-200">
+                  <div role="progressbar" aria-label="Face setup progress" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} className="mt-1 h-2 overflow-hidden rounded-full bg-track">
                     <div className="h-full rounded-full bg-brand-700 transition-[width] motion-reduce:transition-none" style={{ width: `${pct}%` }} />
                   </div>
                 </div>
               )}
-              <p className="text-xs text-slate-600">
+              <p className="text-xs text-muted">
                 {last ? `Last face check: ${last.result === 'SUCCESS' ? 'verified' : 'not verified'}, ${formatFeedTime(last.timestamp)}` : 'No face checks yet.'}
               </p>
             </div>
@@ -192,22 +195,6 @@ function RecentActivity() {
   )
 }
 
-function Bell() {
-  const { token } = useAuth()
-  const state = useLoad(() => getActivityCounts(token), [token])
-  const n = state.data?.pending_incoming_requests ?? 0
-  return (
-    <Link
-      to={REQUESTS_PATH}
-      aria-label={n > 0 ? `Requests, ${n} waiting for you` : 'Requests'}
-      className="relative inline-flex h-11 w-11 items-center justify-center rounded-full bg-white text-slate-800 shadow-card ring-1 ring-slate-200 transition hover:bg-slate-50"
-    >
-      <Icon name="bell" className="h-5 w-5" />
-      {n > 0 && <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1 text-[0.7rem] font-bold text-white">{n > 9 ? '9+' : n}</span>}
-    </Link>
-  )
-}
-
 export default function CustomerHome() {
   const { profile } = useAuth()
   const [notice, setNotice] = useState(null)
@@ -216,15 +203,14 @@ export default function CustomerHome() {
     <div className="mx-auto flex max-w-2xl flex-col gap-5">
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-extrabold tracking-tight">{greeting()}, {first}</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{greeting()}, {first}</h1>
           {profile.facepay_id && (
             <div className="mt-1.5">
-              <p className="text-xs font-semibold text-slate-600">Your FacePay ID</p>
+              <p className="text-xs font-semibold text-muted">Your FacePay ID</p>
               <IdChip id={profile.facepay_id} name={profile.name} onNotice={setNotice} />
             </div>
           )}
         </div>
-        <Bell />
       </header>
       {notice && <Alert tone="info">{notice}</Alert>}
 
@@ -237,7 +223,7 @@ export default function CustomerHome() {
       <MoreLinks />
       <p className="text-center text-sm">
         <Link className={linkClass} to={AUTHENTICATE_PATH}>Try a test face check</Link>
-        <span className="text-slate-600"> without making a payment</span>
+        <span className="text-muted"> without making a payment</span>
       </p>
     </div>
   )

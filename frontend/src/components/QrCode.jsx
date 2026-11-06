@@ -19,14 +19,14 @@ export default function QrCode({ value, size = 224, label = 'QR code', onReady }
     return () => { live = false }
   }, [value, onReady])
 
-  if (failed) return <p role="alert" className="text-sm text-rose-800">The QR code could not be drawn. Share the FacePay ID instead.</p>
+  if (failed) return <p role="alert" className="text-sm text-danger-ink">The QR code could not be drawn. Share the FacePay ID instead.</p>
   if (!svg) return <div role="status" aria-label="Preparing QR code"><Skeleton className="rounded-xl" style={{ width: size, height: size }} /></div>
   return (
     <img
       alt={label}
       width={size}
       height={size}
-      className="rounded-xl bg-white"
+      className="rounded-xl bg-surface"
       src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`}
     />
   )

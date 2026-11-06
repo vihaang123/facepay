@@ -90,7 +90,7 @@ export default function MerchantPaymentSession() {
   if (!session) {
     return (
       <div className="mx-auto flex max-w-md flex-col gap-3">
-        {error ? <Alert tone="error">{error}</Alert> : <div role="status" aria-label="Loading payment session"><Skeleton className="h-80 w-full !rounded-[1.5rem]" /></div>}
+        {error ? <Alert tone="error">{error}</Alert> : <div role="status" aria-label="Loading payment session"><Skeleton className="h-80 w-full !rounded-3xl" /></div>}
         <ButtonLink to={DASHBOARD_PATH.merchant} variant="secondary">Back to home</ButtonLink>
       </div>
     )
@@ -100,17 +100,17 @@ export default function MerchantPaymentSession() {
   const stopped = ['FAILED', 'EXPIRED', 'CANCELLED'].includes(session.status)
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-5">
-      <h1 className="text-2xl font-extrabold tracking-tight">Payment request</h1>
+      <h1 className="text-2xl font-bold tracking-tight">Payment request</h1>
       {error && <Alert tone="error">{error}</Alert>}
 
-      <section aria-label="Session details" className="rounded-[1.5rem] border border-slate-200/80 bg-white p-6 text-center shadow-card">
+      <section aria-label="Session details" className="rounded-3xl border border-line/80 bg-surface p-6 text-center shadow-card">
         <Amount value={session.amount} currency={session.currency} className="text-5xl" />
-        <p aria-live="polite" className={`mt-2 inline-flex items-center gap-2 text-base font-bold ${ok ? 'text-emerald-800' : stopped ? 'text-rose-800' : 'text-slate-900'}`}>
+        <p aria-live="polite" className={`mt-2 inline-flex items-center gap-2 text-base font-bold ${ok ? 'text-success-ink' : stopped ? 'text-danger-ink' : 'text-fg'}`}>
           {!ok && !stopped && <span aria-hidden="true" className="h-2.5 w-2.5 animate-pulse rounded-full bg-brand-600" />}
           {ok && <Icon name="check" className="h-5 w-5" strokeWidth="2.6" />}
           {session.status === 'PAID' && !ok ? HEADLINE.AUTHENTICATED : HEADLINE[session.status]}
         </p>
-        <p className="mt-1 font-mono text-sm text-slate-700">{session.order_reference}</p>
+        <p className="mt-1 font-mono text-sm text-fg">{session.order_reference}</p>
         <div><SimulatedTag className="mt-3" /></div>
       </section>
 
@@ -120,7 +120,7 @@ export default function MerchantPaymentSession() {
 
       <Card aria-label="Details" className="!py-2">
         <dl>
-          {session.requested_from && <Row label="Requested from">{session.requested_from}<span className="ml-2 font-mono text-xs text-slate-600">{session.requested_from_masked_id}</span></Row>}
+          {session.requested_from && <Row label="Requested from">{session.requested_from}<span className="ml-2 font-mono text-xs text-muted">{session.requested_from_masked_id}</span></Row>}
           {session.purpose_label && <Row label="For">{session.purpose_label}</Row>}
           {session.description && <Row label="Details">{session.description}</Row>}
           <Row label="Status"><StatusBadge status={session.status} /></Row>
@@ -133,7 +133,7 @@ export default function MerchantPaymentSession() {
 
       {open && session.requested_from && (
         <Card aria-label="Waiting for the customer">
-          <p className="text-sm text-slate-700">
+          <p className="text-sm text-fg">
             {session.requested_from} has this request as a pop-up in FacePay. They check the amount and reference, verify their own face and confirm.
             This page shows Paid only after the payment is recorded. If they say no, it shows Cancelled.
           </p>
@@ -152,12 +152,12 @@ export default function MerchantPaymentSession() {
 
       {open && !session.requested_from && (
         <Card aria-label="Checkout link">
-          <p className="text-sm text-slate-700">This is the active request. Send the link to the customer. They sign in to a FacePay customer account, verify their face and confirm. This page shows Paid only after the payment is recorded.</p>
-          <code className="mt-2 block break-all rounded-xl bg-slate-100 px-3 py-2 text-xs">{link}</code>
+          <p className="text-sm text-fg">This is the active request. Send the link to the customer. They sign in to a FacePay customer account, verify their face and confirm. This page shows Paid only after the payment is recorded.</p>
+          <code className="mt-2 block break-all rounded-xl bg-sunken px-3 py-2 text-xs">{link}</code>
           {isPayable(session.status) && (
             <div className="mt-4 flex flex-col items-center gap-2">
               <QrCode value={link} size={176} label="QR code for this payment link" />
-              <p className="text-center text-xs text-slate-600">Or let the customer scan this code from FacePay. It points to this one payment only and stops working when it is paid or expires.</p>
+              <p className="text-center text-xs text-muted">Or let the customer scan this code from FacePay. It points to this one payment only and stops working when it is paid or expires.</p>
             </div>
           )}
           <div className="mt-3 flex flex-wrap gap-2">
@@ -165,11 +165,11 @@ export default function MerchantPaymentSession() {
             <Button variant="secondary" onClick={share}><Icon name="share" className="h-4 w-4" />Share</Button>
             <Button variant="secondary" onClick={() => setConfirmCancel(true)} loading={busy} disabled={confirmCancel}>Cancel request</Button>
           </div>
-          <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3.5">
+          <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-surface p-3.5">
             <input type="checkbox" checked={Boolean(session.discoverable)} onChange={toggleDisplay} disabled={busy} className="mt-0.5 h-4 w-4 accent-brand-700" />
             <span className="text-sm">
               <span className="block font-semibold">Show in FacePay nearby (demo)</span>
-              <span className="block text-slate-600">Simulated discovery for signed-in customers. It uses no location. It stops showing when the request is paid, cancelled or expired.</span>
+              <span className="block text-muted">Simulated discovery for signed-in customers. It uses no location. It stops showing when the request is paid, cancelled or expired.</span>
             </span>
           </label>
           {confirmCancel && (

@@ -11,11 +11,11 @@ const MetricBars = lazy(() => import('../components/LabCharts').then((m) => ({ d
 const OutcomeBars = lazy(() => import('../components/LabCharts').then((m) => ({ default: m.OutcomeBars })))
 
 const TABS = [['overview', 'Overview'], ['pca', 'PCA'], ['classifiers', 'LDA and classifiers'], ['errors', 'Error rates'], ['outcomes', 'Live outcomes']]
-const ChartFallback = () => <Skeleton className="h-56 w-full !rounded-[1.25rem]" />
+const ChartFallback = () => <Skeleton className="h-56 w-full !rounded-2xl" />
 const num = (v, d = 3) => (v === null || v === undefined ? 'n/a' : Number(v).toFixed(d))
 
 function Section({ state, label, children }) {
-  if (state.loading) return <div role="status" aria-label={`Loading ${label}`}><Skeleton className="h-40 w-full !rounded-[1.25rem]" /></div>
+  if (state.loading) return <div role="status" aria-label={`Loading ${label}`}><Skeleton className="h-40 w-full !rounded-2xl" /></div>
   if (state.error) return <ErrorState message={state.error} onRetry={state.reload} />
   return children(state.data)
 }
@@ -32,8 +32,8 @@ function Table({ label, head, rows }) {
   return (
     <div className="overflow-x-auto">
       <table aria-label={label} className="w-full min-w-[26rem] text-left text-sm">
-        <thead><tr>{head.map((h) => <th key={h} scope="col" className="border-b border-slate-200 py-2 pr-3 text-xs font-semibold text-slate-600">{h}</th>)}</tr></thead>
-        <tbody>{rows.map((r, i) => <tr key={i} className="border-b border-slate-100">{r.map((c, j) => <td key={j} className="py-2 pr-3">{c}</td>)}</tr>)}</tbody>
+        <thead><tr>{head.map((h) => <th key={h} scope="col" className="border-b border-line py-2 pr-3 text-xs font-semibold text-muted">{h}</th>)}</tr></thead>
+        <tbody>{rows.map((r, i) => <tr key={i} className="border-b border-line">{r.map((c, j) => <td key={j} className="py-2 pr-3">{c}</td>)}</tr>)}</tbody>
       </table>
     </div>
   )
@@ -62,9 +62,9 @@ function Overview({ token }) {
                   ['Threshold percentile', o.model.threshold_percentile ?? 'n/a'],
                   ['KNN k', o.model.knn_k ?? 'n/a'],
                   ['Dataset fingerprint', o.model.dataset_fingerprint],
-                ].map(([k, v]) => <div key={k} className="flex justify-between gap-3 border-b border-slate-100 py-1.5"><dt className="text-slate-600">{k}</dt><dd className="font-semibold">{v}</dd></div>)}
+                ].map(([k, v]) => <div key={k} className="flex justify-between gap-3 border-b border-line py-1.5"><dt className="text-muted">{k}</dt><dd className="font-semibold">{v}</dd></div>)}
               </dl>
-              {o.model.validation && <p className="mt-3 text-sm text-slate-700">Validation scheme: {String(o.model.validation)}</p>}
+              {o.model.validation && <p className="mt-3 text-sm text-fg">Validation scheme: {String(o.model.validation)}</p>}
             </Card>
           )}
           {o.history.length > 0 && (
@@ -74,7 +74,7 @@ function Overview({ token }) {
           )}
           <Card title="Dataset and methodology">
             <dl className="flex flex-col gap-3 text-sm">
-              {Object.entries(o.methodology).map(([k, v]) => <div key={k}><dt className="font-semibold capitalize">{k}</dt><dd className="text-slate-700">{v}</dd></div>)}
+              {Object.entries(o.methodology).map(([k, v]) => <div key={k}><dt className="font-semibold capitalize">{k}</dt><dd className="text-fg">{v}</dd></div>)}
             </dl>
           </Card>
         </div>
@@ -91,7 +91,7 @@ function Pca({ token }) {
     <Section state={state} label="PCA analysis">
       {(a) => !a.available ? <Unavailable reason={a.reason} /> : (
         <Card title="PCA explained and cumulative variance" action={<button type="button" className="text-xs font-semibold text-brand-700" onClick={() => setTable((t) => !t)}>{table ? 'View chart' : 'View as table'}</button>}>
-          <p className="mb-3 text-sm text-slate-700">{a.pca.components} components keep {a.pca.total_explained === null ? 'n/a' : pct(a.pca.total_explained)} of the variance in the training samples (model {a.model_version}).</p>
+          <p className="mb-3 text-sm text-fg">{a.pca.components} components keep {a.pca.total_explained === null ? 'n/a' : pct(a.pca.total_explained)} of the variance in the training samples (model {a.model_version}).</p>
           {table ? (
             <div className="max-h-80 overflow-y-auto"><Table label="PCA variance" head={['Component', 'Explained', 'Cumulative']} rows={a.pca.explained_variance_ratio.map((v, i) => [i + 1, pct(v), pct(a.pca.cumulative_variance[i])])} /></div>
           ) : (
@@ -109,11 +109,11 @@ function Matrix({ labels, matrix }) {
   return (
     <div className="overflow-x-auto">
       <table aria-label="Confusion matrix" className="border-separate border-spacing-0.5 text-center text-xs">
-        <thead><tr><th scope="col" className="p-1 text-slate-600">Actual \ Predicted</th>{labels.map((l) => <th key={l} scope="col" className="p-1 font-semibold text-slate-600">{l}</th>)}</tr></thead>
+        <thead><tr><th scope="col" className="p-1 text-muted">Actual \ Predicted</th>{labels.map((l) => <th key={l} scope="col" className="p-1 font-semibold text-muted">{l}</th>)}</tr></thead>
         <tbody>
           {matrix.map((row, i) => (
             <tr key={labels[i]}>
-              <th scope="row" className="p-1 text-right font-semibold text-slate-600">{labels[i]}</th>
+              <th scope="row" className="p-1 text-right font-semibold text-muted">{labels[i]}</th>
               {row.map((v, j) => (
                 <td key={j} className="h-8 min-w-8 rounded" style={{ background: `rgba(10,111,104,${0.08 + 0.85 * (v / max)})`, color: v / max > 0.5 ? '#fff' : '#0b1b33' }}>{v}</td>
               ))}
@@ -138,7 +138,7 @@ function Classifiers({ token }) {
           <div className="flex flex-col gap-5">
             {a.class_separation && (
               <Card title="LDA class separation">
-                <p className="mb-3 text-sm text-slate-700">How far apart the customers&apos; samples sit relative to their own spread, before PCA, after PCA and after LDA. Higher between/within means better separated.</p>
+                <p className="mb-3 text-sm text-fg">How far apart the customers&apos; samples sit relative to their own spread, before PCA, after PCA and after LDA. Higher between/within means better separated.</p>
                 <Table
                   label="Class separation"
                   head={['Space', 'Dimensions', 'Within-class', 'Between-class', 'Between / within', 'Fisher criterion']}
@@ -151,11 +151,11 @@ function Classifiers({ token }) {
               <div className="mt-4"><Suspense fallback={<ChartFallback />}><MetricBars rows={rows} metric="macro_f1" label="Macro F1" /></Suspense></div>
             </Card>
             <Card title="Confusion matrix" action={
-              <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">Classifier
-                <select value={chosen.name} onChange={(e) => setPick(e.target.value)} className="min-h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm">{rows.map((r) => <option key={r.name} value={r.name}>{r.name}</option>)}</select>
+              <label className="flex items-center gap-2 text-xs font-semibold text-fg">Classifier
+                <select value={chosen.name} onChange={(e) => setPick(e.target.value)} className="min-h-9 rounded-lg border border-field bg-surface px-2 text-sm">{rows.map((r) => <option key={r.name} value={r.name}>{r.name}</option>)}</select>
               </label>}>
-              <p className="mb-3 text-xs text-slate-600">Out-of-fold predictions. Classes are anonymous (C1, C2, …); no customer is identified.</p>
-              {chosen.confusion_matrix ? <Matrix labels={chosen.classes} matrix={chosen.confusion_matrix} /> : <p className="text-sm text-slate-600">No confusion matrix was stored for this classifier.</p>}
+              <p className="mb-3 text-xs text-muted">Out-of-fold predictions. Classes are anonymous (C1, C2, …); no customer is identified.</p>
+              {chosen.confusion_matrix ? <Matrix labels={chosen.classes} matrix={chosen.confusion_matrix} /> : <p className="text-sm text-muted">No confusion matrix was stored for this classifier.</p>}
             </Card>
           </div>
         )
@@ -173,7 +173,7 @@ function ErrorRates({ token }) {
         <div className="flex flex-col gap-5">
           <Alert tone="warning">{b.scope} The live deployment has too few users to measure false accept or false reject rates, so none are shown for it.</Alert>
           <Card title="Genuine rejection and impostor acceptance">
-            <p className="mb-3 text-sm text-slate-700">{b.open_set.setup}. The deployed setting is the {b.open_set.deployed_percentile}th percentile. Lower thresholds reject more genuine users but accept fewer impostors.</p>
+            <p className="mb-3 text-sm text-fg">{b.open_set.setup}. The deployed setting is the {b.open_set.deployed_percentile}th percentile. Lower thresholds reject more genuine users but accept fewer impostors.</p>
             <Suspense fallback={<ChartFallback />}><ErrorRateChart rows={b.open_set.by_threshold_percentile} /></Suspense>
             <div className="mt-4">
               <Table
@@ -184,12 +184,12 @@ function ErrorRates({ token }) {
             </div>
           </Card>
           <Card title="Closed-set results">
-            <p className="mb-3 text-sm text-slate-700">{b.dataset}. {b.closed_set.protocol}.</p>
+            <p className="mb-3 text-sm text-fg">{b.dataset}. {b.closed_set.protocol}.</p>
             <Table label="Closed-set variants" head={['Pipeline', 'Accuracy', 'Macro precision', 'Macro recall', 'Macro F1']} rows={Object.entries(b.closed_set.variants).map(([k, v]) => [k, pct(v.accuracy), pct(v.macro_precision), pct(v.macro_recall), pct(v.macro_f1)])} />
           </Card>
           <Card title="Liveness">
-            <p className="text-sm text-slate-700">{b.liveness.method}</p>
-            <p className="mt-2 text-sm text-amber-900">{b.liveness.note}</p>
+            <p className="text-sm text-fg">{b.liveness.method}</p>
+            <p className="mt-2 text-sm text-warning-ink">{b.liveness.note}</p>
           </Card>
         </div>
       )}
@@ -204,7 +204,7 @@ function Outcomes({ token }) {
   return (
     <div className="flex flex-col gap-4">
       <label className="flex items-center gap-2 self-start text-sm font-semibold">Period
-        <select value={days} onChange={(e) => setDays(Number(e.target.value))} className="min-h-10 rounded-lg border border-slate-300 bg-white px-2">
+        <select value={days} onChange={(e) => setDays(Number(e.target.value))} className="min-h-10 rounded-lg border border-field bg-surface px-2">
           {[7, 30, 90].map((d) => <option key={d} value={d}>Last {d} days</option>)}
         </select>
       </label>
@@ -218,7 +218,7 @@ function Outcomes({ token }) {
             </div>
             <Alert tone="info">{o.note}</Alert>
             <Card title="Why checks did not verify">
-              {o.failure_categories.length === 0 ? <p className="text-sm text-slate-600">No failed checks in this period.</p> : (
+              {o.failure_categories.length === 0 ? <p className="text-sm text-muted">No failed checks in this period.</p> : (
                 <Table label="Failure categories" head={['Category', 'Count']} rows={o.failure_categories.map((c) => [c.category, c.count])} />
               )}
             </Card>
@@ -238,7 +238,7 @@ export default function AdminLab() {
       <PageHeader title="ML Lab" subtitle="Administrator view of the face recognition pipeline. Customers and merchants never see this." />
       <div role="tablist" aria-label="ML Lab sections" className="-mx-4 flex gap-1 overflow-x-auto px-4 sm:mx-0 sm:px-0">
         {TABS.map(([id, label]) => (
-          <button key={id} id={`tab-${id}`} role="tab" type="button" aria-selected={tab === id} aria-controls="lab-panel" onClick={() => setTab(id)} className={`min-h-10 shrink-0 rounded-lg px-4 text-sm font-semibold transition ${tab === id ? 'bg-brand-700 text-white' : 'bg-white text-slate-800 ring-1 ring-inset ring-slate-300 hover:bg-slate-50'}`}>{label}</button>
+          <button key={id} id={`tab-${id}`} role="tab" type="button" aria-selected={tab === id} aria-controls="lab-panel" onClick={() => setTab(id)} className={`min-h-10 shrink-0 rounded-lg px-4 text-sm font-semibold transition ${tab === id ? 'bg-brand-700 text-on-accent' : 'bg-surface text-fg ring-1 ring-inset ring-line-strong hover:bg-sunken'}`}>{label}</button>
         ))}
       </div>
       <div id="lab-panel" role="tabpanel" aria-labelledby={`tab-${tab}`}>

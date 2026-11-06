@@ -65,7 +65,7 @@ const clock = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 
 function Secured() {
   return (
-    <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-slate-600">
+    <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-muted">
       <Icon name="lock" className="h-3.5 w-3.5" />
       Face + basic liveness check, then your confirmation
     </p>
@@ -77,29 +77,29 @@ const PIN_LENGTH = 6
 function FundingPicker({ sources, value, onChange, disabled }) {
   if (sources.length === 0) {
     return (
-      <div className="rounded-xl bg-amber-50 p-4 text-sm ring-1 ring-amber-200">
-        <p className="font-semibold text-amber-900">Connect a demo bank account to pay</p>
-        <p className="mt-1 text-amber-900">A payment needs a funding source. This takes a few seconds and uses a simulated connection.</p>
-        <Link className="mt-2 inline-block font-semibold text-amber-900 underline" to={BANKS_PATH}>Connect a demo bank</Link>
+      <div className="rounded-xl bg-warning-soft p-4 text-sm ring-1 ring-warning-line">
+        <p className="font-semibold text-warning-ink">Connect a demo bank account to pay</p>
+        <p className="mt-1 text-warning-ink">A payment needs a funding source. This takes a few seconds and uses a simulated connection.</p>
+        <Link className="mt-2 inline-block font-semibold text-warning-ink underline" to={BANKS_PATH}>Connect a demo bank</Link>
       </div>
     )
   }
   return (
     <fieldset disabled={disabled} className="flex flex-col gap-2">
-      <legend className="text-sm font-semibold text-slate-800">Pay from</legend>
+      <legend className="text-sm font-semibold text-fg">Pay from</legend>
       <div className="mt-1 flex flex-col gap-2">
         {sources.map((c) => (
-          <label key={c.connection_id} className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 transition ${value === c.connection_id ? 'border-brand-600 bg-brand-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+          <label key={c.connection_id} className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 transition ${value === c.connection_id ? 'border-brand-600 bg-brand-50' : 'border-line bg-surface hover:border-line-strong'}`}>
             <input type="radio" name="funding-source" value={c.connection_id} checked={value === c.connection_id} onChange={() => onChange(c.connection_id)} className="h-4 w-4 accent-brand-700" />
             <BankMark bank={{ short: c.bank_code.toUpperCase().slice(0, 4), color: '#334155' }} size="h-9 w-9 text-[0.6rem]" />
             <span className="min-w-0 flex-1">
               <span className="block truncate font-semibold leading-tight">{c.bank_name} · {c.account_type_label}</span>
-              <span className="block font-mono text-xs text-slate-600">{c.account_ref}{c.is_default ? ' · Default' : ''}</span>
+              <span className="block font-mono text-xs text-muted">{c.account_ref}{c.is_default ? ' · Default' : ''}</span>
             </span>
           </label>
         ))}
       </div>
-      {sources.length > 1 && <p className="text-xs text-slate-600">You can pick a different demo account before you confirm.</p>}
+      {sources.length > 1 && <p className="text-xs text-muted">You can pick a different demo account before you confirm.</p>}
     </fieldset>
   )
 }
@@ -121,17 +121,17 @@ function Authorized({ session, auth, outcome, error, pinError, busy, onConfirm, 
   }
   return (
     <section aria-label="Confirm payment" className="animate-rise flex flex-col gap-5">
-      <div className="rounded-[1.5rem] border border-slate-200/80 bg-white p-6 text-center shadow-card">
-        <p className="inline-flex items-center gap-1.5 text-sm font-bold text-emerald-800">
+      <div className="rounded-3xl border border-line/80 bg-surface p-6 text-center shadow-card">
+        <p className="inline-flex items-center gap-1.5 text-sm font-bold text-success-ink">
           <Icon name="check" className="h-4 w-4" strokeWidth="2.6" />Face verified
         </p>
-        <h2 className="mt-1 text-sm font-semibold text-slate-600">Confirm payment</h2>
+        <h2 className="mt-1 text-sm font-semibold text-muted">Confirm payment</h2>
         <Amount value={session.amount} currency={session.currency} className="mt-2 text-5xl" data-testid="confirm-amount" />
         <dl className="mt-5 text-left">
           <Row label="To">
             {payeeName(session)}
-            {session.recipient_facepay_id && <span className="block font-mono text-xs font-normal text-slate-600">{session.recipient_facepay_id}</span>}
-            {!session.recipient_facepay_id && session.recipient_masked_id && <span className="block font-mono text-xs font-normal text-slate-600">{session.recipient_masked_id}</span>}
+            {session.recipient_facepay_id && <span className="block font-mono text-xs font-normal text-muted">{session.recipient_facepay_id}</span>}
+            {!session.recipient_facepay_id && session.recipient_masked_id && <span className="block font-mono text-xs font-normal text-muted">{session.recipient_masked_id}</span>}
           </Row>
           {session.purpose_label && <Row label="For">{session.purpose_label}</Row>}
           {session.kind === 'TRANSFER' ? (session.note && <Row label="Reference">{session.note}</Row>) : (
@@ -143,7 +143,7 @@ function Authorized({ session, auth, outcome, error, pinError, busy, onConfirm, 
           <Row label="Amount">{formatMoney(session.amount, session.currency)}</Row>
           <Row label="Fee (simulated)">{formatMoney(session.fee ?? 0, session.currency)}</Row>
           <Row label="Total"><span data-testid="confirm-total">{formatMoney(total, session.currency)}</span></Row>
-          <Row label="Authentication"><span className="text-emerald-800">Face + basic liveness check passed</span></Row>
+          <Row label="Authentication"><span className="text-success-ink">Face + basic liveness check passed</span></Row>
         </dl>
         <SimulatedTag className="mt-3" />
       </div>
@@ -161,20 +161,20 @@ function Authorized({ session, auth, outcome, error, pinError, busy, onConfirm, 
           <FundingPicker sources={sources} value={sourceId} onChange={setSourceId} disabled={busy} />
           {sources.length > 0 && <DemoNotice />}
           {needsPin && (
-            <div className="rounded-xl bg-amber-50 p-4 text-sm ring-1 ring-amber-200">
-              <p className="font-semibold text-amber-900">This payment needs your payment PIN</p>
-              {auth.stepUpReasons.length > 0 && <p className="mt-1 text-amber-900">Because of {auth.stepUpReasons.join(', ')}.</p>}
-              <p className="mt-1 text-xs text-amber-900">Risk-based authorization prototype</p>
+            <div className="rounded-xl bg-warning-soft p-4 text-sm ring-1 ring-warning-line">
+              <p className="font-semibold text-warning-ink">This payment needs your payment PIN</p>
+              {auth.stepUpReasons.length > 0 && <p className="mt-1 text-warning-ink">Because of {auth.stepUpReasons.join(', ')}.</p>}
+              <p className="mt-1 text-xs text-warning-ink">Risk-based authorization prototype</p>
               {auth.pinSet ? (
                 <div className="mt-3">
-                  <label htmlFor="payment-pin" className="block text-sm font-semibold text-slate-900">Payment PIN</label>
+                  <label htmlFor="payment-pin" className="block text-sm font-semibold text-fg">Payment PIN</label>
                   <input
                     id="payment-pin" name="payment-pin" type="password" inputMode="numeric" autoComplete="off" maxLength={PIN_LENGTH}
                     value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH))}
                     aria-describedby={pinError ? 'pin-error' : undefined} aria-invalid={pinError ? true : undefined}
-                    className="mt-1 w-40 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-center text-xl tracking-[0.4em]"
+                    className="mt-1 w-40 rounded-lg border border-line-strong bg-surface px-3 py-2.5 text-center text-xl tracking-[0.4em]"
                   />
-                  {pinError && <p id="pin-error" role="alert" className="mt-2 text-sm font-semibold text-rose-800">{pinError}</p>}
+                  {pinError && <p id="pin-error" role="alert" className="mt-2 text-sm font-semibold text-danger-ink">{pinError}</p>}
                 </div>
               ) : (
                 <p className="mt-3">
@@ -185,10 +185,10 @@ function Authorized({ session, auth, outcome, error, pinError, busy, onConfirm, 
           )}
           <Button size="lg" type="submit" disabled={!ready} loading={busy}>{confirmLabel}</Button>
           <Button variant="secondary" onClick={onCancel} disabled={busy}>Cancel</Button>
-          <p className="text-center text-xs text-slate-600">Nothing is paid until you confirm. This face check is for this payment only, works once and stays valid for {clock(left)}.</p>
+          <p className="text-center text-xs text-muted">Nothing is paid until you confirm. This face check is for this payment only, works once and stays valid for {clock(left)}.</p>
         </form>
       )}
-      <details className="rounded-xl bg-white/70 px-4 py-3 text-sm ring-1 ring-slate-200">
+      <details className="rounded-xl bg-surface/70 px-4 py-3 text-sm ring-1 ring-line">
         <summary className="cursor-pointer font-semibold">How FacePay verified you</summary>
         <div className="mt-3 flex flex-col gap-3"><AuthDetails result={outcome} /></div>
       </details>
@@ -199,8 +199,8 @@ function Authorized({ session, auth, outcome, error, pinError, busy, onConfirm, 
 /** Shown only while the confirm request is really in flight; it ends when the server answers. */
 function Processing({ outcome }) {
   return (
-    <section aria-label="Processing payment" className="animate-rise flex flex-col gap-5 rounded-[1.5rem] border border-slate-200/80 bg-white p-8 shadow-card" role="status">
-      <h2 className="text-center text-xl font-extrabold">Processing payment</h2>
+    <section aria-label="Processing payment" className="animate-rise flex flex-col gap-5 rounded-3xl border border-line/80 bg-surface p-8 shadow-card" role="status">
+      <h2 className="text-center text-xl font-bold">Processing payment</h2>
       <PaymentStages outcome={outcome} authorized confirming />
     </section>
   )
@@ -209,18 +209,18 @@ function Processing({ outcome }) {
 function Success({ receipt, session, outcome }) {
   return (
     <section aria-label="Payment successful" className="flex flex-col gap-5">
-      <div className="rounded-[1.5rem] border border-slate-200/80 bg-white p-8 text-center shadow-card">
-        <span aria-hidden="true" className="mx-auto flex h-20 w-20 motion-safe:animate-pop items-center justify-center rounded-full bg-emerald-600 text-white">
+      <div className="rounded-3xl border border-line/80 bg-surface p-8 text-center shadow-card">
+        <span aria-hidden="true" className="mx-auto flex h-20 w-20 motion-safe:animate-pop items-center justify-center rounded-full bg-success text-on-accent">
           <Icon name="check" className="h-10 w-10" strokeWidth="2.6" />
         </span>
-        <h1 className="mt-5 text-2xl font-extrabold">Payment successful</h1>
+        <h1 className="mt-5 text-2xl font-bold">Payment successful</h1>
         <Amount value={receipt.amount} currency={receipt.currency} className="mt-2 text-5xl" data-testid="paid-amount" />
         <p className="mt-2 text-lg font-bold">{receipt.recipient_name ?? receipt.merchant_name ?? payeeName(session)}</p>
-        <p className="mt-3 text-xs text-slate-600">Transaction</p>
+        <p className="mt-3 text-xs text-muted">Transaction</p>
         <p className="font-mono text-sm font-semibold">{receipt.transaction_id}</p>
         {receipt.funding_source && <p className="mt-3 text-sm font-semibold">Paid from {receipt.funding_source.bank_name} · <span className="font-mono">{receipt.funding_source.account_ref}</span></p>}
-        <p className="mt-2 text-sm font-semibold text-emerald-800">Authenticated: {receipt.authentication ?? 'Face + basic liveness check'}</p>
-        <p className="mt-1 text-xs text-slate-600">{formatDateTime(receipt.timestamp)}</p>
+        <p className="mt-2 text-sm font-semibold text-success-ink">Authenticated: {receipt.authentication ?? 'Face + basic liveness check'}</p>
+        <p className="mt-1 text-xs text-muted">{formatDateTime(receipt.timestamp)}</p>
         <SimulatedTag className="mt-4" />
       </div>
       <PaymentStages outcome={outcome} authorized paid />
@@ -235,11 +235,11 @@ function Success({ receipt, session, outcome }) {
 function Summary({ session, payable, attempts, onPay, onCancel, cancelling }) {
   const transfer = session.kind === 'TRANSFER'
   return (
-    <section aria-label="Payment summary" className="rounded-[1.5rem] border border-slate-200/80 bg-white p-6 shadow-card">
+    <section aria-label="Payment summary" className="rounded-3xl border border-line/80 bg-surface p-6 shadow-card">
       <MerchantHeader name={payeeName(session)} caption={transfer ? 'Sending to' : 'Pay to'} />
-      {session.recipient_masked_id && <p className="mt-1 pl-[3.75rem] font-mono text-xs text-slate-600">{session.recipient_masked_id}</p>}
+      {session.recipient_masked_id && <p className="mt-1 pl-[3.75rem] font-mono text-xs text-muted">{session.recipient_masked_id}</p>}
       <div className="mt-6 text-center">
-        <p className="text-sm text-slate-600">Amount to pay</p>
+        <p className="text-sm text-muted">Amount to pay</p>
         <Amount value={session.amount} currency={session.currency} className="mt-1 text-6xl" data-testid="checkout-amount" />
         <SimulatedTag className="mt-3" />
       </div>
@@ -260,9 +260,9 @@ function Summary({ session, payable, attempts, onPay, onCancel, cancelling }) {
         <Row label="Status"><StatusBadge status={session.status} /></Row>
       </dl>
       {payable && session.funding_sources?.length === 0 && (
-        <div className="mt-4 rounded-xl bg-amber-50 p-3.5 text-sm ring-1 ring-amber-200">
-          <p className="font-semibold text-amber-900">You have no demo bank account connected</p>
-          <p className="mt-1 text-amber-900">You can verify your face now, but you need a funding source to confirm. <Link className="font-semibold underline" to={BANKS_PATH}>Connect a demo bank</Link></p>
+        <div className="mt-4 rounded-xl bg-warning-soft p-3.5 text-sm ring-1 ring-warning-line">
+          <p className="font-semibold text-warning-ink">You have no demo bank account connected</p>
+          <p className="mt-1 text-warning-ink">You can verify your face now, but you need a funding source to confirm. <Link className="font-semibold underline" to={BANKS_PATH}>Connect a demo bank</Link></p>
         </div>
       )}
       {payable && (
@@ -270,7 +270,7 @@ function Summary({ session, payable, attempts, onPay, onCancel, cancelling }) {
           <p className="text-center text-sm font-semibold">Pay with your face</p>
           <Button size="lg" onClick={onPay}><Icon name="face" className="h-5 w-5" />Pay with Face</Button>
           <Secured />
-          <p className="text-center text-xs text-slate-600">{attempts}</p>
+          <p className="text-center text-xs text-muted">{attempts}</p>
           {transfer && <Button variant="ghost" onClick={onCancel} loading={cancelling}>Cancel payment</Button>}
         </div>
       )}
@@ -399,7 +399,7 @@ export default function Checkout() {
   if (loadError) {
     return (
       <div className="mx-auto flex max-w-md flex-col gap-4">
-        <h1 className="text-2xl font-extrabold tracking-tight">Checkout</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Checkout</h1>
         <ErrorState message={loadError.message} onRetry={loadError.notFound ? undefined : load} />
         <ButtonLink to={DASHBOARD_PATH[role]} variant="secondary">Back to home</ButtonLink>
       </div>
@@ -408,7 +408,7 @@ export default function Checkout() {
   if (!session) {
     return (
       <div role="status" aria-label="Loading checkout" className="mx-auto flex max-w-md flex-col gap-4">
-        <Skeleton className="h-72 w-full !rounded-[1.5rem]" />
+        <Skeleton className="h-72 w-full !rounded-3xl" />
         <Skeleton className="h-14 w-full !rounded-xl" />
       </div>
     )
@@ -422,7 +422,7 @@ export default function Checkout() {
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-5">
-      {heading && <h1 className="text-2xl font-extrabold tracking-tight">{heading}</h1>}
+      {heading && <h1 className="text-2xl font-bold tracking-tight">{heading}</h1>}
 
       {notice && <Alert tone={notice.startsWith('Payment not confirmed') ? 'info' : 'error'}>{notice}</Alert>}
 

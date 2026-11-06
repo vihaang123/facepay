@@ -23,12 +23,12 @@ export default function TransactionTable({ rows, role, label = 'Transactions' })
       </thead>
       <tbody>
         {rows.map((t) => (
-          <tr key={t.transaction_id} className="border-b border-slate-100 last:border-0">
+          <tr key={t.transaction_id} className="border-b border-line last:border-0">
             <td className="py-2.5 pr-3">
               <Link className="font-mono text-xs font-semibold text-brand-700 underline-offset-2 hover:underline" to={RECEIPT_PATH[role](t.transaction_id)}>
                 {t.transaction_id}
               </Link>
-              <div className="whitespace-nowrap text-xs text-slate-600">{formatDateTime(t.timestamp)}</div>
+              <div className="whitespace-nowrap text-xs text-muted">{formatDateTime(t.timestamp)}</div>
             </td>
             <td className="py-2.5 pr-3">{isMerchant ? t.payer_name : t.merchant_name}</td>
             <td className="hidden py-2.5 pr-3 md:table-cell">{t.order_reference ?? '—'}</td>

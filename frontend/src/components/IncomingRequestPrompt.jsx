@@ -124,32 +124,32 @@ export default function IncomingRequestPrompt() {
   }
 
   return (
-    <div className="no-print fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-4 sm:items-center" data-testid="incoming-request">
+    <div className="no-print fixed inset-0 z-50 flex items-end justify-center bg-overlay p-4 sm:items-center" data-testid="incoming-request">
       <div
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="incoming-title"
         aria-describedby="incoming-body"
-        className="w-full max-w-sm rounded-[1.5rem] bg-white p-6 shadow-2xl motion-safe:animate-pop"
+        className="w-full max-w-sm rounded-3xl bg-surface p-6 shadow-2xl motion-safe:animate-pop"
       >
         <div className="flex items-center gap-3">
           <Avatar name={item.from_name} />
           <div className="min-w-0">
-            <h2 id="incoming-title" className="truncate text-lg font-extrabold leading-tight">{item.from_name} is asking for money</h2>
-            <p className="font-mono text-xs text-slate-600">{item.from_detail}</p>
+            <h2 id="incoming-title" className="truncate text-lg font-bold leading-tight">{item.from_name} is asking for money</h2>
+            <p className="font-mono text-xs text-muted">{item.from_detail}</p>
           </div>
         </div>
 
-        <p className="amount mt-4 text-center text-4xl font-extrabold">{formatMoney(item.amount, item.currency)}</p>
-        <dl id="incoming-body" className="mt-4 divide-y divide-slate-100 rounded-xl bg-slate-50 px-3 text-sm">
+        <p className="amount mt-4 text-center text-4xl font-bold">{formatMoney(item.amount, item.currency)}</p>
+        <dl id="incoming-body" className="mt-4 divide-y divide-line rounded-xl bg-sunken px-3 text-sm">
           {item.purpose_label && (
-            <div className="flex justify-between gap-3 py-2"><dt className="text-slate-600">For</dt><dd className="font-semibold">{item.purpose_label}</dd></div>
+            <div className="flex justify-between gap-3 py-2"><dt className="text-muted">For</dt><dd className="font-semibold">{item.purpose_label}</dd></div>
           )}
-          <div className="flex justify-between gap-3 py-2"><dt className="text-slate-600">Reference</dt><dd className="text-right font-semibold">{item.reference ?? '—'}</dd></div>
-          <div className="flex justify-between gap-3 py-2"><dt className="text-slate-600">Valid until</dt><dd className="font-semibold">{formatDateTime(item.expires_at)}</dd></div>
+          <div className="flex justify-between gap-3 py-2"><dt className="text-muted">Reference</dt><dd className="text-right font-semibold">{item.reference ?? '—'}</dd></div>
+          <div className="flex justify-between gap-3 py-2"><dt className="text-muted">Valid until</dt><dd className="font-semibold">{formatDateTime(item.expires_at)}</dd></div>
         </dl>
 
-        <p className="mt-3 flex items-start gap-2 text-xs text-slate-700">
+        <p className="mt-3 flex items-start gap-2 text-xs text-fg">
           <Icon name="shield" className="mt-0.5 h-4 w-4 shrink-0" />
           Only pay someone you know and expect. FacePay never asks for OTPs, PINs or passwords. You will verify your face before anything is paid.
         </p>

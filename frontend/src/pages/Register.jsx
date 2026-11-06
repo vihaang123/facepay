@@ -44,6 +44,8 @@ export default function Register({ role }) {
   const [errors, setErrors] = useState({})
   const [formError, setFormError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
+  const [agreed, setAgreed] = useState(false)
+  const [consentError, setConsentError] = useState(null)
 
   const onChange = (e) => setValues((v) => ({ ...v, [e.target.name]: e.target.value }))
 
@@ -61,7 +63,8 @@ export default function Register({ role }) {
 
     const found = runValidators(values, validators)
     setErrors(found)
-    if (Object.keys(found).length) return
+    if (!agreed) setConsentError('Agree to continue.')
+    if (Object.keys(found).length || !agreed) return
 
     setSubmitting(true)
     try {
@@ -120,6 +123,30 @@ export default function Register({ role }) {
           onChange={onChange}
           error={errors.confirm}
         />
+        <div className="flex flex-col gap-1.5">
+          <label className="flex items-start gap-3 text-sm text-muted">
+            <input
+              type="checkbox"
+              id="agree"
+              checked={agreed}
+              aria-invalid={consentError ? 'true' : undefined}
+              aria-describedby={consentError ? 'agree-error' : undefined}
+              onChange={(e) => {
+                setAgreed(e.target.checked)
+                if (e.target.checked) setConsentError(null)
+              }}
+              className="mt-0.5 h-5 w-5 shrink-0 rounded border-field accent-brand-700"
+            />
+            <span>
+              I understand FacePay is a simulated prototype: no real money moves. My face data is used to verify my payments, and to let shops find me only if I turn that on.
+            </span>
+          </label>
+          {consentError && (
+            <p id="agree-error" className="text-xs text-danger-ink">
+              {consentError}
+            </p>
+          )}
+        </div>
         <Button type="submit" loading={submitting} size="lg">
           Create account
         </Button>

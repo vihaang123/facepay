@@ -7,7 +7,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useLoad } from '../hooks/useLoad'
 import { getMerchantSecuritySummary, getMerchantSummary, getMerchantTransactions, getReconciliation, listPaymentSessions } from '../services/payments'
 import { formatFeedTime, formatMoney, greeting, isPayable } from '../utils/format'
-import { MERCHANT_SESSION_PATH, NEW_PAYMENT_PATH, RECEIPT_PATH, REQUEST_BY_FACE_PATH, TRANSACTIONS_PATH } from '../utils/roles'
+import { MERCHANT_REQUESTS_PATH, MERCHANT_SESSION_PATH, NEW_PAYMENT_PATH, RECEIPT_PATH, RECONCILIATION_PATH, REQUEST_BY_FACE_PATH, TRANSACTIONS_PATH } from '../utils/roles'
 
 // The chart library is the heaviest dependency; it loads only when a merchant opens their dashboard.
 const RevenueChart = lazy(() => import('../components/RevenueChart'))
@@ -17,7 +17,7 @@ const linkClass = 'text-sm font-semibold text-brand-700 underline-offset-2 hover
 /** Skeleton while loading, an error with retry on failure, otherwise the content: a section never renders blank. */
 function Loaded({ state, label, shape = 'feed', children }) {
   if (state.loading) {
-    if (shape === 'tiles') return <div role="status" aria-label={`Loading ${label}`} className="grid grid-cols-2 gap-3 lg:grid-cols-4">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-24 w-full !rounded-[1.25rem]" />)}</div>
+    if (shape === 'tiles') return <div role="status" aria-label={`Loading ${label}`} className="grid grid-cols-2 gap-3 lg:grid-cols-4">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-24 w-full !rounded-2xl" />)}</div>
     if (shape === 'line') return <div role="status" aria-label={`Loading ${label}`}><Skeleton className="h-16 w-full" /></div>
     return <FeedSkeleton label={`Loading ${label}`} />
   }
@@ -45,7 +45,7 @@ function TodayOverview() {
                 <StatTile icon="pending" label="Awaiting payment" value={s.open_sessions} hint="Open payment requests" />
                 <StatTile icon="x" label="Failed payments" value={s.failed_payments} hint="All time" />
               </div>
-              <Suspense fallback={<Skeleton className="h-56 w-full !rounded-[1.25rem]" />}>
+              <Suspense fallback={<Skeleton className="h-56 w-full !rounded-2xl" />}>
                 <RevenueChart days={s.revenue_by_day} />
               </Suspense>
             </>
@@ -72,9 +72,9 @@ function SecuritySummary() {
                 ['Closed after failed checks', x.closed_after_failed_face_checks],
                 ['Paid with PIN step-up', x.paid_with_pin_step_up],
                 ['Cancelled or expired', x.cancelled + x.expired],
-              ].map(([k, v]) => <div key={k} className="flex justify-between gap-2 border-b border-slate-100 py-1.5"><dt className="text-slate-600">{k}</dt><dd className="font-semibold">{v}</dd></div>)}
+              ].map(([k, v]) => <div key={k} className="flex justify-between gap-2 border-b border-line py-1.5"><dt className="text-muted">{k}</dt><dd className="font-semibold">{v}</dd></div>)}
             </dl>
-            <p className="mt-3 text-xs text-slate-600">{x.note}</p>
+            <p className="mt-3 text-xs text-muted">{x.note}</p>
           </>
         )}
       </Loaded>
@@ -83,11 +83,11 @@ function SecuritySummary() {
 }
 
 /** Requests against the backend transactions that settled them. A request counts as paid only if a successful transaction exists. */
-function Reconciliation() {
+export function Reconciliation({ rowLimit = 6 }) {
   const { token } = useAuth()
   const state = useLoad(() => getReconciliation(token), [token])
   return (
-    <Card title="Order reconciliation" aria-label="Order reconciliation">
+    <Card title="Order reconciliation" aria-label="Order reconciliation" action={rowLimit < 50 ? <Link className={linkClass} to={RECONCILIATION_PATH}>Full view</Link> : null}>
       <Loaded state={state} label="reconciliation" shape="line">
         {(r) => (
           <>
@@ -97,11 +97,11 @@ function Reconciliation() {
                 ['Paid (confirmed)', formatMoney(r.paid_total, r.currency)],
                 ['Awaiting payment', formatMoney(r.awaiting_total, r.currency)],
                 ['Mismatches', r.mismatches],
-              ].map(([k, v]) => <div key={k} className="flex justify-between gap-2 border-b border-slate-100 py-1.5 sm:block sm:border-0"><dt className="text-slate-600">{k}</dt><dd className="font-semibold">{v}</dd></div>)}
+              ].map(([k, v]) => <div key={k} className="flex justify-between gap-2 border-b border-line py-1.5 sm:block sm:border-0"><dt className="text-muted">{k}</dt><dd className="font-semibold">{v}</dd></div>)}
             </dl>
             {r.rows.length > 0 && (
-              <ul aria-label="Order reconciliation rows" className="mt-3 divide-y divide-slate-100 text-sm">
-                {r.rows.slice(0, 6).map((row) => (
+              <ul aria-label="Order reconciliation rows" className="mt-3 divide-y divide-line text-sm">
+                {r.rows.slice(0, rowLimit).map((row) => (
                   <li key={row.session_id} className="flex items-center justify-between gap-3 py-2">
                     <Link to={MERCHANT_SESSION_PATH(row.session_id)} className="min-w-0 flex-1 truncate font-semibold hover:underline">{row.order_reference ?? row.session_id}</Link>
                     <span className="amount shrink-0 font-bold">{formatMoney(row.amount, r.currency)}</span>
@@ -110,7 +110,7 @@ function Reconciliation() {
                 ))}
               </ul>
             )}
-            <p className="mt-3 text-xs text-slate-600">A request counts as paid only when a successful transaction exists for it. This is separate from the admin face-recognition analysis.</p>
+            <p className="mt-3 text-xs text-muted">A request counts as paid only when a successful transaction exists for it. This is separate from the admin face-recognition analysis.</p>
           </>
         )}
       </Loaded>
@@ -143,7 +143,7 @@ function PaymentSessions() {
   const state = useLoad(() => listPaymentSessions(token, 8), [token])
   const active = state.data?.filter((p) => isPayable(p.status)).length ?? 0
   return (
-    <Card title="Payment requests" action={state.data && active > 0 ? <span className="text-sm text-slate-700">{active} waiting for a customer</span> : null}>
+    <Card title="Payment requests" action={<Link className={linkClass} to={MERCHANT_REQUESTS_PATH}>{active > 0 ? `${active} waiting · ` : ''}See all</Link>}>
       <Loaded state={state} label="payment sessions">
         {(rows) =>
           rows.length === 0 ? (
@@ -151,20 +151,20 @@ function PaymentSessions() {
               A payment request is a checkout link for one customer and one amount.
             </EmptyState>
           ) : (
-            <ul aria-label="Payment requests" className="divide-y divide-slate-100">
+            <ul aria-label="Payment requests" className="divide-y divide-line">
               {rows.map((p) => (
                 <li key={p.session_id}>
-                  <Link to={MERCHANT_SESSION_PATH(p.session_id)} className="flex items-center gap-3 rounded-xl px-1 py-3 transition hover:bg-slate-50">
+                  <Link to={MERCHANT_SESSION_PATH(p.session_id)} className="flex items-center gap-3 rounded-xl px-1 py-3 transition hover:bg-sunken">
                     <Avatar name={p.order_reference ?? 'Order'} />
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-bold">{p.order_reference}</p>
-                      <p className="truncate text-xs text-slate-600">{formatFeedTime(p.created_at)}</p>
+                      <p className="truncate text-xs text-muted">{formatFeedTime(p.created_at)}</p>
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1">
-                      <span className="amount font-extrabold">{formatMoney(p.amount, p.currency)}</span>
+                      <span className="amount font-bold">{formatMoney(p.amount, p.currency)}</span>
                       <StatusBadge status={p.status} />
                     </div>
-                    <Icon name="chevron" className="h-4 w-4 shrink-0 text-slate-400" />
+                    <Icon name="chevron" className="h-4 w-4 shrink-0 text-subtle" />
                   </Link>
                 </li>
               ))}
@@ -185,18 +185,22 @@ export function MerchantDashboard() {
         subtitle={`${greeting()}, ${String(profile.name).trim().split(/\s+/)[0]}. Payments are simulated.`}
         actions={(
           <div className="flex flex-wrap gap-2">
-            <ButtonLink to={REQUEST_BY_FACE_PATH} size="lg" className="!w-auto px-6"><Icon name="face" className="h-4 w-4" />Request by face</ButtonLink>
-            <ButtonLink to={NEW_PAYMENT_PATH} variant="secondary" size="lg" className="!w-auto px-6"><Icon name="plus" className="h-4 w-4" strokeWidth="2.4" />Create payment</ButtonLink>
+            <ButtonLink to={REQUEST_BY_FACE_PATH} variant="secondary"><Icon name="face" className="h-4 w-4" />Request by face</ButtonLink>
+            <ButtonLink to={NEW_PAYMENT_PATH}><Icon name="plus" className="h-4 w-4" strokeWidth="2.4" />Create payment</ButtonLink>
           </div>
         )}
       />
       <TodayOverview />
-      <div className="grid gap-6 lg:grid-cols-2">
-        <RecentTransactions />
-        <PaymentSessions />
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <div className="flex min-w-0 flex-col gap-6">
+          <RecentTransactions />
+          <Reconciliation />
+        </div>
+        <div className="flex min-w-0 flex-col gap-6">
+          <PaymentSessions />
+          <SecuritySummary />
+        </div>
       </div>
-      <Reconciliation />
-      <SecuritySummary />
     </div>
   )
 }

@@ -11,7 +11,7 @@ const CAMERA_STATE_TEXT = {
   error: 'Camera could not start',
 }
 
-const EDGE = { neutral: 'border-scan-edge', ok: 'border-emerald-400', bad: 'border-rose-400' }
+const EDGE = { neutral: 'border-scan-edge', ok: 'border-success', bad: 'border-danger' }
 
 /**
  * Dark camera stage shared by face setup and payment authentication. The preview is mirrored (like a mirror) and keeps
@@ -24,7 +24,7 @@ export default function CameraView({ camera, busy = false, flippable = false, ov
   const on = status === 'active'
   return (
     <div className="flex flex-col gap-3">
-      <div className="relative mx-auto aspect-[3/4] w-full max-w-sm overflow-hidden on-dark rounded-[1.5rem] bg-scan sm:aspect-[4/3] sm:max-w-md">
+      <div className="relative mx-auto aspect-[3/4] w-full max-w-sm overflow-hidden on-dark rounded-3xl bg-scan sm:aspect-[4/3] sm:max-w-md">
         <video
           ref={videoRef}
           autoPlay
@@ -34,7 +34,7 @@ export default function CameraView({ camera, busy = false, flippable = false, ov
           className={`h-full w-full ${mirrored ? '-scale-x-100' : ''} object-cover ${on ? '' : 'invisible'}`}
         />
         {!on && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center text-slate-300">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center text-white/70">
             <Icon name="camera" className="h-10 w-10" />
             <p className="text-sm font-semibold">{CAMERA_STATE_TEXT[status]}</p>
           </div>
@@ -42,16 +42,16 @@ export default function CameraView({ camera, busy = false, flippable = false, ov
         <div className="absolute inset-[7%]">
           <Brackets color={EDGE[tone]} />
           {on && guide && !scanning && (tone === 'neutral' || guideTone) && (
-            <FaceGuide className={`absolute left-1/2 top-1/2 h-[72%] -translate-x-1/2 -translate-y-1/2 transition-colors ${guideTone === 'ok' ? 'text-emerald-300' : guideTone === 'warn' ? 'text-amber-300' : 'text-white/45'}`} />
+            <FaceGuide className={`absolute left-1/2 top-1/2 h-[72%] -translate-x-1/2 -translate-y-1/2 transition-colors ${guideTone === 'ok' ? 'text-success' : guideTone === 'warn' ? 'text-warning' : 'text-white/50'}`} />
           )}
           {on && flash && (
             <span aria-hidden="true" className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2 motion-safe:animate-pop">
-              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg"><Icon name="check" className="h-9 w-9" strokeWidth="2.8" /></span>
+              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-success text-on-accent shadow-lg"><Icon name="check" className="h-9 w-9" strokeWidth="2.8" /></span>
               <span className="rounded-full bg-scan/80 px-3 py-1 text-sm font-semibold text-white">Captured</span>
             </span>
           )}
           {on && scanning && (
-            <span aria-hidden="true" className="absolute inset-x-3 h-0.5 animate-scan rounded-full bg-scan-edge shadow-[0_0_14px_2px_rgb(94_234_212/0.7)]" />
+            <span aria-hidden="true" className="absolute inset-x-6 h-px animate-scan rounded-full bg-scan-edge/80" />
           )}
         </div>
         {on && overlay && (
@@ -71,7 +71,7 @@ export default function CameraView({ camera, busy = false, flippable = false, ov
           </Button>
         )}
       </div>}
-      <p className="text-center text-xs text-slate-600">
+      <p className="text-center text-xs text-muted">
         {footnote ?? 'The camera is only used while you are on this page. Nothing is recorded or sent until you capture a sample or start a face check.'}
       </p>
     </div>

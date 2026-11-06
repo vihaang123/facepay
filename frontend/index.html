@@ -3,10 +3,31 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="FacePay" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>FacePay – facial authentication for simulated payments</title>
     <meta name="description" content="Facial authentication for simulated digital payments. An academic prototype; no real money moves." />
-    <meta name="theme-color" content="#047857" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      // Runs before first paint so the page never flashes the wrong theme. Same rules as src/utils/theme.js.
+      (function () {
+        var dark = false;
+        try {
+          var pref = localStorage.getItem('facepay.theme');
+          dark = pref === 'dark' || (pref !== 'light' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+        } catch (e) {}
+        var t = dark ? 'dark' : 'light';
+        var r = document.documentElement;
+        r.dataset.theme = t;
+        r.style.colorScheme = t;
+        var m = document.querySelector('meta[name="theme-color"]');
+        if (m) m.setAttribute('content', dark ? '#0b0d12' : '#ffffff');
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

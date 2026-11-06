@@ -52,7 +52,7 @@ describe('landing page', () => {
     }
     // the only mentions of banks/UPI are denials
     expect(text).toMatch(/not connected to any bank/)
-    expect(screen.getAllByRole('link', { name: 'Try FacePay' })[0]).toHaveAttribute('href', '/register')
+    expect(screen.getAllByRole('link', { name: 'Create account' })[0]).toHaveAttribute('href', '/register')
   })
 })
 
@@ -73,7 +73,7 @@ describe('navigation', () => {
     renderApp('/merchant/dashboard')
     expect(await screen.findByRole('link', { name: 'Skip to content' })).toHaveAttribute('href', '#main')
     const nav = screen.getByRole('navigation', { name: 'Main' })
-    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Home', 'New payment', 'Transactions', 'Profile'])
+    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Overview', 'Requests', 'New payment', 'Transactions', 'Profile'])
   })
 })
 
@@ -183,8 +183,10 @@ describe('customer dashboard', () => {
     renderApp('/dashboard')
     const more = await screen.findByRole('list', { name: 'More options' })
     expect(within(more).getAllByRole('link').map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
-      ['Bank accounts', '/banks'], ['Request money', '/request'], ['Scan QR', '/scan'], ['My QR', '/my-qr'], ['Face profile', '/face'], ['Security and PIN', '/security'],
+      ['Bank accounts', '/banks'], ['Scan QR', '/scan'], ['My QR', '/my-qr'], ['Face profile', '/face'], ['Security and PIN', '/security'],
     ])
+    // Asking for money is a primary action, so it sits beside Pay in the hero instead of in the list of extras.
+    expect(within(screen.getByRole('region', { name: 'Pay with your face' })).getByRole('link', { name: 'Request money' })).toHaveAttribute('href', '/request')
     expect(within(screen.getByRole('navigation', { name: 'Main' })).getAllByRole('link')).toHaveLength(5)
   })
 

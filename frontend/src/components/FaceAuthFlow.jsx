@@ -200,14 +200,14 @@ export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onEr
         <CameraView camera={camera} busy={busy} overlay={overlay} scanning={['baseline', 'turn', 'verifying'].includes(phase)} tone={tone} guide={phase === 'idle'} guideTone={phase === 'idle' && hint ? (hint.tone === 'ok' ? 'ok' : 'warn') : null} />
       )}
 
-      {!blocked && <section aria-label="Authentication" aria-live="polite" className="flex flex-col gap-4 rounded-[1.25rem] border border-slate-200/80 bg-white p-5 shadow-card">
+      {!blocked && <section aria-label="Authentication" aria-live="polite" className="flex flex-col gap-4 rounded-2xl border border-line/80 bg-surface p-5 shadow-card">
         {phase === 'idle' && (
           <>
             <div>
-              <h2 className="text-xl font-extrabold">Position your face</h2>
-              <p className="mt-1 text-sm text-slate-700">{cameraOn ? 'Hold the phone at eye level and keep your whole face inside the frame, then start. You will look at the camera and follow one short instruction.' : 'Turn the camera on, then keep your whole face inside the frame.'}</p>
+              <h2 className="text-xl font-bold">Position your face</h2>
+              <p className="mt-1 text-sm text-fg">{cameraOn ? 'Hold the phone at eye level and keep your whole face inside the frame, then start. You will look at the camera and follow one short instruction.' : 'Turn the camera on, then keep your whole face inside the frame.'}</p>
               {cameraOn && hint && (
-                <p role="status" aria-live="polite" data-testid="position-hint" className={`mt-2 text-sm font-semibold ${hint.tone === 'ok' ? 'text-emerald-800' : 'text-amber-900'}`}>{hint.message}</p>
+                <p role="status" aria-live="polite" data-testid="position-hint" className={`mt-2 text-sm font-semibold ${hint.tone === 'ok' ? 'text-success-ink' : 'text-warning-ink'}`}>{hint.message}</p>
               )}
             </div>
             {readiness.lookupError && !readiness.state && (
@@ -216,53 +216,53 @@ export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onEr
                 <button type="button" onClick={readiness.recheck} className="font-semibold underline">Check again</button>
               </Alert>
             )}
-            {!readiness.state && !readiness.lookupError && <p role="status" className="text-sm text-slate-600">Checking that face recognition is ready…</p>}
+            {!readiness.state && !readiness.lookupError && <p role="status" className="text-sm text-muted">Checking that face recognition is ready…</p>}
             <Button size="lg" onClick={begin} disabled={!canStart}>Start face check</Button>
-            {!cameraOn && <p className="-mt-2 text-xs text-slate-600">Turn the camera on first.</p>}
+            {!cameraOn && <p className="-mt-2 text-xs text-muted">Turn the camera on first.</p>}
           </>
         )}
 
         {phase === 'challenge' && (
           <div>
-            <h2 className="flex items-center gap-2 text-xl font-extrabold"><Spinner label="Preparing" /> Getting ready</h2>
-            <p className="mt-1 text-sm text-slate-700">Preparing your security check…</p>
+            <h2 className="flex items-center gap-2 text-xl font-bold"><Spinner label="Preparing" /> Getting ready</h2>
+            <p className="mt-1 text-sm text-fg">Preparing your security check…</p>
           </div>
         )}
 
         {phase === 'baseline' && (
           <div>
-            <h2 className="text-xl font-extrabold">Hold still</h2>
-            <p className="mt-1 text-sm text-slate-700">Look straight at the camera and hold still. Keep your whole face inside the frame.</p>
+            <h2 className="text-xl font-bold">Hold still</h2>
+            <p className="mt-1 text-sm text-fg">Look straight at the camera and hold still. Keep your whole face inside the frame.</p>
             <LivenessDots step={1} />
           </div>
         )}
 
         {phase === 'turn' && (
           <div>
-            <h2 className="text-xl font-extrabold">Quick security check</h2>
-            <p className="mt-2 text-2xl font-extrabold text-brand-700">{instruction}</p>
-            <p className="mt-1 text-sm text-slate-700">Basic liveness check. Turn gently, hold for a moment, and keep your whole face in the frame. A small turn is enough.</p>
+            <h2 className="text-xl font-bold">Quick security check</h2>
+            <p className="mt-2 text-2xl font-bold text-brand-700">{instruction}</p>
+            <p className="mt-1 text-sm text-fg">Basic liveness check. Turn gently, hold for a moment, and keep your whole face in the frame. A small turn is enough.</p>
             <LivenessDots step={2} />
-            <p className="mt-2 text-xs text-slate-600">Frames captured: {captured}</p>
+            <p className="mt-2 text-xs text-muted">Frames captured: {captured}</p>
           </div>
         )}
 
         {phase === 'verifying' && (
           <div>
-            <h2 className="flex items-center gap-2 text-xl font-extrabold"><Spinner label="Verifying" /> Capturing complete</h2>
-            <p className="mt-1 text-sm text-slate-700">Analyzing your face…</p>
+            <h2 className="flex items-center gap-2 text-xl font-bold"><Spinner label="Verifying" /> Capturing complete</h2>
+            <p className="mt-1 text-sm text-fg">Analyzing your face…</p>
           </div>
         )}
 
         {phase === 'done' && result && (
           <div className="flex flex-col gap-4">
             <div className="flex items-start gap-3">
-              <span aria-hidden="true" className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${authenticated ? 'animate-pop bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+              <span aria-hidden="true" className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${authenticated ? 'animate-pop bg-success-soft text-success-ink' : 'bg-danger-soft text-danger-ink'}`}>
                 <Icon name={authenticated ? 'check' : 'x'} className="h-6 w-6" strokeWidth="2.4" />
               </span>
               <div>
-                <h2 className="text-xl font-extrabold">{authenticated ? 'Identity verified' : rejection.title}</h2>
-                <p role={authenticated ? undefined : 'alert'} className="mt-0.5 text-sm text-slate-700">{authenticated ? `Welcome back${firstName ? `, ${firstName}` : ''}` : rejection.message}</p>
+                <h2 className="text-xl font-bold">{authenticated ? 'Identity verified' : rejection.title}</h2>
+                <p role={authenticated ? undefined : 'alert'} className="mt-0.5 text-sm text-fg">{authenticated ? `Welcome back${firstName ? `, ${firstName}` : ''}` : rejection.message}</p>
               </div>
             </div>
             <AuthDetails result={result} />
@@ -279,7 +279,7 @@ export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onEr
 
         {phase === 'error' && (
           <div className="flex flex-col gap-3">
-            <h2 className="text-xl font-extrabold">{problem?.title ?? 'Face check stopped'}</h2>
+            <h2 className="text-xl font-bold">{problem?.title ?? 'Face check stopped'}</h2>
             <Alert tone="error">{error}</Alert>
             {errorCode === 'BIOMETRIC_DISABLED' && <Link className="text-sm font-semibold text-brand-700 underline" to={SECURITY_PATH}>Open security settings</Link>}
             <Button size="lg" onClick={reset} variant={errorCode === 'BIOMETRIC_LOCKED' ? 'secondary' : 'primary'}>Try again</Button>
@@ -295,11 +295,11 @@ export default function FaceAuthFlow({ requestChallenge, verify, onOutcome, onEr
 /** Every step of the check in order, each with its real state. State is shown in words and a symbol, never by colour alone. */
 function FaceStages({ rows }) {
   const mark = { done: '✓', failed: '✕', current: '•', todo: '–' }
-  const tone = { done: 'text-emerald-800 font-semibold', failed: 'text-rose-800 font-semibold', current: 'text-slate-900 font-semibold', todo: 'text-slate-600' }
-  const chip = { done: 'bg-emerald-600 text-white', failed: 'bg-rose-600 text-white', current: 'bg-brand-700 text-white', todo: 'bg-slate-200 text-slate-600' }
+  const tone = { done: 'text-success-ink font-semibold', failed: 'text-danger-ink font-semibold', current: 'text-fg font-semibold', todo: 'text-muted' }
+  const chip = { done: 'bg-success text-on-accent', failed: 'bg-danger text-on-accent', current: 'bg-brand-700 text-on-accent', todo: 'bg-track text-muted' }
   const word = { done: 'done', failed: 'failed', current: 'in progress', todo: 'not yet' }
   return (
-    <ol aria-label="Face check steps" className="flex flex-col gap-2 rounded-[1.25rem] border border-slate-200/80 bg-white p-4 text-sm shadow-card">
+    <ol aria-label="Face check steps" className="flex flex-col gap-2 rounded-2xl border border-line/80 bg-surface p-4 text-sm shadow-card">
       {rows.map((r) => (
         <li key={r.key} className={`flex items-center gap-2.5 ${tone[r.state]}`} aria-current={r.state === 'current' ? 'step' : undefined}>
           <span aria-hidden="true" className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[0.7rem] font-bold ${chip[r.state]}`}>{mark[r.state]}</span>
@@ -314,9 +314,9 @@ function FaceStages({ rows }) {
 /** Two dots for the two real capture stages of the liveness check: look straight, then turn. */
 function LivenessDots({ step }) {
   return (
-    <p className="mt-3 flex items-center gap-2 text-xs font-semibold text-slate-700" role="img" aria-label={`Step ${step} of 2`}>
+    <p className="mt-3 flex items-center gap-2 text-xs font-semibold text-fg" role="img" aria-label={`Step ${step} of 2`}>
       {[1, 2].map((n) => (
-        <span key={n} aria-hidden="true" className={`h-2.5 w-2.5 rounded-full ${n < step ? 'bg-brand-700' : n === step ? 'bg-brand-700 ring-4 ring-brand-100' : 'bg-slate-300'}`} />
+        <span key={n} aria-hidden="true" className={`h-2.5 w-2.5 rounded-full ${n < step ? 'bg-brand-700' : n === step ? 'bg-brand-700 ring-4 ring-brand-100' : 'bg-track'}`} />
       ))}
       <span aria-hidden="true">{step === 1 ? 'Look straight' : 'Turn your head'}</span>
     </p>

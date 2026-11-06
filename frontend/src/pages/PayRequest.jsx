@@ -19,7 +19,7 @@ function NearbyDemo() {
       aria-label="FacePay nearby demo"
       action={<button type="button" onClick={state.reload} className="text-sm font-semibold text-brand-700 underline-offset-2 hover:underline">Refresh</button>}
     >
-      <p className="mb-3 rounded-xl bg-amber-50 px-3.5 py-2.5 text-xs font-semibold text-amber-900 ring-1 ring-inset ring-amber-200">
+      <p className="mb-3 rounded-xl bg-warning-soft px-3.5 py-2.5 text-xs font-semibold text-warning-ink ring-1 ring-inset ring-warning-line">
         Simulated discovery. FacePay does not use your location or detect merchants on its own. These are open payment requests that merchants chose to show here.
       </p>
       {state.loading ? (
@@ -31,17 +31,17 @@ function NearbyDemo() {
           When a merchant displays a payment request, it appears here. You can always paste a payment link instead.
         </EmptyState>
       ) : (
-        <ul aria-label="Nearby merchant requests" className="divide-y divide-slate-100">
+        <ul aria-label="Nearby merchant requests" className="divide-y divide-line">
           {state.data.map((r) => (
             <li key={r.session_id}>
-              <Link to={CHECKOUT_PATH(r.session_id)} className="flex items-center gap-3 rounded-xl px-1 py-3 transition hover:bg-slate-50 active:bg-slate-100">
+              <Link to={CHECKOUT_PATH(r.session_id)} className="flex items-center gap-3 rounded-xl px-1 py-3 transition hover:bg-sunken active:bg-sunken">
                 <Avatar name={r.merchant_name} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-bold">{r.merchant_name}</p>
-                  <p className="truncate text-xs text-slate-600">{r.order_reference ?? 'Payment request'}{r.expires_at ? ` · expires ${formatFeedTime(r.expires_at)}` : ''}</p>
+                  <p className="truncate text-xs text-muted">{r.order_reference ?? 'Payment request'}{r.expires_at ? ` · expires ${formatFeedTime(r.expires_at)}` : ''}</p>
                 </div>
-                <span className="amount shrink-0 font-extrabold">{formatMoney(r.amount, r.currency)}</span>
-                <Icon name="chevron" className="h-4 w-4 shrink-0 text-slate-400" />
+                <span className="amount shrink-0 font-bold">{formatMoney(r.amount, r.currency)}</span>
+                <Icon name="chevron" className="h-4 w-4 shrink-0 text-subtle" />
               </Link>
             </li>
           ))}
@@ -90,7 +90,7 @@ export default function PayRequest() {
       </Card>
       <NearbyDemo />
       <Alert tone="info">FacePay never picks a merchant from your face. The merchant and amount always come from a request you open.</Alert>
-      <p className="text-center text-xs text-slate-600">Payments here are simulated. No real money moves.</p>
+      <p className="text-center text-xs text-muted">Payments here are simulated. No real money moves.</p>
     </div>
   )
 }

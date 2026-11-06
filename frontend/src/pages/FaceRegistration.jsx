@@ -26,9 +26,9 @@ function Progress({ value, max, label }) {
     <div>
       <div className="flex items-baseline justify-between text-sm">
         <span className="font-medium">{label}</span>
-        <span className="text-slate-700">{value} of {max}</span>
+        <span className="text-fg">{value} of {max}</span>
       </div>
-      <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={max} aria-valuenow={Math.min(value, max)} className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-slate-200">
+      <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={max} aria-valuenow={Math.min(value, max)} className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-track">
         <div className="h-full rounded-full bg-brand-700 transition-all" style={{ width: `${pctDone}%` }} />
       </div>
     </div>
@@ -52,7 +52,7 @@ function ReadinessPanel({ readiness }) {
         </div>
       )}
       {c && (
-        <ul className="mt-3 flex flex-col gap-1 text-sm text-slate-700">
+        <ul className="mt-3 flex flex-col gap-1 text-sm text-fg">
           <li>Usable samples: {c.samples.have} of {c.samples.need} needed</li>
           <li>Head positions covered: {c.poses.have} of {c.poses.need} needed</li>
           <li>{c.people_with_finished_setup.enough ? 'At least two people have a finished setup.' : 'Recognition needs at least two people with a finished setup. FacePay never creates a second person for you.'}</li>
@@ -66,7 +66,7 @@ function ReadinessPanel({ readiness }) {
 function ModelPanel({ model }) {
   return (
     <Card title="Face model" aria-label="Model">
-      <p className="text-sm text-slate-700">
+      <p className="text-sm text-fg">
         {model.includes_you && !model.stale
           ? 'Your face is part of the current model and it is up to date.'
           : model.includes_you
@@ -75,7 +75,7 @@ function ModelPanel({ model }) {
       </p>
       {model.stale && <div className="mt-3"><Alert tone="warning">Your samples changed since this model was trained. Retrain to include them.</Alert></div>}
       {!model.includes_you && <div className="mt-3"><Alert tone="warning">Train the model to add yourself.</Alert></div>}
-      <p className="mt-3 text-xs text-slate-600">Trained {new Date(model.trained_at).toLocaleDateString()}.</p>
+      <p className="mt-3 text-xs text-muted">Trained {new Date(model.trained_at).toLocaleDateString()}.</p>
     </Card>
   )
 }
@@ -94,11 +94,11 @@ function PoseSteps({ sequence, currentPose, running }) {
           <li key={p.pose} aria-current={current ? 'step' : undefined} className="flex min-w-0 flex-1 flex-col items-center gap-1 text-center">
             <span
               aria-hidden="true"
-              className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${done ? 'bg-emerald-600 text-white' : current ? 'bg-brand-700 text-white ring-4 ring-brand-100' : 'bg-slate-200 text-slate-700'}`}
+              className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${done ? 'bg-success text-on-accent' : current ? 'bg-brand-700 text-on-accent ring-4 ring-brand-100' : 'bg-track text-fg'}`}
             >
               {done ? <Icon name="check" className="h-4 w-4" strokeWidth="3" /> : p.count}
             </span>
-            <span className={`text-xs ${current ? 'font-bold text-slate-900' : 'text-slate-700'}`}>{poseCopy(p.pose).label}</span>
+            <span className={`text-xs ${current ? 'font-bold text-fg' : 'text-fg'}`}>{poseCopy(p.pose).label}</span>
             <span className="sr-only">{done ? 'done' : current ? 'current' : `${p.count} of ${p.target} captured`}</span>
           </li>
         )
@@ -176,20 +176,20 @@ function GuidedSetup({ camera, enrollment, model, token, reducedMotion, onSample
 
       <div className="mt-5 flex flex-col gap-4">
         <div role="status" aria-live="polite" aria-atomic="true">
-          <h2 className="text-xl font-extrabold">{head.title}</h2>
-          {head.text && <p className={`mt-1 text-sm ${warn ? 'font-semibold text-amber-800' : 'text-slate-700'}`}>{head.text}</p>}
+          <h2 className="text-xl font-bold">{head.title}</h2>
+          {head.text && <p className={`mt-1 text-sm ${warn ? 'font-semibold text-warning-ink' : 'text-fg'}`}>{head.text}</p>}
         </div>
 
         <PoseSteps sequence={guided.sequence} currentPose={state.pose} running={running} />
         <Progress value={guided.captured} max={guided.required} label="Setup progress" />
         {running && current && (
-          <p className="text-xs text-slate-700" data-testid="pose-samples">
+          <p className="text-xs text-fg" data-testid="pose-samples">
             {poseCopy(current.pose).label}: {current.count} of {current.target} captured
           </p>
         )}
 
         {needsConsent && (
-          <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800">
+          <label className="flex items-start gap-3 rounded-xl border border-line bg-sunken p-3 text-sm text-fg">
             <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-1 h-5 w-5 shrink-0 accent-brand-700" />
             <span>
               I agree that FacePay may use my camera to capture my face for this setup. Only a small grayscale crop of each position is
@@ -216,8 +216,8 @@ function GuidedSetup({ camera, enrollment, model, token, reducedMotion, onSample
 function HowItWorks() {
   return (
     <Card title="How FacePay works">
-      <details className="text-sm text-slate-700">
-        <summary className="cursor-pointer font-medium text-slate-800">Read how your face is used</summary>
+      <details className="text-sm text-fg">
+        <summary className="cursor-pointer font-medium text-fg">Read how your face is used</summary>
         <div className="mt-3 flex flex-col gap-2">
           <p>Each captured position is reduced on the server to a small grayscale crop and stored encrypted. Raw camera frames are not kept.</p>
           <p>The crops are projected with PCA, which keeps the main ways faces differ, then LDA, which pulls different people further apart. A classifier compares a new face with enrolled profiles.</p>
@@ -343,7 +343,7 @@ export default function FaceRegistration() {
       )}
 
       <Card title="Your face data">
-        <p className="text-sm text-slate-700">
+        <p className="text-sm text-fg">
           {enrollment?.total_samples
             ? `${enrollment.total_samples} ${enrollment.total_samples === 1 ? 'position is' : 'positions are'} stored as small encrypted grayscale crops. You can remove them at any time.`
             : 'No face data is stored for you.'}
@@ -374,12 +374,12 @@ export default function FaceRegistration() {
       <HowItWorks />
 
       <Card title="Test recognition">
-        <p className="text-sm text-slate-700">Checks one new camera frame against the trained model. This is a practice check and does not pay or log you in.</p>
+        <p className="text-sm text-fg">Checks one new camera frame against the trained model. This is a practice check and does not pay or log you in.</p>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <Button onClick={cameraOn ? test : camera.start} loading={busy === 'recognize' || cameraStatus === 'requesting'} disabled={!model?.includes_you || busy !== null}>
             {cameraOn ? 'Recognise me' : 'Turn camera on to test'}
           </Button>
-          {!model?.includes_you && <span className="text-xs text-slate-600">Finish face setup first.</span>}
+          {!model?.includes_you && <span className="text-xs text-muted">Finish face setup first.</span>}
         </div>
         {result && (
           <div className="mt-4" aria-live="polite">

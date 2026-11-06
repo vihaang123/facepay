@@ -39,23 +39,23 @@ export default function RequestDetails({ onSubmit, submitLabel = 'Send request',
 
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-5">
-      <div className="flex flex-col gap-4 rounded-[1.25rem] border border-slate-200/80 bg-white p-5 shadow-card">
+      <div className="flex flex-col gap-4 rounded-2xl border border-line/80 bg-surface p-5 shadow-card">
         {formError && <Alert tone="error">{formError}</Alert>}
         <FormField label="Amount (₹)" id="amount" value={amount} onChange={(e) => { setAmount(e.target.value); setErrors((x) => ({ ...x, amount: null })) }} error={errors.amount} inputMode="decimal" autoComplete="off" placeholder="0.00" />
         <div className="flex flex-col gap-1">
-          <label htmlFor="purpose" className="text-sm font-semibold text-slate-800">What is this for?</label>
+          <label htmlFor="purpose" className="text-sm font-semibold text-fg">What is this for?</label>
           <select
             id="purpose"
             value={purpose}
             onChange={(e) => { setPurpose(e.target.value); setErrors((x) => ({ ...x, purpose: null })) }}
             aria-invalid={errors.purpose ? 'true' : undefined}
             aria-describedby={errors.purpose ? 'purpose-error' : undefined}
-            className="min-h-12 rounded-xl border border-slate-300 bg-white px-3.5 text-base"
+            className="min-h-12 rounded-xl border border-line-strong bg-surface px-3.5 text-base"
           >
             <option value="">Choose a purpose</option>
             {PURPOSES.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
           </select>
-          {errors.purpose && <p id="purpose-error" role="alert" className="text-sm font-medium text-rose-700">{errors.purpose}</p>}
+          {errors.purpose && <p id="purpose-error" role="alert" className="text-sm font-medium text-danger-ink">{errors.purpose}</p>}
         </div>
         <FormField
           label="Reference"

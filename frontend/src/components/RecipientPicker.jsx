@@ -48,7 +48,7 @@ export default function RecipientPicker({ onPick, initial, actionLabel = 'Contin
 
   return (
     <div className="flex flex-col gap-5">
-      <form onSubmit={submit} noValidate className="flex flex-col gap-3 rounded-[1.25rem] border border-slate-200/80 bg-white p-5 shadow-card">
+      <form onSubmit={submit} noValidate className="flex flex-col gap-3 rounded-2xl border border-line/80 bg-surface p-5 shadow-card">
         <FormField
           label={prompt}
           id="recipient-id"
@@ -63,12 +63,12 @@ export default function RecipientPicker({ onPick, initial, actionLabel = 'Contin
           inputMode="email"
         />
         <Button type="submit" loading={busy} variant={found ? 'secondary' : 'primary'}>Find</Button>
-        <p className="text-center text-xs text-slate-600">Have a QR code? <Link className="font-semibold text-brand-700 underline" to={SCAN_PATH}>Scan it instead</Link></p>
+        <p className="text-center text-xs text-muted">Have a QR code? <Link className="font-semibold text-brand-700 underline" to={SCAN_PATH}>Scan it instead</Link></p>
       </form>
 
       {found && (
-        <section aria-label="Confirm recipient" className="flex flex-col gap-3 rounded-[1.25rem] border border-brand-200 bg-brand-50/50 p-5">
-          <p className="text-sm font-semibold text-slate-800">Is this the right person?</p>
+        <section aria-label="Confirm recipient" className="flex flex-col gap-3 rounded-2xl border border-brand-200 bg-brand-50/50 p-5">
+          <p className="text-sm font-semibold text-fg">Is this the right person?</p>
           <PersonCard name={found.display_name} maskedId={found.masked_id} />
           <Button size="lg" onClick={() => onPick({ id: found.id, display_name: found.display_name, masked_id: found.masked_id })}>{actionLabel}</Button>
         </section>
@@ -76,7 +76,7 @@ export default function RecipientPicker({ onPick, initial, actionLabel = 'Contin
 
       {!found && (
         <section aria-label="Recent contacts">
-          <h2 className="mb-2 text-sm font-bold text-slate-800">People you have paid or requested</h2>
+          <h2 className="mb-2 text-sm font-bold text-fg">People you have paid or requested</h2>
           {contacts.loading ? (
             <div role="status" aria-label="Loading contacts"><Skeleton className="h-14 w-full" /></div>
           ) : contacts.error ? (
@@ -84,14 +84,14 @@ export default function RecipientPicker({ onPick, initial, actionLabel = 'Contin
           ) : contacts.data.length === 0 ? (
             <EmptyState title="No contacts yet" icon="users">People appear here after you pay them or send them a request.</EmptyState>
           ) : (
-            <ul className="divide-y divide-slate-100 rounded-[1.25rem] border border-slate-200/80 bg-white px-3 shadow-card">
+            <ul className="divide-y divide-line rounded-2xl border border-line/80 bg-surface px-3 shadow-card">
               {contacts.data.map((c) => (
                 <li key={c.facepay_id}>
                   <button type="button" onClick={() => onPick({ id: c.facepay_id, display_name: c.display_name, masked_id: c.masked_id })} className="flex min-h-14 w-full items-center gap-3 py-2 text-left">
                     <Avatar name={c.display_name} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-bold">{c.display_name}</span>
-                      <span className="block font-mono text-xs text-slate-600">{c.masked_id}</span>
+                      <span className="block font-mono text-xs text-muted">{c.masked_id}</span>
                     </span>
                   </button>
                 </li>

@@ -14,8 +14,8 @@ export default function ReceiptPage() {
   const state = useLoad(() => fetcher(token, transactionId), [token, role, transactionId])
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-4">
-      <h1 className="text-2xl font-extrabold tracking-tight">Transaction details</h1>
-      {state.loading && <div role="status" aria-label="Loading receipt"><Skeleton className="h-96 w-full !rounded-[1.25rem]" /></div>}
+      <h1 className="text-2xl font-bold tracking-tight">Transaction details</h1>
+      {state.loading && <div role="status" aria-label="Loading receipt"><Skeleton className="h-96 w-full !rounded-2xl" /></div>}
       {state.error && <ErrorState message={state.error} onRetry={state.reload} />}
       {state.data && (
         <Receipt receipt={state.data}>

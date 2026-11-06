@@ -50,16 +50,16 @@ export default function CreatePayment() {
           <FormField id="orderReference" label="Order / reference" value={form.orderReference} onChange={set('orderReference')} error={errors.orderReference} placeholder="SG-10492" />
           <FormField id="description" label="Description (optional)" value={form.description} onChange={set('description')} maxLength={255} />
           <div className="flex flex-col gap-1">
-            <label htmlFor="expiresInMinutes" className="text-sm font-semibold text-slate-800">Link valid for</label>
-            <select id="expiresInMinutes" value={form.expiresInMinutes} onChange={set('expiresInMinutes')} className="min-h-12 rounded-xl border border-slate-300 bg-white px-3.5 text-base">
+            <label htmlFor="expiresInMinutes" className="text-sm font-semibold text-fg">Link valid for</label>
+            <select id="expiresInMinutes" value={form.expiresInMinutes} onChange={set('expiresInMinutes')} className="min-h-12 rounded-xl border border-field bg-surface px-3.5 text-base">
               {[5, 15, 30, 60].map((m) => <option key={m} value={m}>{m} minutes</option>)}
             </select>
           </div>
-          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3.5">
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-surface p-3.5">
             <input type="checkbox" checked={form.discoverable} onChange={toggle('discoverable')} className="mt-0.5 h-4 w-4 accent-brand-700" />
             <span className="text-sm">
               <span className="block font-semibold">Show in FacePay nearby (demo)</span>
-              <span className="block text-slate-600">Lists this request for signed-in customers in the simulated nearby view. You can hide it again at any time. Customers can always pay from the link.</span>
+              <span className="block text-muted">Lists this request for signed-in customers in the simulated nearby view. You can hide it again at any time. Customers can always pay from the link.</span>
             </span>
           </label>
           <div className="flex flex-col gap-2">

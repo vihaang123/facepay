@@ -13,10 +13,10 @@ import { REQUESTS_PATH } from '../utils/roles'
 
 function Sent({ request }) {
   return (
-    <section aria-label="Request sent" className="flex flex-col gap-4 rounded-[1.5rem] border border-slate-200/80 bg-white p-6 text-center shadow-card">
-      <h2 className="text-xl font-extrabold">Request sent</h2>
-      <p className="amount text-4xl font-extrabold">{formatMoney(request.amount, request.currency)}</p>
-      <p className="text-sm text-slate-700">{request.counterparty_name} gets it as a pop-up in FacePay and sees it under Requests. Nothing has been taken from anyone; they choose whether to pay, with their own face check.</p>
+    <section aria-label="Request sent" className="flex flex-col gap-4 rounded-3xl border border-line/80 bg-surface p-6 text-center shadow-card">
+      <h2 className="text-xl font-bold">Request sent</h2>
+      <p className="amount text-4xl font-bold">{formatMoney(request.amount, request.currency)}</p>
+      <p className="text-sm text-fg">{request.counterparty_name} gets it as a pop-up in FacePay and sees it under Requests. Nothing has been taken from anyone; they choose whether to pay, with their own face check.</p>
       <dl className="text-left">
         <Row label="From">{request.counterparty_name}</Row>
         <Row label="For">{request.purpose_label}</Row>
@@ -51,14 +51,14 @@ function PickPerson({ initialId, onPick }) {
       role="tab"
       aria-selected={mode === key}
       onClick={() => setMode(key)}
-      className={`min-h-11 flex-1 rounded-lg px-3 text-sm font-semibold transition ${mode === key ? 'bg-white text-brand-800 shadow-sm' : 'text-slate-700'}`}
+      className={`min-h-11 flex-1 rounded-lg px-3 text-sm font-semibold transition ${mode === key ? 'bg-surface text-brand-800 shadow-sm' : 'text-fg'}`}
     >
       {label}
     </button>
   )
   return (
     <div className="flex flex-col gap-4">
-      <div role="tablist" aria-label="How to find the person" className="flex gap-1 rounded-xl bg-slate-100 p-1">
+      <div role="tablist" aria-label="How to find the person" className="flex gap-1 rounded-xl bg-sunken p-1">
         {tab('face', 'Scan their face')}
         {tab('id', 'FacePay ID')}
       </div>
@@ -81,8 +81,8 @@ export default function RequestMoney() {
   return (
     <div className="mx-auto flex max-w-md flex-col gap-5">
       <div>
-        <h1 className="text-2xl font-extrabold tracking-tight">Request money</h1>
-        <p className="mt-1 text-sm text-slate-600">Ask another FacePay customer to pay you, and say what it is for. They approve it themselves.</p>
+        <h1 className="text-2xl font-bold tracking-tight">Request money</h1>
+        <p className="mt-1 text-sm text-muted">Ask another FacePay customer to pay you, and say what it is for. They approve it themselves.</p>
       </div>
       {sent ? <Sent request={sent} /> : payer ? <DetailsStep payer={payer} onBack={() => setPayer(null)} onSent={setSent} /> : (
         <PickPerson initialId={params.get('from') ?? ''} onPick={setPayer} />

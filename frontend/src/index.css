@@ -1,83 +1,260 @@
-@import "@fontsource-variable/manrope";
+@import "@fontsource-variable/inter";
 @import "tailwindcss";
 
 /*
- * FacePay brand system
- *   Trust + Security + Speed + AI
- *   - ink     deep navy for text and the dark "scan" surface
- *   - brand   ocean teal: actions, links, the logo mark
- *   - success emerald is reserved for "paid / verified", so green always means something happened
- *   - amber = waiting, rose = failed, slate = ended
- *   Radius: 12px controls, 20px cards, full for pills and avatars. One soft shadow for cards, one for overlays.
- *   Spacing: 4px base; screens use 16/20/24 gutters. Type: Manrope; amounts use tabular figures.
+ * FacePay design system
+ *
+ * Every colour a component uses is a SEMANTIC token (surface, fg, muted, line, brand, success-ink, ...). The values live in
+ * two places only: :root (light) and [data-theme="dark"]. Components never hardcode a colour, so both themes stay in step.
+ *
+ *   Surfaces   canvas (page) < surface (cards) < elevated (sheets, dialogs, menus); sunken is a quiet fill inside a surface.
+ *   Text       fg (primary), muted (secondary), subtle (placeholders and disabled only).
+ *   Lines      line (hairlines), line-strong (emphasis, buttons), field (input and checkbox borders: 3:1 against the surface).
+ *   Brand      indigo. brand-700 is THE action colour; brand-800 is its hover; 50/100/200 are tints. on-accent is the text
+ *              colour that sits on any solid accent fill (white in light, near-black in dark, so contrast holds in both).
+ *   Status     success / warning / danger / info, each as: solid (fills, icons), soft (tinted background), line (its border)
+ *              and ink (text on soft or on the surface). Green means "paid or verified" and nothing else.
+ *   Camera     scan / scan-edge are the camera surface. It is dark in BOTH themes on purpose: a camera preview is not a page.
+ *
+ *   Radius     8 chips, 12 controls, 16 cards, 24 sheets and camera frames, full for pills and avatars.
+ *   Shadow     one hairline lift for cards in light; none in dark (borders carry the structure).
+ *   Type       Inter. Sizes and weights live in the .type-* classes below; amounts use tabular figures.
+ *   Spacing    4px base; page gutters 16 (phone) / 24 (tablet and up).
  */
-@theme {
-  --font-sans: "Manrope Variable", ui-sans-serif, system-ui, sans-serif;
 
-  --color-brand-50: #ecf8f7;
-  --color-brand-100: #cfefec;
-  --color-brand-200: #a2dfd9;
-  --color-brand-500: #17a398;
-  /* 600 is for fills behind large white text only; 700 is the action color (6:1 on white); 800 for hover and text on tints. */
-  --color-brand-600: #0d8a80;
-  --color-brand-700: #0a6f68;
-  --color-brand-800: #07554f;
-  --color-ink: #0b1b33;
-  --color-scan: #07111f;
-  --color-scan-edge: #5eead4;
-  --color-canvas: #f5f7fa;
+:root {
+  color-scheme: light;
+
+  --canvas: #f7f8fa;
+  --surface: #ffffff;
+  --elevated: #ffffff;
+  --sunken: #f2f4f7;
+  --track: #e4e7ec;
+
+  --fg: #101828;
+  --muted: #667085;
+  --subtle: #6f7787;
+
+  --line: #eaecf0;
+  --line-strong: #d0d5dd;
+  --field: #858d9d;
+
+  --brand-50: #eef2ff;
+  --brand-100: #e0e7ff;
+  --brand-200: #c7d2fe;
+  --brand-500: #6366f1;
+  --brand-600: #5850ec;
+  --brand-700: #4f46e5;
+  --brand-800: #4338ca;
+  --on-accent: #ffffff;
+
+  --success: #16a36a;
+  --success-soft: #ecfdf3;
+  --success-line: #abefc6;
+  --success-ink: #0b7a4e;
+
+  --warning: #d97706;
+  --warning-soft: #fffaeb;
+  --warning-line: #fedf89;
+  --warning-ink: #93370d;
+
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --danger-soft: #fef3f2;
+  --danger-line: #fecdca;
+  --danger-ink: #b42318;
+
+  --info: #2563eb;
+  --info-soft: #eff6ff;
+  --info-line: #bfdbfe;
+  --info-ink: #1d4ed8;
+
+  --scan: #0b0d12;
+  --scan-edge: #a5b4fc;
+
+  --elev-card: 0 1px 2px rgb(16 24 40 / 0.04);
+  --elev-pop: 0 16px 40px -12px rgb(16 24 40 / 0.28);
+  --overlay: rgb(16 24 40 / 0.45);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --canvas: #0b0d12;
+  --surface: #141821;
+  --elevated: #1b2230;
+  --sunken: #181e2a;
+  --track: #293142;
+
+  --fg: #f9fafb;
+  --muted: #a1a1aa;
+  --subtle: #8b91a0;
+
+  --line: #293142;
+  --line-strong: #3a445a;
+  --field: #6b7488;
+
+  --brand-50: #1a1e3d;
+  --brand-100: #232a5c;
+  --brand-200: #343d85;
+  --brand-500: #818cf8;
+  --brand-600: #818cf8;
+  --brand-700: #818cf8;
+  --brand-800: #a5b4fc;
+  --on-accent: #0b0d12;
+
+  --success: #34d399;
+  --success-soft: #0f2a22;
+  --success-line: #14533f;
+  --success-ink: #6ee7b7;
+
+  --warning: #fbbf24;
+  --warning-soft: #2a2008;
+  --warning-line: #5c4410;
+  --warning-ink: #fcd34d;
+
+  --danger: #f87171;
+  --danger-hover: #fca5a5;
+  --danger-soft: #2d1416;
+  --danger-line: #5f2125;
+  --danger-ink: #fca5a5;
+
+  --info: #60a5fa;
+  --info-soft: #0f1d33;
+  --info-line: #1e3a5f;
+  --info-ink: #93c5fd;
+
+  --scan: #05070b;
+  --scan-edge: #a5b4fc;
+
+  --elev-card: none;
+  --elev-pop: 0 16px 40px -12px rgb(0 0 0 / 0.7);
+  --overlay: rgb(0 0 0 / 0.6);
+}
+
+/* `inline` makes each utility read the variable at use, so switching data-theme repaints everything with no rebuild. */
+@theme inline {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
+  --color-sunken: var(--sunken);
+  --color-track: var(--track);
+  --color-fg: var(--fg);
+  --color-ink: var(--fg);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-field: var(--field);
+
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-200: var(--brand-200);
+  --color-brand-500: var(--brand-500);
+  --color-brand-600: var(--brand-600);
+  --color-brand-700: var(--brand-700);
+  --color-brand-800: var(--brand-800);
+  --color-on-accent: var(--on-accent);
+
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-line: var(--success-line);
+  --color-success-ink: var(--success-ink);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-line: var(--warning-line);
+  --color-warning-ink: var(--warning-ink);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-line: var(--danger-line);
+  --color-danger-ink: var(--danger-ink);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-line: var(--info-line);
+  --color-info-ink: var(--info-ink);
+
+  --color-overlay: var(--overlay);
+  --color-scan: var(--scan);
+  --color-scan-edge: var(--scan-edge);
 
   --radius-control: 0.75rem;
-  --radius-card: 1.25rem;
-  --shadow-card: 0 1px 2px rgb(11 27 51 / 0.05), 0 4px 16px -6px rgb(11 27 51 / 0.08);
-  --shadow-pop: 0 12px 32px -8px rgb(11 27 51 / 0.25);
+  --radius-card: 1rem;
+  --shadow-card: var(--elev-card);
+  --shadow-pop: var(--elev-pop);
 
-  --animate-scan: scan 2.4s ease-in-out infinite;
-  --animate-pop: pop 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
-  --animate-rise: rise 0.28s ease-out both;
+  --animate-scan: scan 2.8s ease-in-out infinite;
+  --animate-pop: pop 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.1) both;
+  --animate-rise: rise 0.22s ease-out both;
   --animate-shimmer: shimmer 1.4s linear infinite;
-  --animate-toast: toast 0.25s ease-out both;
-  --animate-draw: draw 0.5s 0.15s ease-out both;
+  --animate-toast: toast 0.22s ease-out both;
+  --animate-draw: draw 0.45s 0.1s ease-out both;
+  --animate-sheet: sheet 0.26s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-fade: fade 0.18s ease-out both;
 }
 
-@keyframes scan { 0%, 100% { top: 6%; opacity: 0.25; } 50% { top: 94%; opacity: 1; } }
-@keyframes pop { 0% { transform: scale(0.6); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
-@keyframes rise { 0% { transform: translateY(6px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+@keyframes scan { 0%, 100% { top: 10%; opacity: 0.2; } 50% { top: 90%; opacity: 0.8; } }
+@keyframes pop { 0% { transform: scale(0.7); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes rise { 0% { transform: translateY(4px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
 @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
-@keyframes toast { 0% { transform: translateY(12px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+@keyframes toast { 0% { transform: translateY(10px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
 @keyframes draw { 0% { stroke-dashoffset: 30; } 100% { stroke-dashoffset: 0; } }
+@keyframes sheet { 0% { transform: translateY(24px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+@keyframes fade { 0% { opacity: 0; } 100% { opacity: 1; } }
+
+html { background: var(--canvas); }
 
 body {
-  @apply bg-canvas text-ink antialiased;
-  font-feature-settings: "cv11", "ss01";
+  @apply bg-canvas text-fg antialiased;
+  font-feature-settings: "cv11", "ss03";
 }
 
+/* Typography scale. Components use these names instead of ad-hoc size and weight combinations. */
+@utility type-display { font-size: 2.25rem; line-height: 2.5rem; font-weight: 700; letter-spacing: -0.03em; }
+@utility type-page { font-size: 1.5rem; line-height: 2rem; font-weight: 700; letter-spacing: -0.02em; }
+@utility type-section { font-size: 1rem; line-height: 1.5rem; font-weight: 600; }
+@utility type-body { font-size: 0.9375rem; line-height: 1.5rem; }
+@utility type-support { font-size: 0.875rem; line-height: 1.25rem; color: var(--muted); }
+@utility type-label { font-size: 0.8125rem; line-height: 1.125rem; font-weight: 600; }
+@utility type-meta { font-size: 0.75rem; line-height: 1rem; color: var(--muted); }
+@utility type-amount { font-variant-numeric: tabular-nums; font-feature-settings: "tnum", "cv11"; letter-spacing: -0.025em; font-weight: 700; }
+
 /* Money is always set in tabular figures so columns and large amounts line up. */
-.amount { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.amount { font-variant-numeric: tabular-nums; font-feature-settings: "tnum", "cv11"; letter-spacing: -0.02em; }
 
 .skeleton {
-  background: linear-gradient(90deg, #e8edf3 25%, #f3f6f9 37%, #e8edf3 63%);
+  background: linear-gradient(90deg, var(--track) 25%, var(--sunken) 37%, var(--track) 63%);
   background-size: 200% 100%;
   animation: var(--animate-shimmer);
 }
 
 /* One visible focus style for every interactive element. */
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
-  outline: 2px solid var(--color-brand-700);
+  outline: 2px solid var(--brand-700);
   outline-offset: 2px;
 }
-.on-dark :where(a, button, summary):focus-visible { outline-color: var(--color-scan-edge); }
+.on-dark :where(a, button, summary):focus-visible { outline-color: var(--scan-edge); }
+
+/* Native form controls follow the theme (date pickers, scrollbars, autofill). */
+input, select, textarea { color-scheme: inherit; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
-/* A receipt prints on its own, without navigation or buttons. */
+/* A receipt prints on its own, in light colours, without navigation or buttons. */
 @media print {
+  :root, [data-theme="dark"] {
+    --canvas: #fff; --surface: #fff; --elevated: #fff; --sunken: #fff; --fg: #101828; --muted: #475467; --line: #d0d5dd;
+    --elev-card: none;
+  }
   body { background: #fff; }
   .no-print { display: none !important; }
   .print-card { border: 0 !important; box-shadow: none !important; }

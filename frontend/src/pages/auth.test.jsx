@@ -186,6 +186,7 @@ describe('registration', () => {
     await user.type(screen.getByLabelText('Email'), 'asha@example.com')
     await user.type(screen.getByLabelText('Password'), password)
     await user.type(screen.getByLabelText('Confirm password'), confirm)
+    await user.click(screen.getByRole('checkbox', { name: /simulated prototype/i }))
   }
 
   it('blocks mismatched passwords', async () => {
@@ -243,6 +244,7 @@ describe('registration', () => {
     await user.type(screen.getByLabelText('Email'), 'ravi@shop.example')
     await user.type(screen.getByLabelText('Password'), 'Correct-horse-42')
     await user.type(screen.getByLabelText('Confirm password'), 'Correct-horse-42')
+    await user.click(screen.getByRole('checkbox', { name: /simulated prototype/i }))
     await user.click(screen.getByRole('button', { name: 'Create account' }))
     expect(await heading('SuperGrocery')).toBeInTheDocument()
     expect(api.callsTo('POST /auth/merchant/register')[0].body).toEqual({
@@ -251,6 +253,29 @@ describe('registration', () => {
       email: 'ravi@shop.example',
       password: 'Correct-horse-42',
     })
+  })
+
+  it('does not register until the person agrees to the prototype notice', async () => {
+    const user = userEvent.setup()
+    const api = mockApi({})
+    renderApp('/register')
+    await fillCustomer(user)
+    await user.click(screen.getByRole('checkbox', { name: /simulated prototype/i })) // fillCustomer ticked it; untick
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
+    expect(await screen.findByText('Agree to continue.')).toBeInTheDocument()
+    expect(api.callsTo('POST /auth/register')).toHaveLength(0)
+    expect(session()).toBeNull()
+  })
+
+  it('reveals and hides a password on request', async () => {
+    const user = userEvent.setup()
+    renderApp('/login')
+    const field = screen.getByLabelText('Password')
+    expect(field).toHaveAttribute('type', 'password')
+    await user.click(screen.getByRole('button', { name: 'Show password' }))
+    expect(field).toHaveAttribute('type', 'text')
+    await user.click(screen.getByRole('button', { name: 'Hide password' }))
+    expect(field).toHaveAttribute('type', 'password')
   })
 
   it('shows a duplicate-email conflict from the server', async () => {

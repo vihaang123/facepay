@@ -12,7 +12,7 @@ export function Stages({ stages }) {
   return (
     <ol aria-label="Authentication stages" className="flex flex-col gap-1.5 text-sm">
       {stages.map((s) => (
-        <li key={s.stage} className={s.status === 'PASSED' ? 'text-emerald-800' : s.status === 'FAILED' ? 'text-rose-800' : 'text-slate-600'}>
+        <li key={s.stage} className={s.status === 'PASSED' ? 'text-success-ink' : s.status === 'FAILED' ? 'text-danger-ink' : 'text-muted'}>
           <span aria-hidden="true" className="mr-2 inline-block w-4 text-center font-bold">{STAGE_MARK[s.status]}</span>
           {STAGE_LABELS[s.stage]?.[s.status] ?? s.stage}
         </li>
@@ -33,7 +33,7 @@ export function AuthDetails({ result }) {
       <Stages stages={result.stages} />
       {authenticated && id?.name && (
         <dl className="text-sm">
-          <div><dt className="inline text-slate-600">Verified as: </dt><dd className="inline font-semibold">{id.name}</dd></div>
+          <div><dt className="inline text-muted">Verified as: </dt><dd className="inline font-semibold">{id.name}</dd></div>
         </dl>
       )}
     </>
@@ -47,8 +47,8 @@ export function PaymentStages({ outcome, authorized, confirming, paid, className
   return (
     <ol aria-label="Payment stages" className={`flex flex-col gap-2 text-sm ${className}`}>
       {rows.map((r) => (
-        <li key={r.label} className={`flex items-center gap-2.5 ${r.state === 'done' ? 'font-semibold text-emerald-800' : r.state === 'failed' ? 'font-semibold text-rose-800' : r.state === 'current' ? 'font-semibold text-slate-900' : 'text-slate-600'}`}>
-          <span aria-hidden="true" className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[0.7rem] font-bold ${r.state === 'done' ? 'bg-emerald-600 text-white' : r.state === 'failed' ? 'bg-rose-600 text-white' : r.state === 'current' ? 'bg-brand-700 text-white' : 'bg-slate-200 text-slate-600'}`}>
+        <li key={r.label} className={`flex items-center gap-2.5 ${r.state === 'done' ? 'font-semibold text-success-ink' : r.state === 'failed' ? 'font-semibold text-danger-ink' : r.state === 'current' ? 'font-semibold text-fg' : 'text-muted'}`}>
+          <span aria-hidden="true" className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[0.7rem] font-bold ${r.state === 'done' ? 'bg-success text-on-accent' : r.state === 'failed' ? 'bg-danger text-on-accent' : r.state === 'current' ? 'bg-brand-700 text-on-accent' : 'bg-track text-muted'}`}>
             {r.state === 'done' ? '✓' : r.state === 'failed' ? '✕' : r.state === 'current' ? '•' : '–'}
           </span>
           <span>{r.label}</span>

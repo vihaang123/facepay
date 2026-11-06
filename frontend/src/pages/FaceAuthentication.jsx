@@ -37,7 +37,7 @@ export default function FaceAuthentication() {
             <thead><tr><Th>When</Th><Th>Result</Th><Th>Reason</Th></tr></thead>
             <tbody>
               {attempts.map((a) => (
-                <tr key={a.id} className="border-b border-slate-100 last:border-0">
+                <tr key={a.id} className="border-b border-line last:border-0">
                   <td className="py-2 pr-3">{new Date(a.timestamp).toLocaleString()}</td>
                   <td className="py-2 pr-3">{a.result === 'SUCCESS' ? 'Authenticated' : 'Rejected'}</td>
                   <td className="py-2">{a.failure_reason ?? '—'}</td>

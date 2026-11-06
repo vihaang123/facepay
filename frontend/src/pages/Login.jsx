@@ -86,6 +86,7 @@ export default function Login({ role }) {
         <Button type="submit" loading={submitting} size="lg">
           Sign in
         </Button>
+        <p className="text-center text-xs text-muted">Forgot your password? Password reset is not available in this prototype yet.</p>
       </form>
     </AuthLayout>
   )

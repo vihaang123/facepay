@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { ButtonLink, Logo } from './components/ui'
 import { GuestRoute, ProtectedRoute } from './components/RouteGuards'
 import { ToastProvider } from './components/Toast'
+import { ThemeProvider } from './hooks/ThemeProvider'
 import DashboardLayout from './layouts/DashboardLayout'
 import Checkout from './pages/Checkout'
 import CreatePayment from './pages/CreatePayment'
@@ -22,6 +23,8 @@ import FaceRegistration from './pages/FaceRegistration'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import MerchantPaymentSession from './pages/MerchantPaymentSession'
+import MerchantReconciliation from './pages/MerchantReconciliation'
+import MerchantRequests from './pages/MerchantRequests'
 import PayRequest from './pages/PayRequest'
 import Profile from './pages/Profile'
 import ReceiptPage from './pages/ReceiptPage'
@@ -33,8 +36,8 @@ function NotFound() {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-3 px-6 text-center">
       <Logo className="text-lg" />
-      <h1 className="mt-4 text-2xl font-extrabold">Page not found</h1>
-      <p className="text-sm text-slate-600">That page does not exist or has moved.</p>
+      <h1 className="mt-4 text-2xl font-bold">Page not found</h1>
+      <p className="text-sm text-muted">That page does not exist or has moved.</p>
       <ButtonLink to="/" variant="secondary" className="mt-2">Back to FacePay</ButtonLink>
     </main>
   )
@@ -42,6 +45,7 @@ function NotFound() {
 
 export default function AppRoutes() {
   return (
+    <ThemeProvider>
     <ToastProvider>
     <Routes>
       <Route path="/" element={<Home />} />
@@ -80,6 +84,8 @@ export default function AppRoutes() {
           <Route path="/merchant/dashboard" element={<MerchantDashboard />} />
           <Route path="/merchant/profile" element={<Profile />} />
           <Route path="/merchant/transactions" element={<Transactions />} />
+          <Route path="/merchant/payments" element={<MerchantRequests />} />
+          <Route path="/merchant/reconciliation" element={<MerchantReconciliation />} />
           <Route path="/merchant/payments/new" element={<CreatePayment />} />
           <Route path="/merchant/payments/face" element={<RequestByFace />} />
           <Route path="/merchant/payments/:sessionId" element={<MerchantPaymentSession />} />
@@ -96,5 +102,6 @@ export default function AppRoutes() {
       <Route path="*" element={<NotFound />} />
     </Routes>
     </ToastProvider>
+    </ThemeProvider>
   )
 }

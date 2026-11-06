@@ -37,11 +37,11 @@ function ConnectFlow({ catalog, onDone, onCancel }) {
               <button
                 type="button"
                 onClick={() => setBank(b)}
-                className="flex min-h-14 w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-brand-300 hover:bg-brand-50/40 focus-visible:outline-2"
+                className="flex min-h-14 w-full items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2 text-left transition hover:border-brand-300 hover:bg-brand-50/40 focus-visible:outline-2"
               >
                 <BankMark bank={b} />
                 <span className="min-w-0 flex-1 truncate font-semibold">{b.name}</span>
-                <Icon name="chevron" className="h-4 w-4 shrink-0 text-slate-400" />
+                <Icon name="chevron" className="h-4 w-4 shrink-0 text-subtle" />
               </button>
             </li>
           ))}
@@ -57,18 +57,18 @@ function ConnectFlow({ catalog, onDone, onCancel }) {
         <BankMark bank={bank} size="h-12 w-12 text-xs" />
         <div className="min-w-0">
           <p className="font-bold leading-tight">{bank.name}</p>
-          <p className="text-xs font-semibold text-amber-900">Simulated connection</p>
+          <p className="text-xs font-semibold text-warning-ink">Simulated connection</p>
         </div>
       </div>
       <DemoNotice className="mt-3" />
-      <p className="mt-3 text-sm text-slate-700">
+      <p className="mt-3 text-sm text-fg">
         FacePay does not open {bank.name}, ask you to sign in or ask for any bank detail. Pick a demo account profile and FacePay will create a demo record you can pay from.
       </p>
       <fieldset className="mt-4">
         <legend className="text-sm font-semibold">Demo account profile</legend>
         <div className="mt-2 flex flex-col gap-2">
           {catalog.account_types.map((t) => (
-            <label key={t.code} className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border px-3.5 py-2.5 transition ${accountType === t.code ? 'border-brand-600 bg-brand-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+            <label key={t.code} className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border px-3.5 py-2.5 transition ${accountType === t.code ? 'border-brand-600 bg-brand-50' : 'border-line bg-surface hover:border-line-strong'}`}>
               <input type="radio" name="account-type" value={t.code} checked={accountType === t.code} onChange={() => setAccountType(t.code)} className="h-4 w-4 accent-brand-700" />
               <span className="font-semibold">{t.label}</span>
             </label>
@@ -86,16 +86,16 @@ function ConnectFlow({ catalog, onDone, onCancel }) {
 
 function ConnectionCard({ c, bank, onDefault, onAskDisconnect, busy }) {
   return (
-    <li className="flex flex-col gap-3 rounded-[1.25rem] border border-slate-200/80 bg-white p-4 shadow-card">
+    <li className="flex flex-col gap-3 rounded-2xl border border-line/80 bg-surface p-4 shadow-card">
       <div className="flex items-center gap-3">
         <BankMark bank={bank ?? { short: c.bank_code.toUpperCase().slice(0, 4) }} size="h-12 w-12 text-xs" />
         <div className="min-w-0 flex-1">
           <p className="truncate font-bold leading-tight">{c.bank_name}</p>
-          <p className="text-sm text-slate-700">{c.account_type_label}</p>
-          <p className="font-mono text-xs text-slate-600">{c.account_ref}</p>
+          <p className="text-sm text-fg">{c.account_type_label}</p>
+          <p className="font-mono text-xs text-muted">{c.account_ref}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 ring-1 ring-inset ring-emerald-200">
+          <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2.5 py-0.5 text-xs font-semibold text-success-ink ring-1 ring-inset ring-success-line">
             <Icon name="check" className="h-3 w-3" strokeWidth="2.4" />Demo connected
           </span>
           {c.is_default && <span className="rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-semibold text-brand-800 ring-1 ring-inset ring-brand-200">Default</span>}
@@ -189,11 +189,11 @@ export default function Banks() {
           <Button size="lg" onClick={() => setAdding(true)} disabled={!catalog.data || full}>
             <Icon name="plus" className="h-4 w-4" strokeWidth="2.4" />Connect a demo bank
           </Button>
-          {full && <p className="text-center text-xs text-slate-600">You can connect up to {catalog.data.max_connected} demo accounts. Disconnect one to add another.</p>}
+          {full && <p className="text-center text-xs text-muted">You can connect up to {catalog.data.max_connected} demo accounts. Disconnect one to add another.</p>}
           {catalog.error && <Alert tone="error">The bank list could not load. {catalog.error}</Alert>}
         </>
       )}
-      <p className="text-center text-xs text-slate-600">A linked bank is never proof of funds: FacePay shows no balance and moves no money.</p>
+      <p className="text-center text-xs text-muted">A linked bank is never proof of funds: FacePay shows no balance and moves no money.</p>
     </div>
   )
 }

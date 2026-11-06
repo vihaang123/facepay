@@ -41,7 +41,7 @@ function AmountStep({ recipient, onBack }) {
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-5">
       <PersonCard name={recipient.display_name} maskedId={recipient.masked_id} caption="Paying" />
-      <div className="flex flex-col gap-4 rounded-[1.25rem] border border-slate-200/80 bg-white p-5 shadow-card">
+      <div className="flex flex-col gap-4 rounded-2xl border border-line/80 bg-surface p-5 shadow-card">
         {formError && <Alert tone="error">{formError}</Alert>}
         <FormField
           label="Amount (₹)"
@@ -59,7 +59,7 @@ function AmountStep({ recipient, onBack }) {
         <Button size="lg" type="submit" loading={busy}>Review payment</Button>
         <Button variant="ghost" onClick={onBack} disabled={busy}>Change recipient</Button>
       </div>
-      <p className="text-center text-xs text-slate-600">Next you verify your face, pick the demo bank account to pay from and confirm. Nothing is sent until you confirm.</p>
+      <p className="text-center text-xs text-muted">Next you verify your face, pick the demo bank account to pay from and confirm. Nothing is sent until you confirm.</p>
     </form>
   )
 }
@@ -78,11 +78,11 @@ export default function Send() {
   return (
     <div className="mx-auto flex max-w-md flex-col gap-5">
       <div>
-        <h1 className="text-2xl font-extrabold tracking-tight">Send money</h1>
-        <p className="mt-1 text-sm text-slate-600">Simulated payment to another FacePay customer.</p>
+        <h1 className="text-2xl font-bold tracking-tight">Send money</h1>
+        <p className="mt-1 text-sm text-muted">Simulated payment to another FacePay customer.</p>
       </div>
       {linked && lookup.loading ? (
-        <div role="status" aria-label="Finding recipient"><Skeleton className="h-24 w-full !rounded-[1.25rem]" /></div>
+        <div role="status" aria-label="Finding recipient"><Skeleton className="h-24 w-full !rounded-2xl" /></div>
       ) : recipient ? (
         <AmountStep recipient={recipient} onBack={() => { setPicked(null); setDismissed(true) }} />
       ) : (

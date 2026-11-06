@@ -28,10 +28,10 @@ function RequestFound({ request, onPaid, onBack }) {
   }
   const mine = request.direction === 'INCOMING'
   return (
-    <section aria-label="Scanned request" className="flex flex-col gap-3 rounded-[1.25rem] border border-brand-200 bg-brand-50/50 p-5">
+    <section aria-label="Scanned request" className="flex flex-col gap-3 rounded-2xl border border-brand-200 bg-brand-50/50 p-5">
       <PersonCard name={request.counterparty_name} maskedId={request.counterparty_masked_id} caption={mine ? 'Is asking you for' : 'You asked'} />
-      <p className="amount text-3xl font-extrabold">{formatMoney(request.amount, request.currency)}</p>
-      {request.note && <p className="text-sm text-slate-700">{request.note}</p>}
+      <p className="amount text-3xl font-bold">{formatMoney(request.amount, request.currency)}</p>
+      {request.note && <p className="text-sm text-fg">{request.note}</p>}
       <StatusBadge status={request.status} />
       {error && <Alert tone="error">{error}</Alert>}
       {request.payable && mine ? <Button size="lg" onClick={pay} loading={busy}>Review and pay</Button> : <Alert tone="info">{mine ? 'This request can no longer be paid.' : 'This is your own request. The other person pays it from their app.'}</Alert>}
@@ -154,15 +154,15 @@ export default function Scan() {
   return (
     <div className="mx-auto flex max-w-md flex-col gap-5">
       <div>
-        <h1 className="text-2xl font-extrabold tracking-tight">Scan QR</h1>
-        <p className="mt-1 text-sm text-slate-600">Scan a FacePay QR code to pay someone or answer a request.</p>
+        <h1 className="text-2xl font-bold tracking-tight">Scan QR</h1>
+        <p className="mt-1 text-sm text-muted">Scan a FacePay QR code to pay someone or answer a request.</p>
       </div>
 
       {request ? (
         <RequestFound request={request} onPaid={(sid) => navigate(CHECKOUT_PATH(sid))} onBack={() => { setRequest(null); setError(null) }} />
       ) : (
         <>
-          <section aria-label="Scanner" className="overflow-hidden rounded-[1.5rem] bg-ink shadow-card">
+          <section aria-label="Scanner" className="overflow-hidden rounded-3xl bg-fg shadow-card">
             <div className="relative aspect-square">
               <video ref={videoRef} muted playsInline aria-label="Camera preview" className={`h-full w-full object-cover ${camera === 'on' ? '' : 'hidden'}`} />
               <canvas ref={canvasRef} className="hidden" />
@@ -180,7 +180,7 @@ export default function Scan() {
           {checking && <Alert tone="info">Checking the code…</Alert>}
           {error && <Alert tone="error">{error}</Alert>}
 
-          <form onSubmit={submitManual} noValidate className="flex flex-col gap-3 rounded-[1.25rem] border border-slate-200/80 bg-white p-5 shadow-card">
+          <form onSubmit={submitManual} noValidate className="flex flex-col gap-3 rounded-2xl border border-line/80 bg-surface p-5 shadow-card">
             <FormField label="Or enter a FacePay ID" id="manual-code" value={manual} onChange={(e) => { setManual(e.target.value); setError(null) }} autoComplete="off" autoCapitalize="none" spellCheck={false} placeholder="ravi.shah@facepay" />
             <Button type="submit" variant="secondary" loading={checking}>Continue</Button>
           </form>

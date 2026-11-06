@@ -48,7 +48,7 @@ export const createPaymentSession = (token, { amount, orderReference, descriptio
     json: { amount, order_reference: orderReference, ...(description ? { description } : {}), expires_in_minutes: expiresInMinutes, ...(discoverable ? { discoverable: true } : {}) },
   })
 export const getPaymentSession = (token, sessionId) => apiFetch(`/merchant/payment-sessions/${enc(sessionId)}`, { token })
-export const listPaymentSessions = (token, limit = 10) => apiFetch(`/merchant/payment-sessions?limit=${limit}`, { token })
+export const listPaymentSessions = (token, limit = 10, status = '') => apiFetch(`/merchant/payment-sessions?limit=${limit}${status ? `&status=${encodeURIComponent(status)}` : ''}`, { token })
 export const cancelPaymentSession = (token, sessionId) =>
   apiFetch(`/merchant/payment-sessions/${enc(sessionId)}/cancel`, { method: 'POST', token })
 export const getMerchantTransactions = (token, params = { limit: 10 }) => apiFetch(`/merchant/transactions${query(params)}`, { token })

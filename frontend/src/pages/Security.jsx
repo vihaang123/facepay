@@ -36,9 +36,9 @@ function Switch({ checked, onChange, disabled, label, describedBy }) {
   return (
     <button
       type="button" role="switch" aria-checked={checked} aria-label={label} aria-describedby={describedBy} disabled={disabled} onClick={onChange}
-      className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full border transition disabled:opacity-60 ${checked ? 'border-brand-700 bg-brand-700' : 'border-slate-400 bg-slate-200'}`}
+      className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full border transition disabled:opacity-60 ${checked ? 'border-brand-700 bg-brand-700' : 'border-line-strong bg-track'}`}
     >
-      <span aria-hidden="true" className={`inline-block h-6 w-6 rounded-full bg-white shadow transition-transform motion-reduce:transition-none ${checked ? 'translate-x-7' : 'translate-x-1'}`} />
+      <span aria-hidden="true" className={`inline-block h-6 w-6 rounded-full bg-surface shadow transition-transform motion-reduce:transition-none ${checked ? 'translate-x-7' : 'translate-x-1'}`} />
     </button>
   )
 }
@@ -71,7 +71,7 @@ function PinCard({ overview, token, onChanged }) {
 
   return (
     <Card title="Payment PIN">
-      <p className="text-sm text-slate-700">
+      <p className="text-sm text-fg">
         An optional 6-digit PIN. It is only asked for on payments that look higher risk, such as a large amount or several recent failed face checks. It is not needed for every payment.
       </p>
       <p className="mt-2 text-sm font-semibold" data-testid="pin-state">{overview.pin_set ? 'A payment PIN is set.' : 'No payment PIN is set.'}</p>
@@ -135,7 +135,7 @@ export default function Security() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="font-semibold" id="biometric-label">Face authentication for payments</p>
-            <p className="mt-1 text-sm text-slate-700" id="biometric-help">
+            <p className="mt-1 text-sm text-fg" id="biometric-help">
               {o.biometric_enabled ? 'On. You can pay by verifying your face and confirming.' : 'Off. FacePay will not use your face to authorize payments until you turn this back on.'}
             </p>
           </div>
@@ -145,8 +145,8 @@ export default function Security() {
           />
         </div>
         <dl className="mt-4 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-          <div><dt className="inline text-slate-600">Face setup: </dt><dd className="inline font-semibold">{o.face_enrolled ? 'Complete' : 'Not set up'}</dd></div>
-          <div><dt className="inline text-slate-600">Last successful face check: </dt><dd className="inline font-semibold">{o.last_successful_authentication ? formatDateTime(o.last_successful_authentication) : 'None yet'}</dd></div>
+          <div><dt className="inline text-muted">Face setup: </dt><dd className="inline font-semibold">{o.face_enrolled ? 'Complete' : 'Not set up'}</dd></div>
+          <div><dt className="inline text-muted">Last successful face check: </dt><dd className="inline font-semibold">{o.last_successful_authentication ? formatDateTime(o.last_successful_authentication) : 'None yet'}</dd></div>
         </dl>
         {o.biometric_locked_seconds > 0 && (
           <div className="mt-3"><Alert tone="error">Too many unsuccessful attempts. Please try again in about {minutes(o.biometric_locked_seconds)} minutes or use another verification method.</Alert></div>
@@ -157,29 +157,29 @@ export default function Security() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="font-semibold" id="lookup-label">Let shops and friends find me by face</p>
-            <p className="mt-1 text-sm text-slate-700" id="lookup-help">
+            <p className="mt-1 text-sm text-fg" id="lookup-help">
               {o.face_lookup_enabled
                 ? 'On. Someone who points their camera at you can see your name and a masked FacePay ID, and send you a payment request.'
                 : 'Off. Nobody can find you with a camera. People can still ask you for money with your FacePay ID.'}
             </p>
-            <p className="mt-1 text-sm text-slate-700">Finding you never takes money. Every request needs your own face check and your confirmation, and you can decline any of them.</p>
+            <p className="mt-1 text-sm text-fg">Finding you never takes money. Every request needs your own face check and your confirmation, and you can decline any of them.</p>
           </div>
           <Switch
             checked={Boolean(o.face_lookup_enabled)} disabled={busy !== null || !o.face_enrolled} label="Let shops and friends find me by face" describedBy="lookup-help"
             onChange={() => act('lookup', () => setFaceLookup(token, !o.face_lookup_enabled), o.face_lookup_enabled ? 'You can no longer be found by face.' : 'People can now find you by face.')}
           />
         </div>
-        {!o.face_enrolled && <p className="mt-3 text-sm text-slate-700">Finish face setup first.</p>}
+        {!o.face_enrolled && <p className="mt-3 text-sm text-fg">Finish face setup first.</p>}
       </Card>
 
       <PinCard overview={o} token={token} onChanged={reload} />
 
       <Card title="Your face data">
-        <p className="text-sm text-slate-700">
+        <p className="text-sm text-fg">
           {o.samples_stored > 0 ? `${o.samples_stored} small encrypted grayscale crops are stored. Camera frames are never kept.` : 'No face data is stored for you.'}
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <Link className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-800 hover:bg-slate-50" to={FACE_PATH}>{o.face_enrolled ? 'Re-enroll my face' : 'Set up my face'}</Link>
+          <Link className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line-strong bg-surface px-5 text-sm font-semibold text-fg hover:bg-sunken" to={FACE_PATH}>{o.face_enrolled ? 'Re-enroll my face' : 'Set up my face'}</Link>
           <Button variant="secondary" onClick={() => setConfirmRemove(true)} disabled={!o.samples_stored || busy !== null || confirmRemove}>Remove my face data</Button>
         </div>
         {confirmRemove && (
@@ -197,21 +197,21 @@ export default function Security() {
 
       <Card title="Limits">
         <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-          <div><dt className="inline text-slate-600">Per payment: </dt><dd className="inline font-semibold">{formatMoney(o.limits.per_transaction, o.limits.currency)}</dd></div>
-          <div><dt className="inline text-slate-600">Per day: </dt><dd className="inline font-semibold">{formatMoney(o.limits.daily, o.limits.currency)}</dd></div>
-          <div><dt className="inline text-slate-600">Spent in the last 24 hours: </dt><dd className="inline font-semibold">{formatMoney(o.limits.spent_last_24h, o.limits.currency)}</dd></div>
-          <div><dt className="inline text-slate-600">PIN asked from: </dt><dd className="inline font-semibold">{formatMoney(o.limits.step_up_amount, o.limits.currency)}</dd></div>
+          <div><dt className="inline text-muted">Per payment: </dt><dd className="inline font-semibold">{formatMoney(o.limits.per_transaction, o.limits.currency)}</dd></div>
+          <div><dt className="inline text-muted">Per day: </dt><dd className="inline font-semibold">{formatMoney(o.limits.daily, o.limits.currency)}</dd></div>
+          <div><dt className="inline text-muted">Spent in the last 24 hours: </dt><dd className="inline font-semibold">{formatMoney(o.limits.spent_last_24h, o.limits.currency)}</dd></div>
+          <div><dt className="inline text-muted">PIN asked from: </dt><dd className="inline font-semibold">{formatMoney(o.limits.step_up_amount, o.limits.currency)}</dd></div>
         </dl>
-        <p className="mt-3 text-xs text-slate-600">{o.risk_label}. A payment above the PIN amount, or after several failed face checks, may ask for your PIN. A confirmation lasts {o.limits.authorization_seconds} seconds and works once.</p>
+        <p className="mt-3 text-xs text-muted">{o.risk_label}. A payment above the PIN amount, or after several failed face checks, may ask for your PIN. A confirmation lasts {o.limits.authorization_seconds} seconds and works once.</p>
       </Card>
 
       <Card title="Recent face checks">
-        {o.recent_attempts.length === 0 ? <p className="text-sm text-slate-700">No face checks yet.</p> : (
-          <ul className="divide-y divide-slate-100 text-sm">
+        {o.recent_attempts.length === 0 ? <p className="text-sm text-fg">No face checks yet.</p> : (
+          <ul className="divide-y divide-line text-sm">
             {o.recent_attempts.map((a, i) => (
               <li key={`${a.timestamp}-${i}`} className="flex flex-wrap items-baseline justify-between gap-2 py-2">
-                <span><span className={`font-semibold ${a.result === 'SUCCESS' ? 'text-emerald-800' : 'text-rose-800'}`}>{a.result === 'SUCCESS' ? 'Successful' : 'Unsuccessful'}</span>{a.category ? `: ${a.category}` : ''}</span>
-                <span className="text-xs text-slate-600">{formatDateTime(a.timestamp)}{a.transaction_ref ? ` · ${a.transaction_ref}` : ''}</span>
+                <span><span className={`font-semibold ${a.result === 'SUCCESS' ? 'text-success-ink' : 'text-danger-ink'}`}>{a.result === 'SUCCESS' ? 'Successful' : 'Unsuccessful'}</span>{a.category ? `: ${a.category}` : ''}</span>
+                <span className="text-xs text-muted">{formatDateTime(a.timestamp)}{a.transaction_ref ? ` · ${a.transaction_ref}` : ''}</span>
               </li>
             ))}
           </ul>
@@ -219,12 +219,12 @@ export default function Security() {
       </Card>
 
       <Card title="Recent payments">
-        {o.recent_transactions.length === 0 ? <p className="text-sm text-slate-700">No payments yet.</p> : (
-          <ul className="divide-y divide-slate-100 text-sm">
+        {o.recent_transactions.length === 0 ? <p className="text-sm text-fg">No payments yet.</p> : (
+          <ul className="divide-y divide-line text-sm">
             {o.recent_transactions.map((t) => (
               <li key={t.transaction_id} className="flex flex-wrap items-baseline justify-between gap-2 py-2">
                 <Link className="font-semibold text-brand-800 underline" to={RECEIPT_PATH.customer(t.transaction_id)}>{t.merchant_name}</Link>
-                <span>{formatMoney(t.amount, o.limits.currency)}<span className="ml-2 text-xs text-slate-600">{formatDateTime(t.timestamp)}</span></span>
+                <span>{formatMoney(t.amount, o.limits.currency)}<span className="ml-2 text-xs text-muted">{formatDateTime(t.timestamp)}</span></span>
               </li>
             ))}
           </ul>
@@ -232,12 +232,12 @@ export default function Security() {
       </Card>
 
       <Card title="Security activity">
-        {o.recent_events.length === 0 ? <p className="text-sm text-slate-700">Nothing to show yet.</p> : (
-          <ul className="divide-y divide-slate-100 text-sm">
+        {o.recent_events.length === 0 ? <p className="text-sm text-fg">Nothing to show yet.</p> : (
+          <ul className="divide-y divide-line text-sm">
             {o.recent_events.map((e, i) => (
               <li key={`${e.timestamp}-${i}`} className="flex flex-wrap items-baseline justify-between gap-2 py-2">
                 <span>{EVENT_LABELS[e.kind] ?? 'Account activity'}</span>
-                <span className="text-xs text-slate-600">{formatDateTime(e.timestamp)}</span>
+                <span className="text-xs text-muted">{formatDateTime(e.timestamp)}</span>
               </li>
             ))}
           </ul>

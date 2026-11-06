@@ -12,31 +12,31 @@ import { shareFacePayId } from '../utils/share'
 function Signed({ a }) {
   const done = a.status === 'SUCCESS'
   const sign = !done ? '' : a.direction === 'RECEIVED' ? '+' : a.direction === 'SENT' ? '−' : ''
-  const tone = !done ? 'text-slate-500' : a.direction === 'RECEIVED' ? 'text-emerald-800' : ''
-  return <span className={`amount font-extrabold ${tone}`}>{sign}{formatMoney(a.amount, a.currency)}</span>
+  const tone = !done ? 'text-muted' : a.direction === 'RECEIVED' ? 'text-success-ink' : ''
+  return <span className={`amount font-bold ${tone}`}>{sign}{formatMoney(a.amount, a.currency)}</span>
 }
 
 export function ActivityRow({ a }) {
   return (
     <li>
-      <Link to={ACTIVITY_DETAIL_PATH(a.ref)} className="flex items-center gap-3 rounded-xl px-1 py-3 transition hover:bg-slate-50 active:bg-slate-100">
-        <Avatar name={a.counterparty_name ?? '?'} />
+      <Link to={ACTIVITY_DETAIL_PATH(a.ref)} className="flex items-center gap-3 rounded-xl px-1 py-3 transition hover:bg-sunken active:bg-sunken">
+        <Avatar name={a.counterparty_name ?? '?'} size="h-10 w-10 text-xs" />
         <div className="min-w-0 flex-1">
-          <p className="truncate font-bold">{activityTitle(a)}</p>
-          <p className="truncate text-xs text-slate-600">{a.note ? `${a.note} · ` : a.order_reference ? `${a.order_reference} · ` : ''}{formatFeedTime(a.timestamp)}{a.funding_source ? ` · from ${a.funding_source.split(' · ')[0]}` : ''}</p>
+          <p className="line-clamp-2 break-words font-semibold leading-snug">{activityTitle(a)}</p>
+          <p className="truncate text-xs text-muted">{a.note ? `${a.note} · ` : a.order_reference ? `${a.order_reference} · ` : ''}{formatFeedTime(a.timestamp)}{a.funding_source ? ` · from ${a.funding_source.split(' · ')[0]}` : ''}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           <Signed a={a} />
           <StatusBadge status={a.status} />
         </div>
-        <Icon name="chevron" className="h-4 w-4 shrink-0 text-slate-400" />
+        <Icon name="chevron" className="hidden h-4 w-4 shrink-0 text-subtle sm:block" />
       </Link>
     </li>
   )
 }
 
 export function ActivityList({ rows, label = 'Activity' }) {
-  return <ul aria-label={label} className="divide-y divide-slate-100">{rows.map((a) => <ActivityRow key={a.ref} a={a} />)}</ul>
+  return <ul aria-label={label} className="divide-y divide-line">{rows.map((a) => <ActivityRow key={a.ref} a={a} />)}</ul>
 }
 
 export function NoActivity({ filtered = false }) {
@@ -79,12 +79,12 @@ export function IdChip({ id, name, onNotice, size = 'md' }) {
 /** Who the money goes to or comes from: name and masked ID only, as the server resolved them. */
 export function PersonCard({ name, maskedId, caption }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">
+    <div className="flex items-center gap-3 rounded-xl bg-sunken p-3">
       <Avatar name={name} size="h-12 w-12 text-base" />
       <div className="min-w-0">
-        {caption && <p className="text-xs text-slate-600">{caption}</p>}
+        {caption && <p className="text-xs text-muted">{caption}</p>}
         <p className="truncate text-lg font-bold leading-tight">{name}</p>
-        {maskedId && <p className="font-mono text-xs text-slate-600">{maskedId}</p>}
+        {maskedId && <p className="font-mono text-xs text-muted">{maskedId}</p>}
       </div>
     </div>
   )
