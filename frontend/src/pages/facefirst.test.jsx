@@ -10,14 +10,14 @@ const DISCLAIMER = 'Demo connection only. No real bank account is accessed and n
 
 const conn = (id, bank, over = {}) => ({
   connection_id: id, bank_code: bank.toLowerCase(), bank_name: `${bank} Bank`, account_type: 'SAVINGS', account_type_label: 'Savings account',
-  account_ref: 'DEMO-••••-4821', is_default: false, status: 'CONNECTED', connected_at: '2026-10-07T10:00:00Z', disclaimer: DISCLAIMER, ...over,
+  account_ref: 'DEMO-••••-4821', is_default: false, status: 'CONNECTED', connected_at: '2026-10-07T10:00:00Z', disclaimer: DISCLAIMER,
+  holder_name: 'ASHA RAO', ifsc: 'DEMO0123456', branch: 'Demo Branch, Fort, Mumbai', link_status: 'LINKED', link_status_label: 'Linked (simulated)', ...over,
 })
 const CATALOG = {
   banks: [
     { code: 'sbi', name: 'State Bank of India', short: 'SBI', color: '#1d4f91' },
     { code: 'hdfc', name: 'HDFC Bank', short: 'HDFC', color: '#0b3d7a' },
   ],
-  account_types: [{ code: 'SAVINGS', label: 'Savings account' }, { code: 'CURRENT', label: 'Current account' }],
   max_connected: 5, disclaimer: DISCLAIMER,
 }
 
@@ -35,33 +35,77 @@ describe('connected bank accounts', () => {
     expect(within(list).getAllByRole('listitem')).toHaveLength(2)
     expect(list).toHaveTextContent('HDFC Bank')
     expect(list).toHaveTextContent('DEMO-••••-4821')
-    expect(within(list).getAllByText('Demo connected')).toHaveLength(2)
+    expect(within(list).getAllByText('Linked (simulated)')).toHaveLength(2)
     expect(within(list).getAllByText('Default')).toHaveLength(1)
     expect(screen.getAllByText(DISCLAIMER).length).toBeGreaterThan(0)
     expect(document.body.textContent).not.toMatch(/₹\s?\d/) // a linked bank is never shown with an amount or as proof of funds
   })
 
-  it('connects a bank by choosing it and a demo profile, sends only codes, and never asks for credentials', async () => {
+  it('links a bank by choosing only the bank, shows what the server found, and never asks for credentials or account details', async () => {
     const user = userEvent.setup()
     storeSession('customer')
     let banks = []
+    const found = conn('bk_9', 'SBI', { is_default: true, bank_name: 'State Bank of India', bank_code: 'sbi', account_ref: 'DEMO-••••-0731', holder_name: 'ASHA RAO', ifsc: 'DEMO0555123', branch: 'Demo Branch, MG Road, Bengaluru', account_type_label: 'Salary account' })
     const api = mockApi(routes({
       'GET /banks': () => ({ body: banks }),
-      'POST /banks': ({ body }) => { banks = [conn('bk_9', 'SBI', { is_default: true, bank_name: 'State Bank of India', bank_code: body.bank_code, account_type: body.account_type })]; return { status: 201, body: banks[0] } },
+      'POST /banks': () => { banks = [found]; return { status: 201, body: found } },
     }))
     renderApp('/banks')
     await user.click(await screen.findByRole('button', { name: /Connect a demo bank/ }))
     await user.click(await screen.findByRole('button', { name: /State Bank of India/ }))
-    expect(screen.getByText('Simulated connection')).toBeInTheDocument()
+    expect(screen.getByText('Simulated lookup')).toBeInTheDocument()
     expect(screen.getAllByText(DISCLAIMER).length).toBeGreaterThan(0)
-    // nothing that looks like a bank sign-in
-    expect(screen.queryByLabelText(/password|pin|otp|card|account number|user ?id|customer id/i)).not.toBeInTheDocument()
-    expect(document.querySelector('input[type="password"], input[type="text"]')).toBeNull()
-    expect(screen.getByRole('button', { name: 'Create demo connection' })).toBeDisabled()
-    await user.click(screen.getByRole('radio', { name: 'Savings account' }))
-    await user.click(screen.getByRole('button', { name: 'Create demo connection' }))
-    expect(api.callsTo('POST /banks')[0].body).toEqual({ bank_code: 'sbi', account_type: 'SAVINGS' })
-    expect(await screen.findByRole('list', { name: 'Connected bank accounts' })).toHaveTextContent('State Bank of India')
+    expect(screen.getByText(/never asks for a bank password, UPI PIN, card detail, Aadhaar number or bank OTP/)).toBeInTheDocument()
+    // nothing to type: no inputs, no account type to pick
+    expect(document.querySelector('input, select, textarea')).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Find and link my account' }))
+    // the confirmation shows exactly what the server returned
+    const card = await screen.findByRole('region', { name: 'Account linked' })
+    expect(within(card).getAllByText('State Bank of India').length).toBeGreaterThan(0)
+    for (const text of ['ASHA RAO', 'DEMO-••••-0731', 'Salary account', 'DEMO0555123', 'Demo Branch, MG Road, Bengaluru', 'Linked (simulated)', 'Default']) {
+      expect(within(card).getByText(text)).toBeInTheDocument()
+    }
+    expect(api.callsTo('POST /banks')[0].body).toEqual({ bank_code: 'sbi' })
+    await user.click(within(card).getByRole('button', { name: 'Done' }))
+    const list = await screen.findByRole('list', { name: 'Connected bank accounts' })
+    expect(list).toHaveTextContent('State Bank of India')
+    expect(list).toHaveTextContent('ASHA RAO')
+  })
+
+  it('shows only the details the provider returned and leaves the rest out', async () => {
+    const user = userEvent.setup()
+    storeSession('customer')
+    const found = conn('bk_9', 'SBI', { is_default: true, bank_name: 'State Bank of India', ifsc: null, branch: null, link_status_label: 'Linked' })
+    mockApi(routes({ 'GET /banks': { body: [] }, 'POST /banks': { status: 201, body: found } }))
+    renderApp('/banks')
+    await user.click(await screen.findByRole('button', { name: /Connect a demo bank/ }))
+    await user.click(await screen.findByRole('button', { name: /State Bank of India/ }))
+    await user.click(screen.getByRole('button', { name: 'Find and link my account' }))
+    const card = await screen.findByRole('region', { name: 'Account linked' })
+    expect(within(card).queryByText('IFSC')).not.toBeInTheDocument()
+    expect(within(card).queryByText('Branch')).not.toBeInTheDocument()
+    expect(within(card).getByText('Linked')).toBeInTheDocument()
+    expect(within(card).getByText('Account holder')).toBeInTheDocument()
+  })
+
+  it('says plainly when the lookup fails and lets the person try again', async () => {
+    const user = userEvent.setup()
+    storeSession('customer')
+    let calls = 0
+    mockApi(routes({
+      'GET /banks': { body: [] },
+      'POST /banks': () => (++calls === 1
+        ? { status: 503, body: { detail: { code: 'DISCOVERY_UNAVAILABLE', message: 'We could not look up your account right now. Nothing was linked. Please try again.' } } }
+        : { status: 201, body: conn('bk_9', 'SBI', { is_default: true, bank_name: 'State Bank of India' }) }),
+    }))
+    renderApp('/banks')
+    await user.click(await screen.findByRole('button', { name: /Connect a demo bank/ }))
+    await user.click(await screen.findByRole('button', { name: /State Bank of India/ }))
+    await user.click(screen.getByRole('button', { name: 'Find and link my account' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Nothing was linked')
+    expect(screen.queryByRole('region', { name: 'Account linked' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Find and link my account' }))
+    expect(await screen.findByRole('region', { name: 'Account linked' })).toBeInTheDocument()
   })
 
   it('changes the default and disconnects after asking', async () => {

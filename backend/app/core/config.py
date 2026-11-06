@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     request_ttl_days: int = 7  # a money request that nobody pays expires after this long
     facepay_id_change_cooldown_days: int = 30  # a customer may rename their FacePay ID this rarely
     resolve_rate_limit_per_minute: int = 20  # FacePay ID lookups per customer (limits guessing which IDs exist)
+    # Which bank account-discovery provider links a customer's account. Only 'simulated' exists; a real, authorised provider
+    # would be registered in app/services/bank_discovery.py and selected here.
+    bank_discovery_provider: str = "simulated"
     transfer_rate_limit_per_minute: int = 20  # creating transfers and money requests per customer
     face_lookup_rate_limit_per_minute: int = 8  # "find a customer by face" scans per signed-in requester (customer or shop)
     face_lookup_ttl_seconds: int = 180  # how long a found customer can be asked for money before the scan must be repeated

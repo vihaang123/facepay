@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core import banks, upi
 from app.models import BankConnection, User
-from app.services import security_service as sec
+from app.services import bank_discovery, security_service as sec
 
 
 def _err(status_code: int, code: str, message: str) -> HTTPException:
@@ -33,6 +33,13 @@ def out(c: BankConnection) -> dict:
         "is_default": c.is_default,
         "status": c.status,
         "connected_at": c.created_at,
+        # What the discovery provider returned, stored with the link. None = the provider did not return it.
+        "holder_name": c.holder_name,
+        "ifsc": c.ifsc,
+        "branch": c.branch,
+        "discovery_source": c.discovery_source,
+        "link_status": "LINKED",
+        "link_status_label": "Linked (simulated)" if c.discovery_source == "SIMULATED" else "Linked",
         "sim_behavior": c.sim_behavior,
         "sim_behavior_label": upi.BEHAVIORS.get(c.sim_behavior, c.sim_behavior),
         "disclaimer": banks.DEMO_DISCLAIMER,
@@ -42,7 +49,6 @@ def out(c: BankConnection) -> dict:
 def catalog() -> dict:
     return {
         "banks": banks.catalog(),
-        "account_types": [{"code": k, "label": v} for k, v in banks.ACCOUNT_TYPES.items()],
         "max_connected": banks.MAX_CONNECTED_BANKS,
         "behaviors": [{"code": k, "label": v} for k, v in upi.BEHAVIORS.items()],
         "behavior_note": upi.BEHAVIOR_NOTE,
@@ -82,26 +88,47 @@ def _owned(db: Session, user: User, connection_id: str, *, lock: bool = False) -
     return c
 
 
-def connect(db: Session, user: User, *, bank_code: str, account_type: str) -> dict:
+def _discover(user: User, bank_code: str, bank_name: str) -> bank_discovery.DiscoveredAccount:
+    """Asks the configured provider for this customer's account at the bank. Done before any row lock is taken, because a real
+    provider is a network call. Nothing is stored here."""
+    try:
+        found = bank_discovery.get_provider().discover(
+            bank_discovery.DiscoveryRequest(user_id=user.id, bank_code=bank_code, bank_name=bank_name, mobile=user.mobile, customer_name=user.name)
+        )
+        if not found:
+            raise bank_discovery.NoAccountFound
+        return bank_discovery.validate(found[0])
+    except bank_discovery.NoAccountFound:
+        raise _err(404, "NO_ACCOUNT_FOUND", f"{bank_name} has no account linked to your details. Nothing was linked.") from None
+    except bank_discovery.DiscoveryUnavailable:
+        raise _err(503, "DISCOVERY_UNAVAILABLE", "We could not look up your account right now. Nothing was linked. Please try again.") from None
+
+
+def connect(db: Session, user: User, *, bank_code: str) -> dict:
+    """Links the customer's account at the chosen bank. The customer supplies only the bank: the holder name, account type,
+    number, IFSC and branch all come from the discovery provider, never from the client."""
     bank = banks.BANKS.get(bank_code)
     if bank is None:
         raise _err(422, "BANK_UNKNOWN", "Choose a bank from the list.")
-    if account_type not in banks.ACCOUNT_TYPES:
-        raise _err(422, "ACCOUNT_TYPE_UNKNOWN", "Choose one of the demo account types.")
+    account = _discover(user, bank_code, bank["name"])
     _lock_user(db, user)
     live = connected(db, user)
     if len(live) >= banks.MAX_CONNECTED_BANKS:
-        raise _err(409, "BANK_LIMIT", f"You can connect up to {banks.MAX_CONNECTED_BANKS} demo accounts. Disconnect one first.")
-    if any(c.bank_code == bank_code and c.account_type == account_type for c in live):
-        raise _err(409, "BANK_ALREADY_CONNECTED", f"Your {banks.ACCOUNT_TYPES[account_type].lower()} at {bank['name']} is already connected.")
+        raise _err(409, "BANK_LIMIT", f"You can link up to {banks.MAX_CONNECTED_BANKS} accounts. Disconnect one first.")
+    if any(c.bank_code == bank_code and c.account_type == account.account_type for c in live):
+        raise _err(409, "BANK_ALREADY_CONNECTED", f"Your {banks.ACCOUNT_TYPES[account.account_type].lower()} at {bank['name']} is already linked.")
     c = BankConnection(
         connection_id="bk_" + secrets.token_urlsafe(14),
         user_id=user.id,
         bank_code=bank_code,
         bank_name=bank["name"],  # from the server's catalog, never from the client
-        account_type=account_type,
-        account_last4="".join(secrets.choice("0123456789") for _ in range(4)),
-        is_default=not live,  # the first one connected becomes the default
+        account_type=account.account_type,
+        account_last4=account.account_last4,
+        holder_name=account.holder_name,
+        ifsc=account.ifsc,
+        branch=account.branch,
+        discovery_source=account.source,
+        is_default=not live,  # the first one linked becomes the default
         status="CONNECTED",
     )
     db.add(c)
@@ -110,7 +137,7 @@ def connect(db: Session, user: User, *, bank_code: str, account_type: str) -> di
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise _err(409, "BANK_ALREADY_CONNECTED", "That account is already connected.") from None
+        raise _err(409, "BANK_ALREADY_CONNECTED", "That account is already linked.") from None
     db.refresh(c)
     return out(c)
 

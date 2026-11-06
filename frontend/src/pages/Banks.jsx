@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BankMark, DemoNotice } from '../components/banks'
+import { AccountDetails, BankMark, DemoNotice } from '../components/banks'
 import Icon from '../components/Icon'
 import { Alert, Button, Card, ConfirmPanel, EmptyState, ErrorState, FeedSkeleton, PageHeader } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
@@ -7,24 +7,41 @@ import { useLoad } from '../hooks/useLoad'
 import { useToast } from '../hooks/useToast'
 import { connectBank, disconnectBank, getBankCatalog, getMyBanks, makeDefaultBank, setBankBehavior } from '../services/banks'
 
-/** Three small steps, none of which asks for anything secret: pick a bank, see that it is a simulation, pick a demo account. */
+/**
+ * Pick a bank, let FacePay find the account, confirm what it found. The person types no account detail and nothing secret:
+ * the server's discovery provider returns the holder name, type, masked number, IFSC and branch, and this screen shows them.
+ */
 export function ConnectFlow({ catalog, onDone, onCancel, heading = 'Choose a bank', cancelLabel = 'Cancel' }) {
-  const { token } = useAuth()
+  const { token, profile } = useAuth()
   const [bank, setBank] = useState(null)
-  const [accountType, setAccountType] = useState(null)
+  const [linked, setLinked] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
 
-  const connect = async () => {
+  const link = async () => {
     setBusy(true)
     setError(null)
     try {
-      const made = await connectBank(token, { bankCode: bank.code, accountType })
-      onDone(made)
+      setLinked(await connectBank(token, { bankCode: bank.code }))
     } catch (err) {
       setError(err.message)
+    } finally {
       setBusy(false)
     }
+  }
+
+  if (linked) {
+    return (
+      <Card title="Account linked" aria-label="Account linked">
+        <div className="flex items-center gap-3">
+          <BankMark bank={bank} size="h-12 w-12 text-xs" />
+          <p className="min-w-0 text-sm text-fg">FacePay found this account at <strong>{linked.bank_name}</strong>. You did not need to enter anything.</p>
+        </div>
+        <AccountDetails account={linked} className="mt-4" />
+        <DemoNotice className="mt-3" />
+        <Button size="lg" className="mt-4" onClick={() => onDone(linked)}>Done</Button>
+      </Card>
+    )
   }
 
   if (!bank) {
@@ -52,33 +69,23 @@ export function ConnectFlow({ catalog, onDone, onCancel, heading = 'Choose a ban
   }
 
   return (
-    <Card title={`Connect ${bank.name}`} aria-label="Connect a demo account">
+    <Card title={`Link ${bank.name}`} aria-label="Link your account">
       <div className="flex items-center gap-3">
         <BankMark bank={bank} size="h-12 w-12 text-xs" />
         <div className="min-w-0">
           <p className="font-bold leading-tight">{bank.name}</p>
-          <p className="text-xs font-semibold text-warning-ink">Simulated connection</p>
+          <p className="text-xs font-semibold text-warning-ink">Simulated lookup</p>
         </div>
       </div>
       <DemoNotice className="mt-3" />
       <p className="mt-3 text-sm text-fg">
-        FacePay does not open {bank.name}, ask you to sign in or ask for any bank detail. Pick a demo account profile and FacePay will create a demo record you can pay from.
+        FacePay will look up the account linked to {profile?.mobile ? `+91 •••••${profile.mobile.slice(-5)}` : 'you'} at {bank.name} and fill in the details for you. This is a simulation: no bank is contacted, and FacePay never asks for a bank password, UPI PIN, card detail, Aadhaar number or bank OTP.
       </p>
-      <fieldset className="mt-4">
-        <legend className="text-sm font-semibold">Demo account profile</legend>
-        <div className="mt-2 flex flex-col gap-2">
-          {catalog.account_types.map((t) => (
-            <label key={t.code} className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border px-3.5 py-2.5 transition ${accountType === t.code ? 'border-brand-600 bg-brand-50' : 'border-line bg-surface hover:border-line-strong'}`}>
-              <input type="radio" name="account-type" value={t.code} checked={accountType === t.code} onChange={() => setAccountType(t.code)} className="h-4 w-4 accent-brand-700" />
-              <span className="font-semibold">{t.label}</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      {busy && <p role="status" className="mt-3 text-sm font-semibold text-brand-800">Looking up your account…</p>}
       {error && <Alert tone="error" className="mt-3">{error}</Alert>}
       <div className="mt-4 flex flex-col gap-2">
-        <Button size="lg" onClick={connect} loading={busy} disabled={!accountType}>Create demo connection</Button>
-        <Button variant="ghost" onClick={() => { setBank(null); setAccountType(null); setError(null) }} disabled={busy}>Choose another bank</Button>
+        <Button size="lg" onClick={link} loading={busy}>Find and link my account</Button>
+        <Button variant="ghost" onClick={() => { setBank(null); setError(null) }} disabled={busy}>Choose another bank</Button>
       </div>
     </Card>
   )
@@ -91,14 +98,16 @@ function ConnectionCard({ c, bank, behaviors, onDefault, onAskDisconnect, onBeha
         <BankMark bank={bank ?? { short: c.bank_code.toUpperCase().slice(0, 4) }} size="h-12 w-12 text-xs" />
         <div className="min-w-0 flex-1">
           <p className="truncate font-bold leading-tight">{c.bank_name}</p>
+          {c.holder_name && <p className="truncate text-sm font-semibold">{c.holder_name}</p>}
           <p className="text-sm text-fg">{c.account_type_label}</p>
           <p className="font-mono text-xs text-muted">{c.account_ref}</p>
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2.5 py-0.5 text-xs font-semibold text-success-ink ring-1 ring-inset ring-success-line">
-            <Icon name="check" className="h-3 w-3" strokeWidth="2.4" />Demo connected
-          </span>
-          {c.is_default && <span className="rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-semibold text-brand-800 ring-1 ring-inset ring-brand-200">Default</span>}
+          {(c.ifsc || c.branch) && <p className="break-words text-xs text-muted">{[c.ifsc, c.branch].filter(Boolean).join(' · ')}</p>}
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2.5 py-0.5 text-xs font-semibold text-success-ink ring-1 ring-inset ring-success-line">
+              <Icon name="check" className="h-3 w-3" strokeWidth="2.4" />{c.link_status_label ?? 'Linked'}
+            </span>
+            {c.is_default && <span className="rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-semibold text-brand-800 ring-1 ring-inset ring-brand-200">Default</span>}
+          </div>
         </div>
       </div>
       {behaviors?.length > 0 && (
@@ -190,7 +199,7 @@ export default function Banks() {
         <ConnectFlow
           catalog={catalog.data}
           onCancel={() => setAdding(false)}
-          onDone={(made) => { setAdding(false); notify(`${made.bank_name} connected (demo)`); banks.reload() }}
+          onDone={(made) => { setAdding(false); notify(`${made.bank_name} linked (demo)`); banks.reload() }}
         />
       ) : (
         <>

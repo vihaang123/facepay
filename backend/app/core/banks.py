@@ -28,7 +28,7 @@ _BANKS = [
 
 BANKS: dict[str, dict] = {code: {"code": code, "name": name, "short": short, "color": color} for code, name, short, color in _BANKS}
 
-# What the customer picks after choosing a bank: a demo account profile, not a real account.
+# Account types a discovery provider may report for a linked account (the customer no longer picks one).
 ACCOUNT_TYPES: dict[str, str] = {"SAVINGS": "Savings account", "SALARY": "Salary account", "CURRENT": "Current account"}
 
 MAX_CONNECTED_BANKS = 5

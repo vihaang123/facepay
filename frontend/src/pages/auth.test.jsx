@@ -268,7 +268,7 @@ describe('getting started with a mobile number', () => {
     'POST /auth/number/verify': { body: { verified: true } },
     'POST /auth/number/signup': { status: 201, body: tokenResponse('customer') },
     'GET /users/me': { body: { ...customerProfile, mobile: '9876543210', email: null } },
-    'GET /banks/catalog': { body: { banks: [{ code: 'hdfc', name: 'HDFC Bank', short: 'HDFC', color: '#0b3d7a' }], account_types: [{ code: 'SAVINGS', label: 'Savings account' }], max_connected: 5, disclaimer: 'Demo', behaviors: [], behavior_note: '' } },
+    'GET /banks/catalog': { body: { banks: [{ code: 'hdfc', name: 'HDFC Bank', short: 'HDFC', color: '#0b3d7a' }], max_connected: 5, disclaimer: 'Demo', behaviors: [], behavior_note: '' } },
     'GET /banks': { body: [] },
     ...over,
   })
@@ -420,10 +420,10 @@ describe('getting started with a mobile number', () => {
 })
 
 describe('after joining: bank, then face', () => {
-  const catalog = { banks: [{ code: 'hdfc', name: 'HDFC Bank', short: 'HDFC', color: '#0b3d7a' }], account_types: [{ code: 'SAVINGS', label: 'Savings account' }], max_connected: 5, disclaimer: 'Demo', behaviors: [], behavior_note: '' }
-  const made = { connection_id: 'bk_1', bank_code: 'hdfc', bank_name: 'HDFC Bank', account_type: 'SAVINGS', account_type_label: 'Savings account', account_ref: 'XXXX 0000', is_default: true, status: 'CONNECTED' }
+  const catalog = { banks: [{ code: 'hdfc', name: 'HDFC Bank', short: 'HDFC', color: '#0b3d7a' }], max_connected: 5, disclaimer: 'Demo', behaviors: [], behavior_note: '' }
+  const made = { connection_id: 'bk_1', bank_code: 'hdfc', bank_name: 'HDFC Bank', account_type: 'SAVINGS', account_type_label: 'Savings account', account_ref: 'DEMO-••••-0000', is_default: true, status: 'CONNECTED', holder_name: 'NEHA KAPOOR', ifsc: 'DEMO0000001', branch: 'Demo Branch, Fort, Mumbai', link_status_label: 'Linked (simulated)' }
 
-  it('connects the chosen bank (a demo) and then offers face set-up', async () => {
+  it('links the chosen bank (a demo), shows the account found, then offers face set-up', async () => {
     const user = userEvent.setup()
     storeSession('customer')
     const api = mockApi({
@@ -433,11 +433,13 @@ describe('after joining: bank, then face', () => {
     renderApp('/welcome')
     expect(await screen.findByText('Which bank is your mobile number linked to?')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /HDFC Bank/ }))
-    expect(screen.getByText('Simulated connection')).toBeInTheDocument()
-    await user.click(screen.getByRole('radio', { name: 'Savings account' }))
-    await user.click(screen.getByRole('button', { name: 'Create demo connection' }))
-    expect(await screen.findByRole('heading', { name: 'HDFC Bank connected (demo)' })).toBeInTheDocument()
-    expect(api.callsTo('POST /banks')[0].body).toEqual({ bank_code: 'hdfc', account_type: 'SAVINGS' })
+    await user.click(screen.getByRole('button', { name: 'Find and link my account' }))
+    const card = await screen.findByRole('region', { name: 'Account linked' })
+    expect(card).toHaveTextContent('NEHA KAPOOR')
+    expect(card).toHaveTextContent('DEMO-••••-0000')
+    await user.click(within(card).getByRole('button', { name: 'Done' }))
+    expect(await screen.findByRole('heading', { name: 'HDFC Bank linked (demo)' })).toBeInTheDocument()
+    expect(api.callsTo('POST /banks')[0].body).toEqual({ bank_code: 'hdfc' })
     expect(screen.getByRole('link', { name: 'Set up my face' })).toHaveAttribute('href', '/face')
   })
 

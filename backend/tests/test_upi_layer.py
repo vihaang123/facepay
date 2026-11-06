@@ -180,7 +180,7 @@ def test_a_failed_attempt_cannot_be_replayed_and_a_fresh_face_check_then_a_worki
 
 
 def test_choosing_another_bank_after_a_decline_works(client, asha, shop, db):
-    other = client.post("/banks", json={"bank_code": "sbi", "account_type": "SAVINGS"}, headers=asha["headers"]).json()
+    other = client.post("/banks", json={"bank_code": "sbi"}, headers=asha["headers"]).json()
     behave(client, asha, "DECLINE")  # the default HDFC account declines
     sid = create_session(client, shop)["session_id"]
     assert confirm(client, asha, sid, authorize(client, asha, sid)).status_code == 409

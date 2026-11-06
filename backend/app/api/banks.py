@@ -39,8 +39,9 @@ def my_banks(user: User = Depends(get_current_customer), db: Session = Depends(g
 
 @router.post("", response_model=BankConnectionOut, status_code=201, dependencies=[Depends(_write_limit)])
 def connect(data: BankConnectRequest, user: User = Depends(get_current_customer), db: Session = Depends(get_db)):
-    """Creates a simulated connection. No credentials are requested and no bank is contacted."""
-    return bank_service.connect(db, user, bank_code=data.bank_code, account_type=data.account_type)
+    """Finds and links the customer's account at the chosen bank through the configured discovery provider (simulated today:
+    no bank is contacted). The client sends only the bank; no credentials are requested."""
+    return bank_service.connect(db, user, bank_code=data.bank_code)
 
 
 @router.post("/{connection_id}/default", response_model=BankConnectionOut, dependencies=[Depends(_write_limit)])

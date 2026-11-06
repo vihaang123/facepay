@@ -42,7 +42,7 @@ export default function Welcome() {
         </>
       ) : (
         <section aria-label="Set up your face" className="rounded-3xl border border-line/80 bg-surface p-6 shadow-card">
-          <h1 className="text-2xl font-bold tracking-tight">{linked ? `${linked.bank_name} connected (demo)` : 'One more thing'}</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{linked ? `${linked.bank_name} linked (demo)` : 'One more thing'}</h1>
           <p className="mt-2 text-sm text-fg">
             Payments on FacePay are confirmed with your face, in place of a UPI PIN. Take a few photos now and you can pay straight away.
           </p>

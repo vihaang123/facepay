@@ -10,11 +10,6 @@ class BankInfo(BaseModel):
     color: str
 
 
-class AccountTypeInfo(BaseModel):
-    code: str
-    label: str
-
-
 class BehaviorInfo(BaseModel):
     code: str
     label: str
@@ -22,7 +17,6 @@ class BehaviorInfo(BaseModel):
 
 class BankCatalogOut(BaseModel):
     banks: list[BankInfo]
-    account_types: list[AccountTypeInfo]
     max_connected: int
     behaviors: list[BehaviorInfo]
     behavior_note: str
@@ -30,12 +24,12 @@ class BankCatalogOut(BaseModel):
 
 
 class BankConnectRequest(BaseModel):
-    """Only a bank code and an account type: the name and reference are created by the server. No credentials, ever."""
+    """Only the bank. The holder name, account type, number, IFSC and branch are found by the server's discovery provider and
+    cannot be supplied. No credential, PIN, card detail, Aadhaar number or bank OTP is accepted (unknown fields are refused)."""
 
     model_config = ConfigDict(extra="forbid")
 
     bank_code: str = Field(min_length=2, max_length=24)
-    account_type: str = Field(min_length=2, max_length=20)
 
 
 class BankConnectionOut(BaseModel):
@@ -48,6 +42,12 @@ class BankConnectionOut(BaseModel):
     is_default: bool
     status: str
     connected_at: datetime
+    holder_name: str | None = None
+    ifsc: str | None = None
+    branch: str | None = None
+    discovery_source: str | None = None
+    link_status: str = "LINKED"
+    link_status_label: str = "Linked"
     sim_behavior: str
     sim_behavior_label: str
     disclaimer: str

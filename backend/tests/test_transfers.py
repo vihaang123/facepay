@@ -210,7 +210,7 @@ def test_disconnecting_the_bank_after_the_face_check_blocks_confirmation_and_mov
     r = confirm(client, asha, sid, token)
     assert r.status_code == 409 and code(r) == "NO_FUNDING_SOURCE"
     assert txns(db) == [] and db.scalar(select(PaymentSession.status)) == "AUTHENTICATED"  # the ticket is not burned
-    again = client.post("/banks", json={"bank_code": "sbi", "account_type": "SALARY"}, headers=asha["headers"]).json()
+    again = client.post("/banks", json={"bank_code": "sbi"}, headers=asha["headers"]).json()
     ok = confirm(client, asha, sid, token)  # same ticket, new default account
     assert ok.status_code == 200 and ok.json()["funding_source"]["bank_name"] == "State Bank of India"
     assert ok.json()["funding_source"]["account_ref"] == again["account_ref"]

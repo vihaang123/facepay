@@ -95,16 +95,16 @@ def test_the_recipient_of_a_person_payment_comes_from_the_chosen_facepay_id_only
 
 def test_connecting_a_demo_bank_creates_a_record_only_and_the_first_becomes_the_default(client, db):
     c = new_customer(client, "Dana Mehta", bank=False)
-    r = client.post("/banks", json={"bank_code": "sbi", "account_type": "SAVINGS"}, headers=c["headers"])
+    r = client.post("/banks", json={"bank_code": "sbi"}, headers=c["headers"])
     assert r.status_code == 201, r.text
     b = r.json()
-    assert b["bank_name"] == "State Bank of India" and b["account_type"] == "SAVINGS" and b["is_default"] is True and b["status"] == "CONNECTED"
+    assert b["bank_name"] == "State Bank of India" and b["account_type"] in ("SAVINGS", "SALARY") and b["is_default"] is True and b["status"] == "CONNECTED"
     assert DEMO_REF.match(b["account_ref"]) and "Demo connection only" in b["disclaimer"]
     row = db.scalar(select(BankConnection))
     assert row.user_id == c["id"] and row.account_last4 == b["account_ref"][-4:]
-    # nothing but a bank code and an account type is accepted: no names, numbers, passwords, PINs or OTPs
-    for extra in ({"bank_name": "Fake Bank"}, {"password": "x"}, {"account_number": "123456789012"}, {"otp": "123456"}, {"pin": "1234"}):
-        assert client.post("/banks", json={"bank_code": "hdfc", "account_type": "SAVINGS", **extra}, headers=c["headers"]).status_code == 422
+    # nothing but a bank code is accepted: no names, types, numbers, passwords, PINs or OTPs
+    for extra in ({"bank_name": "Fake Bank"}, {"account_type": "SAVINGS"}, {"holder_name": "Someone Else"}, {"password": "x"}, {"account_number": "123456789012"}, {"otp": "123456"}, {"pin": "1234"}):
+        assert client.post("/banks", json={"bank_code": "hdfc", **extra}, headers=c["headers"]).status_code == 422
     assert db.scalar(select(func.count()).select_from(BankConnection)) == 1
 
 
@@ -118,20 +118,19 @@ def test_the_catalog_lists_the_required_indian_banks_and_the_demo_disclaimer(cli
     ):
         assert required in names
     assert cat["disclaimer"] == bank_catalog.DEMO_DISCLAIMER == "Demo connection only. No real bank account is accessed and no money is transferred."
-    assert {t["code"] for t in cat["account_types"]} == {"SAVINGS", "SALARY", "CURRENT"}
+    assert "account_types" not in cat  # the customer no longer picks a type: the discovery provider reports it
 
 
-def test_unknown_banks_and_account_types_duplicates_and_the_limit_are_refused(client, db):
+def test_unknown_banks_duplicates_and_the_limit_are_refused(client, db):
     c = new_customer(client, "Dana Mehta", bank=False)
     post = lambda **kw: client.post("/banks", json=kw, headers=c["headers"])  # noqa: E731
-    assert post(bank_code="notabank", account_type="SAVINGS").status_code == 422
-    assert post(bank_code="sbi", account_type="CRYPTO").status_code == 422
-    assert post(bank_code="sbi", account_type="SAVINGS").status_code == 201
-    dup = post(bank_code="sbi", account_type="SAVINGS")
+    assert post(bank_code="notabank").status_code == 422
+    assert post(bank_code="sbi").status_code == 201
+    dup = post(bank_code="sbi")
     assert dup.status_code == 409 and code(dup) == "BANK_ALREADY_CONNECTED"
     for bank in ("hdfc", "icici", "axis", "kotak"):
-        assert post(bank_code=bank, account_type="SAVINGS").status_code == 201
-    over = post(bank_code="pnb", account_type="SAVINGS")
+        assert post(bank_code=bank).status_code == 201
+    over = post(bank_code="pnb")
     assert over.status_code == 409 and code(over) == "BANK_LIMIT"
     assert db.scalar(select(func.count()).select_from(BankConnection)) == bank_catalog.MAX_CONNECTED_BANKS
 
@@ -158,14 +157,14 @@ def test_the_default_can_be_changed_and_disconnecting_the_default_promotes_anoth
 def test_two_simultaneous_connections_leave_exactly_one_default(client, db):
     c = new_customer(client, "Dana Mehta", bank=False)
     with ThreadPoolExecutor(max_workers=4) as pool:
-        results = list(pool.map(lambda code_: client.post("/banks", json={"bank_code": code_, "account_type": "SAVINGS"}, headers=c["headers"]), ["sbi", "hdfc", "icici", "axis"]))
+        results = list(pool.map(lambda code_: client.post("/banks", json={"bank_code": code_}, headers=c["headers"]), ["sbi", "hdfc", "icici", "axis"]))
     assert all(r.status_code == 201 for r in results)
     assert sum(1 for b in banks_of(client, c) if b["is_default"]) == 1
 
 
 def test_the_checkout_offers_the_customers_own_accounts_and_marks_the_default(client, world, shop):
     asha, ravi, _ = world
-    second = connect_bank(client, asha, "axis", "SALARY")
+    second = connect_bank(client, asha, "axis")
     sid = create_session(client, shop)["session_id"]
     sources = checkout(client, asha, sid)["funding_sources"]
     assert [(s["bank_name"], s["is_default"]) for s in sources] == [("HDFC Bank", True), ("Axis Bank", False)]
@@ -178,7 +177,7 @@ def test_the_checkout_offers_the_customers_own_accounts_and_marks_the_default(cl
 
 def test_the_chosen_account_is_the_one_on_the_receipt_the_history_and_the_transaction(client, world, shop, db):
     asha, _, _ = world
-    chosen = connect_bank(client, asha, "icici", "CURRENT")
+    chosen = connect_bank(client, asha, "icici")
     sid = create_session(client, shop, amount="499.00", ref="ORD-1001")["session_id"]
     r = confirm(client, asha, sid, authorize(client, asha, sid), funding_source_id=chosen["connection_id"])
     assert r.status_code == 200, r.text

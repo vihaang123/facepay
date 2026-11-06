@@ -811,7 +811,7 @@ describe('UPI-style layer (simulated)', () => {
     const user = userEvent.setup()
     const account = { ...BANK, account_type: 'SAVINGS', status: 'CONNECTED', connected_at: '2026-10-07T12:00:00Z', disclaimer: 'Demo', sim_behavior: 'NORMAL', sim_behavior_label: 'Works normally' }
     const catalog = {
-      banks: [{ code: 'hdfc', name: 'HDFC Bank', short: 'HDFC', color: '#0b3d7a' }], account_types: [{ code: 'SAVINGS', label: 'Savings account' }], max_connected: 5, disclaimer: 'Demo',
+      banks: [{ code: 'hdfc', name: 'HDFC Bank', short: 'HDFC', color: '#0b3d7a' }], max_connected: 5, disclaimer: 'Demo',
       behaviors: [{ code: 'NORMAL', label: 'Works normally' }, { code: 'DECLINE', label: 'Declines payments' }, { code: 'TIMEOUT', label: 'Does not respond' }],
       behavior_note: 'Demo setting. It only changes what this simulated account does when you pay; no real bank is involved.',
     }

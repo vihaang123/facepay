@@ -18,9 +18,9 @@ def b64(data: bytes) -> str:
     return base64.b64encode(data).decode()
 
 
-def connect_bank(client, cust, bank_code="hdfc", account_type="SAVINGS"):
+def connect_bank(client, cust, bank_code="hdfc"):
     """Connects a simulated bank account (the funding source every payment needs). Returns its JSON."""
-    r = client.post("/banks", json={"bank_code": bank_code, "account_type": account_type}, headers=cust["headers"])
+    r = client.post("/banks", json={"bank_code": bank_code}, headers=cust["headers"])
     assert r.status_code == 201, r.text
     return r.json()
 

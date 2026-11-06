@@ -448,6 +448,7 @@ class BankConnection(Base):
         CheckConstraint("account_last4 ~ '^[0-9]{4}$'", name="ck_bank_connections_last4"),
         CheckConstraint("NOT is_default OR status = 'CONNECTED'", name="ck_bank_connections_default_connected"),
         CheckConstraint("sim_behavior IN ('NORMAL', 'DECLINE', 'TIMEOUT')", name="ck_bank_connections_behavior"),
+        CheckConstraint("ifsc IS NULL OR ifsc ~ '^[A-Z]{4}0[A-Z0-9]{6}$'", name="ck_bank_connections_ifsc"),
         Index("ix_bank_connections_user_status", "user_id", "status"),
         # One default per customer, and one live connection per (customer, bank, account type).
         Index("uq_bank_connections_one_default", "user_id", unique=True, postgresql_where=text("is_default AND status = 'CONNECTED'")),
@@ -470,6 +471,12 @@ class BankConnection(Base):
     disconnected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # DEMO switch chosen by the owner: how this simulated account answers a payment (see app/core/upi.py). Not random.
     sim_behavior: Mapped[str] = mapped_column(String(12), default="NORMAL", server_default="NORMAL")
+    # What the discovery provider returned for this account (see app/services/bank_discovery.py). Stored with the link so it
+    # reads the same after logout, login and restart. None means the provider did not return it; it is never invented.
+    holder_name: Mapped[str | None] = mapped_column(String(120))
+    ifsc: Mapped[str | None] = mapped_column(String(11))
+    branch: Mapped[str | None] = mapped_column(String(120))
+    discovery_source: Mapped[str | None] = mapped_column(String(24))
 
     @property
     def account_ref(self) -> str:
