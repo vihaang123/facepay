@@ -1,45 +1,71 @@
-# Recognition engine comparison: PCA-LDA-KNN vs dlib ResNet embeddings
+# Recognition engine comparison
 
-Status: measured, **not adopted**. The default engine is still PCA-LDA-KNN. `FACE_ENGINE=embedding` selects the deep engine
-(see `backend/app/ml/embedding.py`). Changing the default or any threshold needs an explicit decision.
+Engines measured: **PCA-LDA-KNN** (the app's default), **dlib ResNet** 128-d embeddings (optional, `FACE_ENGINE=embedding`,
+see `backend/app/ml/embedding.py`), and **SCRFD + ArcFace** (InsightFace `buffalo_l`: `det_10g.onnx` + `w600k_r50.onnx`, run
+with onnxruntime; benchmark only, NOT wired into the app).
 
-## What was measured
+Status: measured, **nothing adopted**. The default engine is unchanged. Changing it, or any threshold, needs an explicit decision.
 
-| | PCA-LDA-KNN (default) | dlib ResNet 128-d embedding (optional) |
-|---|---|---|
-| Identification accuracy (30 enrolled people, 6 images each, 4 held-out images each) | 89.0 % | 100.0 % |
-| Equal error rate, strangers vs enrolled | 19.9 % | 0.0 % |
-| Strangers accepted when genuine users pass 90 % of the time | 64.6 % | 0.0 % |
-| Per-frame cost on a 640x480 frame (detect + features/embedding), median | 54 ms | 140 ms |
-| Per-frame cost, 95th percentile | 64 ms | 145 ms |
-| Extra memory in the process | baseline (about 77 MB peak) | about +52 MB (about 129 MB peak) |
+## 1. Clean studio images (ORL, 40 people, 400 images)
+30 enrolled people (6 images each), 4 held-out images each, plus 10 people the system has never seen. Mean of 5 random splits.
 
-- Accuracy figures: ORL face database (40 people, 400 studio images), 5 random splits of 30 enrolled and 10 stranger identities,
-  mean over splits. Script: `bench.py` in the scratch folder used for this work. dlib found a face in 399 of 400 ORL images.
-- Latency and memory: 40 frames made by scaling ORL faces to about 300 px wide on a 640x480 canvas, on a 2-core cloud container,
-  one process, one frame at a time. Single-run timings on shared hardware: treat them as order of magnitude.
+| | PCA-LDA-KNN | dlib | SCRFD + ArcFace |
+|---|---|---|---|
+| Identification accuracy | 89.0 % | 100.0 % | 100.0 % |
+| Equal error rate | 19.9 % | 0.0 % | 0.0 % |
+| Strangers accepted when real users pass 90 % | 64.6 % | 0.0 % | 0.0 % |
+| Faces found | n/a (no detector in this test) | 399 / 400 | 400 / 400 |
 
-## What this does and does not show
+ORL is too easy for the deep engines: both score perfectly, so **this test cannot tell dlib and ArcFace apart.**
 
-- The accuracy gap on strangers is large and consistent with how the two methods work: PCA-LDA learns a projection from only
-  the enrolled people, so a stranger is simply mapped to the nearest enrolled person; embeddings are trained on a large
-  external face set and measure identity directly.
-- ORL is a studio dataset (frontal, controlled light, 1990s cameras). It says little about phone selfies, glasses, beards,
-  lighting changes, or deliberate impersonation. **No real-user or phone-camera evaluation has been run**, so absolute numbers
-  here must not be quoted as the system's real-world accuracy. ORL results are kept separate from any future phone captures.
-- The deep engine is **slower** (about 2.6x per frame) and uses more memory. Both are far inside the 120 s authorization window
-  and a human cannot perceive the difference between 54 ms and 140 ms, but "faster" is not what it offers; "more accurate" is.
-- Neither engine is a defence against deepfakes or replayed video. Liveness is a basic head-turn check.
+## 2. Degraded test images (synthetic)
+Enrolment on the clean photos, testing on copies made worse on purpose: brightness x0.4 to x1.3, uneven side light, blur,
+noise and JPEG quality 35. This is a rough stand-in for a poor phone capture, **not real phone data**.
 
-## Not evaluated
+Threshold set so that 1 % of clean strangers would be accepted (a stranger-based operating point):
 
-- YuNet + SFace (OpenCV Zoo) and SCRFD + ArcFace (InsightFace `buffalo_l`): the model files could not be downloaded in the build
-  environment (the host is blocked), so nothing is claimed about them. `buffalo_l` also ships under a non-commercial research
-  licence; YOLOv8 is AGPL-3.0 and the common YOLO-face weights are GPL-3.0. Any of these needs a licence decision before use.
-- Memory on the hosted 512 MB instance with the database driver loaded and a real model: must be measured there before
-  switching, since the figure above is for a bare Python process.
+| | PCA-LDA-KNN | dlib | SCRFD + ArcFace |
+|---|---|---|---|
+| Face found in the degraded image | n/a | 96.7 % | 92.7 % |
+| Identification accuracy (when found) | 89.7 % | 94.3 % | 100.0 % |
+| Real users accepted | 52.2 % | 78.8 % | 92.7 % |
+| Strangers accepted | 1.0 % | 2.5 % | 2.1 % |
+| Equal error rate (best-case threshold) | 21.8 % | 9.3 % | 0.0 % |
 
-## Switching, if approved
+Note: if the threshold is instead set from clean real users (90 % pass), both deep engines reject almost every degraded real
+user (6 % and 2.5 % accepted) although they still tell people apart. Their distances grow when capture quality drops, so a
+threshold calibrated on clean studio photos is wrong for phones. **Thresholds must be calibrated on real phone captures.**
 
-1. Set `FACE_ENGINE=embedding` on the backend host. 2. Every customer re-does face setup once (templates are different).
-3. Thresholds in `app/ml/config.py` are provisional and must be re-tuned on real phone captures before any claim is made.
+## 3. Cost per frame (2-core cloud container, 640x480 frames made from ORL faces; single runs, order of magnitude)
+
+| | PCA-LDA-KNN | dlib | SCRFD + ArcFace |
+|---|---|---|---|
+| Median time per frame (detect + features/embedding) | 54 ms | 140 ms | 340 ms |
+| 95th percentile | 64 ms | 145 ms | 376 ms |
+| Peak memory of a bare Python process | about 77 MB | about 129 MB | about 505 MB |
+| Model files on disk | tiny (trained per deployment) | about 100 MB (in the dlib models package) | 191 MB (the two models used) |
+
+## 4. What this means
+- Accuracy ranking, in every test: ArcFace >= dlib >> PCA-LDA. PCA-LDA's weakness is strangers: it only knows the enrolled
+  people, so it maps any stranger onto the nearest one.
+- Speed ranking is the reverse: PCA-LDA is fastest, ArcFace slowest. **No tested engine is both the most accurate and the
+  fastest.** Every engine is far inside the 120 s authorization window; the time difference matters for server cost, not for
+  the person paying.
+- **ArcFace does not fit the current host.** About 505 MB for the models alone is the whole of a 512 MB instance. It needs
+  roughly 1-2 GB.
+- **dlib is the realistic upgrade**: +52 MB, ~140 ms, already integrated and tested behind a switch.
+- Licences: the InsightFace code is MIT but the `buffalo_l` pretrained models are for non-commercial research use only;
+  fine for a college project, not for a commercial launch. (YOLOv8 is AGPL-3.0 and common YOLO-face weights are GPL-3.0; these
+  were not tested.) dlib's licence terms should be checked before commercial use.
+
+## 5. Limits of this evidence
+- ORL is 1990s studio photos of 40 people. The degradation test is synthetic. **No real phone-camera data was evaluated**, so
+  none of these numbers may be quoted as the system's real-world accuracy.
+- The LFW real-world dataset could not be downloaded (host blocked). YuNet + SFace could not be downloaded either, so nothing
+  is claimed about them.
+- Liveness is a basic head-turn check; none of these engines protects against deepfakes or replayed video.
+- Memory on the hosted instance with the database driver and a real model was not measured there.
+
+## 6. Switching to dlib, if approved
+1. Set `FACE_ENGINE=embedding` on the backend host (check memory on that host first). 2. Every customer redoes face setup once.
+3. Re-tune the provisional thresholds in `app/ml/config.py` on real phone captures before claiming anything.
