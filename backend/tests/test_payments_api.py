@@ -219,7 +219,10 @@ def test_full_flow_merchant_to_receipt_to_both_dashboards(client, trained, shop,
     merchant_view = client.get(f"/merchant/transactions/{rec['transaction_id']}", headers=shop["headers"]).json()
     assert rec["funding_source"] == {"bank_name": a["bank"]["bank_name"], "account_ref": a["bank"]["account_ref"]}
     assert merchant_view["funding_source"] is None
-    assert {**merchant_view, "funding_source": rec["funding_source"]} == rec
+    # ...and the trail's debit step: the payer's trail names their own account, the merchant's says "Payer's bank".
+    assert {**merchant_view, "funding_source": rec["funding_source"], "trail": rec["trail"]} == rec
+    assert [s["key"] for s in merchant_view["trail"]] == [s["key"] for s in rec["trail"]]
+    assert "Payer's bank" in merchant_view["trail"][2]["label"] and a["bank"]["bank_name"] not in merchant_view["trail"][2]["label"]
     ms = client.get(f"/merchant/payment-sessions/{sid}", headers=shop["headers"]).json()
     assert ms["status"] == "PAID" and ms["transaction_id"] == rec["transaction_id"]
     sm = client.get("/merchant/summary", headers=shop["headers"]).json()

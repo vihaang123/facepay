@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_vali
 from typing import Annotated
 
 from app.core import purposes
-from app.schemas.payments import Money
+from app.schemas.payments import Money, TrailStep
 
 Note = Annotated[str, StringConstraints(strip_whitespace=True, max_length=140)]
 IdText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)]
@@ -143,6 +143,9 @@ class ActivityDetail(ActivityItem):
     payment_method: str
     authentication: str
     request_id: str | None
+    utr: str | None = None
+    failure_message: str | None = None
+    trail: list[TrailStep] = []
 
 
 class ActivityCounts(BaseModel):

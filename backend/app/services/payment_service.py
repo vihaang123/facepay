@@ -17,11 +17,11 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from fastapi import HTTPException
-from sqlalchemy import exists, func, or_, select, update
+from sqlalchemy import and_, exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core import purposes
+from app.core import purposes, upi
 from app.core.config import get_settings
 from app.ml.preprocessing import FaceDetector
 from app.core import facepay_id as fid
@@ -53,6 +53,15 @@ def _hash(token: str) -> str:
 def new_transaction_id() -> str:
     """FP-XXXXXXXXXX: random, unique, and not modelled on any real payment network's ID format."""
     return "FP-" + "".join(secrets.choice(_ID_ALPHABET) for _ in range(10))
+
+
+def _unique_utr(db: Session) -> str:
+    """A fresh 12-digit reference. The unique index is the real guarantee; this only avoids a pointless collision."""
+    for _ in range(20):
+        value = upi.new_utr()
+        if db.scalar(select(Transaction.id).where(Transaction.utr == value)) is None:
+            return value
+    raise _err(500, "REFERENCE_UNAVAILABLE", "Could not issue a reference number. Please try again.")
 
 
 def _reject(db: Session, status_code: int, code: str, message: str):
@@ -482,6 +491,16 @@ def _receipt(db: Session, txn: Transaction, *, viewer_is_payer: bool = False) ->
             if viewer_is_payer and txn.funding_bank_name
             else None
         ),
+        "utr": txn.utr,
+        "failure_code": txn.failure_code,
+        "failure_message": upi.failure_message(txn.failure_code) if txn.status == "FAILED" else None,
+        "trail": upi.build_trail(
+            status=txn.status,
+            failure_code=txn.failure_code,
+            viewer_is_payer=viewer_is_payer,
+            bank_label=f"{txn.funding_bank_name} {txn.funding_account_ref}" if txn.funding_bank_name else None,
+            payee_name=merchant.business_name if merchant else (recipient.name if recipient else None),
+        ),
     }
 
 
@@ -591,6 +610,9 @@ def confirm_payment(
             _reject(db, 409, "REQUEST_NOT_PENDING", message)
 
     now = _now()
+    # A simulated bank can answer "declined" or "did not respond" (the owner's demo switch). That is decided here, after every
+    # check above has passed, so it can only turn a would-be success into a recorded failure, never the other way round.
+    failure_code = {"DECLINE": "BANK_DECLINED", "TIMEOUT": "BANK_TIMEOUT"}.get(funding.sim_behavior)
     txn = Transaction(
         transaction_id=new_transaction_id(),
         kind="MERCHANT_PAYMENT" if ps.kind == "MERCHANT" else "TRANSFER",
@@ -602,13 +624,15 @@ def confirm_payment(
         currency=ps.currency,
         note=ps.description if ps.kind == "TRANSFER" else None,
         payment_method="FACE_PAY",
-        status="SUCCESS",
+        status="FAILED" if failure_code else "SUCCESS",
         timestamp=now,
         # Copied from the server's own record of the account, never from the client, so the receipt stays correct even
         # if the account is disconnected later.
         funding_source_id=funding.id,
         funding_bank_name=funding.bank_name,
         funding_account_ref=funding.account_ref,
+        utr=_unique_utr(db),
+        failure_code=failure_code,
     )
     db.add(txn)
     try:
@@ -616,6 +640,18 @@ def confirm_payment(
     except IntegrityError:
         db.rollback()
         raise _err(409, "SESSION_ALREADY_PAID", "This payment has already been completed.") from None
+
+    if failure_code:
+        # No money moved (it is a simulation, and nothing was charged). The face check cannot be replayed: this authorization is
+        # voided, the session is payable again, and any money request stays pending, so the customer can verify and retry.
+        auth.status = "REVOKED"
+        ps.status = "CREATED"
+        sec.record_event(db, user, "PAYMENT_BANK_FAILED", ps.session_id)
+        db.commit()
+        raise HTTPException(
+            409,
+            detail={"code": failure_code, "message": upi.failure_message(failure_code), "transaction_id": txn.transaction_id, "utr": txn.utr},
+        )
 
     auth.status, auth.consumed_at = "CONSUMED", now
     ps.status = "PAID"
@@ -722,7 +758,10 @@ def customer_summary(db: Session, user: User) -> dict:
 
 def customer_receipt(db: Session, user: User, transaction_id: str) -> dict:
     txn = db.scalar(
-        select(Transaction).where(Transaction.transaction_id == transaction_id, or_(Transaction.payer_id == user.id, Transaction.recipient_id == user.id))
+        select(Transaction).where(
+            Transaction.transaction_id == transaction_id,
+            or_(Transaction.payer_id == user.id, and_(Transaction.recipient_id == user.id, Transaction.status == "SUCCESS")),
+        )
     )
     if txn is None:
         raise _err(404, "TRANSACTION_NOT_FOUND", "Transaction not found.")

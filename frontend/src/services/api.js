@@ -11,6 +11,7 @@ export class ApiError extends Error {
     this.status = status
     this.fieldErrors = fieldErrors
     this.code = code // machine-readable reason, e.g. "TOO_BLURRY" (face endpoints)
+    this.detail = null
   }
 }
 
@@ -52,7 +53,9 @@ async function parseError(response) {
     return new ApiError(detail, response.status)
   }
   if (server && detail && typeof detail === 'object' && !Array.isArray(detail) && detail.message) {
-    return new ApiError(String(detail.message), response.status, {}, detail.code ?? null)
+    const err = new ApiError(String(detail.message), response.status, {}, detail.code ?? null)
+    err.detail = detail // extra fields the API sends with an error, e.g. a failed payment's transaction_id and utr
+    return err
   }
   if (Array.isArray(detail)) {
     // FastAPI/Pydantic validation errors: [{ loc: ['body', 'password'], msg: '...' }]

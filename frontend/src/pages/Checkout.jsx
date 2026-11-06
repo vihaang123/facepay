@@ -4,6 +4,7 @@ import { AuthDetails, PaymentStages } from '../components/AuthStages'
 import Icon from '../components/Icon'
 import FaceAuthFlow from '../components/FaceAuthFlow'
 import { BankMark, DemoNotice } from '../components/banks'
+import { ReferenceNumber } from '../components/Trail'
 import { Amount, MerchantHeader, Row, SecurityNote, SimulatedTag, StatusBadge, Timeline } from '../components/payUi'
 import { Alert, Button, ButtonLink, Card, ErrorState, Skeleton } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
@@ -218,6 +219,7 @@ function Success({ receipt, session, outcome }) {
         <p className="mt-2 text-lg font-bold">{receipt.recipient_name ?? receipt.merchant_name ?? payeeName(session)}</p>
         <p className="mt-3 text-xs text-muted">Transaction</p>
         <p className="font-mono text-sm font-semibold">{receipt.transaction_id}</p>
+        {receipt.utr && <p className="mt-2 text-xs text-muted">UTR (reference no.) <ReferenceNumber value={receipt.utr} className="font-semibold text-fg" /></p>}
         {receipt.funding_source && <p className="mt-3 text-sm font-semibold">Paid from {receipt.funding_source.bank_name} · <span className="font-mono">{receipt.funding_source.account_ref}</span></p>}
         <p className="mt-2 text-sm font-semibold text-success-ink">Authenticated: {receipt.authentication ?? 'Face + basic liveness check'}</p>
         <p className="mt-1 text-xs text-muted">{formatDateTime(receipt.timestamp)}</p>
@@ -227,6 +229,28 @@ function Success({ receipt, session, outcome }) {
       <div className="flex flex-col gap-2">
         <ButtonLink to={RECEIPT_PATH.customer(receipt.transaction_id)} size="lg">View receipt</ButtonLink>
         <ButtonLink to={DASHBOARD_PATH.customer} variant="secondary" size="lg">Done</ButtonLink>
+      </div>
+    </section>
+  )
+}
+
+/** The simulated bank said no (or did not answer). Nothing was paid; the face check is spent, so the next step is a new one. */
+function BankFailure({ failure, onRetry }) {
+  return (
+    <section aria-label="Payment did not go through" className="flex flex-col gap-4 rounded-3xl border border-danger-line bg-surface p-6 shadow-card">
+      <div className="text-center">
+        <span aria-hidden="true" className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-danger text-on-accent">
+          <Icon name="x" className="h-8 w-8" strokeWidth="2.6" />
+        </span>
+        <h1 className="mt-4 text-2xl font-bold">{failure.code === 'BANK_TIMEOUT' ? 'Your bank did not respond' : 'Your bank declined the payment'}</h1>
+        <p role="alert" className="mt-2 text-sm text-fg">{failure.message}</p>
+        {failure.utr && <p className="mt-3 text-xs text-muted">UTR (reference no.) <ReferenceNumber value={failure.utr} className="font-semibold text-fg" /></p>}
+        <SimulatedTag className="mt-3" />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Button size="lg" onClick={onRetry}><Icon name="face" className="h-5 w-5" />Verify my face and try again</Button>
+        {failure.transactionId && <ButtonLink to={RECEIPT_PATH.customer(failure.transactionId)} variant="secondary" size="lg">See what happened</ButtonLink>}
+        <ButtonLink to={DASHBOARD_PATH.customer} variant="ghost">Back to home</ButtonLink>
       </div>
     </section>
   )
@@ -290,6 +314,7 @@ export default function Checkout() {
   const [auth, setAuth] = useState(null) // { token, expiresAt }
   const [outcome, setOutcome] = useState(null)
   const [confirmError, setConfirmError] = useState(null)
+  const [bankFailure, setBankFailure] = useState(null) // { code, message, utr, transactionId } after a simulated bank failure
   const [pinError, setPinError] = useState(null)
   const [receipt, setReceipt] = useState(null)
 
@@ -353,6 +378,11 @@ export default function Checkout() {
       if (code === 'PIN_INCORRECT' || code === 'PIN_REQUIRED') {
         setStep('authorized') // the authorization is still valid; only the PIN needs another try
         setPinError(err.message)
+      } else if (code === 'BANK_DECLINED' || code === 'BANK_TIMEOUT') {
+        // The face check is spent and nothing was paid. Show what happened; a new face check is the way forward.
+        restart()
+        setBankFailure({ code, message: err.message, utr: err.detail?.utr ?? null, transactionId: err.detail?.transaction_id ?? null })
+        load()
       } else if (code === 'PIN_LOCKED' || code === 'PER_TRANSACTION_LIMIT' || code === 'DAILY_LIMIT_EXCEEDED' || code === 'BIOMETRIC_DISABLED') {
         restart()
         setNotice(err.message)
@@ -426,8 +456,12 @@ export default function Checkout() {
 
       {notice && <Alert tone={notice.startsWith('Payment not confirmed') ? 'info' : 'error'}>{notice}</Alert>}
 
-      {step !== 'paid' && (step === 'summary' || !payable) && (
-        <Summary session={session} payable={payable && step === 'summary'} attempts={attempts} onPay={() => { setNotice(null); setStep('authenticating') }} onCancel={cancelPayment} cancelling={cancelling} />
+      {bankFailure && step === 'summary' && payable && (
+        <BankFailure failure={bankFailure} onRetry={() => { setBankFailure(null); setNotice(null); setStep('authenticating') }} />
+      )}
+
+      {step !== 'paid' && !bankFailure && (step === 'summary' || !payable) && (
+        <Summary session={session} payable={payable && step === 'summary'} attempts={attempts} onPay={() => { setNotice(null); setBankFailure(null); setStep('authenticating') }} onCancel={cancelPayment} cancelling={cancelling} />
       )}
 
       {!payable && step !== 'paid' && (

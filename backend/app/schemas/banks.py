@@ -15,10 +15,17 @@ class AccountTypeInfo(BaseModel):
     label: str
 
 
+class BehaviorInfo(BaseModel):
+    code: str
+    label: str
+
+
 class BankCatalogOut(BaseModel):
     banks: list[BankInfo]
     account_types: list[AccountTypeInfo]
     max_connected: int
+    behaviors: list[BehaviorInfo]
+    behavior_note: str
     disclaimer: str
 
 
@@ -41,9 +48,19 @@ class BankConnectionOut(BaseModel):
     is_default: bool
     status: str
     connected_at: datetime
+    sim_behavior: str
+    sim_behavior_label: str
     disclaimer: str
 
 
 class BankDisconnectOut(BaseModel):
     connection_id: str
     status: str
+
+
+class BankBehaviorRequest(BaseModel):
+    """Only one of the fixed behaviours; anything else is refused."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    behavior: str = Field(min_length=2, max_length=12)

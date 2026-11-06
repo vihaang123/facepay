@@ -5,7 +5,7 @@ import { Alert, Button, Card, ConfirmPanel, EmptyState, ErrorState, FeedSkeleton
 import { useAuth } from '../hooks/useAuth'
 import { useLoad } from '../hooks/useLoad'
 import { useToast } from '../hooks/useToast'
-import { connectBank, disconnectBank, getBankCatalog, getMyBanks, makeDefaultBank } from '../services/banks'
+import { connectBank, disconnectBank, getBankCatalog, getMyBanks, makeDefaultBank, setBankBehavior } from '../services/banks'
 
 /** Three small steps, none of which asks for anything secret: pick a bank, see that it is a simulation, pick a demo account. */
 function ConnectFlow({ catalog, onDone, onCancel }) {
@@ -84,7 +84,7 @@ function ConnectFlow({ catalog, onDone, onCancel }) {
   )
 }
 
-function ConnectionCard({ c, bank, onDefault, onAskDisconnect, busy }) {
+function ConnectionCard({ c, bank, behaviors, onDefault, onAskDisconnect, onBehavior, busy }) {
   return (
     <li className="flex flex-col gap-3 rounded-2xl border border-line/80 bg-surface p-4 shadow-card">
       <div className="flex items-center gap-3">
@@ -101,6 +101,21 @@ function ConnectionCard({ c, bank, onDefault, onAskDisconnect, busy }) {
           {c.is_default && <span className="rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-semibold text-brand-800 ring-1 ring-inset ring-brand-200">Default</span>}
         </div>
       </div>
+      {behaviors?.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <label htmlFor={`behavior-${c.connection_id}`} className="text-xs font-semibold text-muted">Demo: how this account answers a payment</label>
+          <select
+            id={`behavior-${c.connection_id}`}
+            value={c.sim_behavior}
+            disabled={busy === c.connection_id}
+            onChange={(e) => onBehavior(c, e.target.value)}
+            className="min-h-11 rounded-xl border border-field bg-surface px-3 text-sm"
+          >
+            {behaviors.map((b) => <option key={b.code} value={b.code}>{b.label}</option>)}
+          </select>
+          {c.sim_behavior !== 'NORMAL' && <p className="text-xs font-semibold text-warning-ink">Payments from this account will fail on purpose (simulation) until you change this.</p>}
+        </div>
+      )}
       <div className="flex flex-wrap gap-2">
         {!c.is_default && <Button variant="secondary" onClick={() => onDefault(c)} loading={busy === c.connection_id}>Make default</Button>}
         <Button variant="ghost" onClick={() => onAskDisconnect(c)} disabled={busy === c.connection_id}>Disconnect</Button>
@@ -129,6 +144,19 @@ export default function Banks() {
     try {
       await makeDefaultBank(token, c.connection_id)
       notify(`${c.bank_name} is now your default`)
+      banks.reload()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(null)
+    }
+  }
+  const changeBehavior = async (c, behavior) => {
+    setBusy(c.connection_id)
+    setError(null)
+    try {
+      await setBankBehavior(token, c.connection_id, behavior)
+      notify(`${c.bank_name}: ${(catalog.data?.behaviors ?? []).find((b) => b.code === behavior)?.label ?? behavior}`)
       banks.reload()
     } catch (err) {
       setError(err.message)
@@ -177,7 +205,7 @@ export default function Banks() {
           ) : (
             <ul aria-label="Connected bank accounts" className="flex flex-col gap-3">
               {banks.data.map((c) => (
-                <ConnectionCard key={c.connection_id} c={c} bank={byCode[c.bank_code]} onDefault={makeDefault} onAskDisconnect={setLeaving} busy={busy} />
+                <ConnectionCard key={c.connection_id} c={c} bank={byCode[c.bank_code]} behaviors={catalog.data?.behaviors} onDefault={makeDefault} onAskDisconnect={setLeaving} onBehavior={changeBehavior} busy={busy} />
               ))}
             </ul>
           )}
@@ -193,6 +221,7 @@ export default function Banks() {
           {catalog.error && <Alert tone="error">The bank list could not load. {catalog.error}</Alert>}
         </>
       )}
+      {catalog.data?.behavior_note && <p className="text-center text-xs text-muted">{catalog.data.behavior_note}</p>}
       <p className="text-center text-xs text-muted">A linked bank is never proof of funds: FacePay shows no balance and moves no money.</p>
     </div>
   )

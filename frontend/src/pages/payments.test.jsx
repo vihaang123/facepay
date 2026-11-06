@@ -721,3 +721,109 @@ describe('risk-based step-up and safety messages', () => {
     expect(document.body.textContent).not.toMatch(/bank-grade|military-grade|impossible to hack|100% secure|cannot be spoofed/i)
   })
 })
+
+describe('UPI-style layer (simulated)', () => {
+  const UTR = '482915063721'
+  const trailOk = [
+    { key: 'face', label: 'Face verified', state: 'done' },
+    { key: 'confirm', label: 'Payment confirmed', state: 'done' },
+    { key: 'debit', label: 'HDFC Bank DEMO-••••-4821: debit approved (simulated)', state: 'done' },
+    { key: 'credit', label: 'SuperGrocery credited (simulated)', state: 'done' },
+    { key: 'complete', label: 'Payment complete', state: 'done' },
+  ]
+  const trailDeclined = [
+    { key: 'face', label: 'Face verified', state: 'done' },
+    { key: 'confirm', label: 'Payment confirmed', state: 'done' },
+    { key: 'debit', label: 'HDFC Bank DEMO-••••-4821 declined the payment (simulated)', state: 'failed' },
+    { key: 'credit', label: 'SuperGrocery was not credited', state: 'skipped' },
+    { key: 'complete', label: 'No money moved', state: 'skipped' },
+  ]
+  const bankFail = (code, message) => ({
+    [`POST /payments/sessions/${SID}/confirm`]: { status: 409, body: { detail: { code, message, transaction_id: 'FP-FAILED0001', utr: UTR } } },
+  })
+
+  async function toConfirm(extra) {
+    const out = await payWithFace(extra)
+    await screen.findByRole('heading', { name: 'Confirm payment' })
+    await out.user.click(screen.getByRole('button', { name: /Confirm and Pay ₹950\.00/ }))
+    return out
+  }
+
+  it('a declined bank shows what happened, the reference number and a way to try again, and never says paid', async () => {
+    const { user } = await toConfirm(bankFail('BANK_DECLINED', 'Your bank declined this payment (simulated). No money moved. Verify your face to try again.'))
+    const panel = await screen.findByRole('region', { name: 'Payment did not go through' })
+    expect(within(panel).getByRole('heading', { name: 'Your bank declined the payment' })).toBeInTheDocument()
+    expect(within(panel).getByRole('alert')).toHaveTextContent('No money moved')
+    expect(within(panel).getByTestId('utr')).toHaveTextContent(UTR)
+    expect(within(panel).getByRole('link', { name: 'See what happened' })).toHaveAttribute('href', '/receipts/FP-FAILED0001')
+    expect(screen.queryByText('Payment successful')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Confirm and Pay/ })).not.toBeInTheDocument()
+    // the face check is spent: the way forward is a fresh one
+    await user.click(within(panel).getByRole('button', { name: 'Verify my face and try again' }))
+    expect(await screen.findByRole('heading', { name: 'Verify your face' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Payment did not go through' })).not.toBeInTheDocument()
+  })
+
+  it('a bank that does not respond says so', async () => {
+    await toConfirm(bankFail('BANK_TIMEOUT', 'Your bank did not respond (simulated). No money moved.'))
+    expect(await screen.findByRole('heading', { name: 'Your bank did not respond' })).toBeInTheDocument()
+  })
+
+  it('the success screen shows the UTR', async () => {
+    await toConfirm({ [`POST /payments/sessions/${SID}/confirm`]: { body: { ...receipt, utr: UTR, trail: trailOk } } })
+    expect(await screen.findByRole('heading', { name: 'Payment successful' })).toBeInTheDocument()
+    expect(screen.getByTestId('utr')).toHaveTextContent(UTR)
+  })
+
+  it('a receipt shows the UTR and the step trail with each state in words', async () => {
+    mockApi({ 'GET /users/me': { body: customerProfile }, 'GET /payments/transactions/FP-7K3M9Q2XA4': { body: { ...receipt, utr: UTR, trail: trailOk } } })
+    renderApp('/receipts/FP-7K3M9Q2XA4')
+    const rec = await screen.findByRole('article', { name: 'Payment receipt' })
+    expect(within(rec).getByTestId('utr')).toHaveTextContent(UTR)
+    const trail = within(rec).getByRole('list', { name: 'Payment trail' })
+    expect(within(trail).getAllByRole('listitem')).toHaveLength(5)
+    expect(within(trail).getByText(/debit approved \(simulated\)/)).toBeInTheDocument()
+    expect(within(trail).getAllByText('(Done)')).toHaveLength(5)
+  })
+
+  it('a failed receipt explains the failure and marks the failed and skipped steps', async () => {
+    const failed = { ...receipt, transaction_id: 'FP-FAILED0001', status: 'FAILED', utr: UTR, failure_code: 'BANK_DECLINED', failure_message: 'Your bank declined this payment (simulated). No money moved.', trail: trailDeclined }
+    mockApi({ 'GET /users/me': { body: customerProfile }, 'GET /payments/transactions/FP-FAILED0001': { body: failed } })
+    renderApp('/receipts/FP-FAILED0001')
+    const rec = await screen.findByRole('article', { name: 'Payment receipt' })
+    expect(within(rec).getByRole('alert')).toHaveTextContent('No money moved')
+    expect(within(rec).getByText('Payment failed')).toBeInTheDocument()
+    expect(within(rec).getByText('Failed (no money moved)')).toBeInTheDocument()
+    const trail = within(rec).getByRole('list', { name: 'Payment trail' })
+    expect(within(trail).getByText('(Failed)')).toBeInTheDocument()
+    expect(within(trail).getAllByText('(Not reached)')).toHaveLength(2)
+  })
+
+  it('an old receipt with no reference or trail still renders', async () => {
+    mockApi({ 'GET /users/me': { body: customerProfile }, 'GET /payments/transactions/FP-7K3M9Q2XA4': { body: receipt } })
+    renderApp('/receipts/FP-7K3M9Q2XA4')
+    const rec = await screen.findByRole('article', { name: 'Payment receipt' })
+    expect(within(rec).queryByTestId('utr')).not.toBeInTheDocument()
+    expect(within(rec).queryByRole('list', { name: 'Payment trail' })).not.toBeInTheDocument()
+  })
+
+  it('the Banks page lets the owner set a demo behaviour and says it is a demo setting', async () => {
+    const user = userEvent.setup()
+    const account = { ...BANK, account_type: 'SAVINGS', status: 'CONNECTED', connected_at: '2026-10-07T12:00:00Z', disclaimer: 'Demo', sim_behavior: 'NORMAL', sim_behavior_label: 'Works normally' }
+    const catalog = {
+      banks: [{ code: 'hdfc', name: 'HDFC Bank', short: 'HDFC', color: '#0b3d7a' }], account_types: [{ code: 'SAVINGS', label: 'Savings account' }], max_connected: 5, disclaimer: 'Demo',
+      behaviors: [{ code: 'NORMAL', label: 'Works normally' }, { code: 'DECLINE', label: 'Declines payments' }, { code: 'TIMEOUT', label: 'Does not respond' }],
+      behavior_note: 'Demo setting. It only changes what this simulated account does when you pay; no real bank is involved.',
+    }
+    const api = mockApi({
+      'GET /users/me': { body: customerProfile }, 'GET /banks/catalog': { body: catalog }, 'GET /banks': { body: [account] },
+      'PATCH /banks/bk_hdfc1/behavior': ({ body }) => ({ body: { ...account, sim_behavior: body.behavior } }),
+    })
+    renderApp('/banks')
+    const select = await screen.findByLabelText('Demo: how this account answers a payment')
+    expect(select).toHaveValue('NORMAL')
+    expect(screen.getByText(/Demo setting\. It only changes/)).toBeInTheDocument()
+    await user.selectOptions(select, 'DECLINE')
+    await waitFor(() => expect(api.callsTo('PATCH /banks/bk_hdfc1/behavior')[0]?.body).toEqual({ behavior: 'DECLINE' }))
+  })
+})

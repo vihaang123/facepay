@@ -8,7 +8,7 @@ from app.core.config import get_settings
 from app.core.rate_limit import RateLimiter
 from app.database.session import get_db
 from app.models import User
-from app.schemas.banks import BankCatalogOut, BankConnectionOut, BankConnectRequest, BankDisconnectOut
+from app.schemas.banks import BankBehaviorRequest, BankCatalogOut, BankConnectionOut, BankConnectRequest, BankDisconnectOut
 from app.services import bank_service
 
 _s = get_settings()
@@ -46,6 +46,12 @@ def connect(data: BankConnectRequest, user: User = Depends(get_current_customer)
 @router.post("/{connection_id}/default", response_model=BankConnectionOut, dependencies=[Depends(_write_limit)])
 def make_default(connection_id: str, user: User = Depends(get_current_customer), db: Session = Depends(get_db)):
     return bank_service.set_default(db, user, connection_id)
+
+
+@router.patch("/{connection_id}/behavior", response_model=BankConnectionOut, dependencies=[Depends(_write_limit)])
+def set_behavior(connection_id: str, data: BankBehaviorRequest, user: User = Depends(get_current_customer), db: Session = Depends(get_db)):
+    """The owner's DEMO switch: how this simulated account answers a payment (works, declines, does not respond)."""
+    return bank_service.set_behavior(db, user, connection_id, data.behavior)
 
 
 @router.delete("/{connection_id}", response_model=BankDisconnectOut, dependencies=[Depends(_write_limit)])

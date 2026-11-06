@@ -284,6 +284,9 @@ class Transaction(Base):
     funding_source_id: Mapped[int | None] = mapped_column(ForeignKey("bank_connections.id", name="fk_transactions_funding_source"))
     funding_bank_name: Mapped[str | None] = mapped_column(String(80))
     funding_account_ref: Mapped[str | None] = mapped_column(String(24))
+    # UPI-style reference: 12 random digits, unique. Nullable only so a row written by an older server mid-deploy is still valid.
+    utr: Mapped[str | None] = mapped_column(String(12), unique=True, index=True)
+    failure_code: Mapped[str | None] = mapped_column(String(30))  # why a FAILED transaction failed (BANK_DECLINED, BANK_TIMEOUT)
 
     merchant: Mapped[Merchant | None] = relationship(back_populates="transactions")
     payer: Mapped[User] = relationship(back_populates="transactions", foreign_keys=[payer_id])
@@ -440,6 +443,7 @@ class BankConnection(Base):
         CheckConstraint("account_type IN ('SAVINGS', 'SALARY', 'CURRENT')", name="ck_bank_connections_type"),
         CheckConstraint("account_last4 ~ '^[0-9]{4}$'", name="ck_bank_connections_last4"),
         CheckConstraint("NOT is_default OR status = 'CONNECTED'", name="ck_bank_connections_default_connected"),
+        CheckConstraint("sim_behavior IN ('NORMAL', 'DECLINE', 'TIMEOUT')", name="ck_bank_connections_behavior"),
         Index("ix_bank_connections_user_status", "user_id", "status"),
         # One default per customer, and one live connection per (customer, bank, account type).
         Index("uq_bank_connections_one_default", "user_id", unique=True, postgresql_where=text("is_default AND status = 'CONNECTED'")),
@@ -460,6 +464,8 @@ class BankConnection(Base):
     status: Mapped[str] = mapped_column(String(16), default="CONNECTED", server_default="CONNECTED")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     disconnected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # DEMO switch chosen by the owner: how this simulated account answers a payment (see app/core/upi.py). Not random.
+    sim_behavior: Mapped[str] = mapped_column(String(12), default="NORMAL", server_default="NORMAL")
 
     @property
     def account_ref(self) -> str:

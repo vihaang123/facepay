@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core import banks
+from app.core import banks, upi
 from app.models import BankConnection, User
 from app.services import security_service as sec
 
@@ -33,6 +33,8 @@ def out(c: BankConnection) -> dict:
         "is_default": c.is_default,
         "status": c.status,
         "connected_at": c.created_at,
+        "sim_behavior": c.sim_behavior,
+        "sim_behavior_label": upi.BEHAVIORS.get(c.sim_behavior, c.sim_behavior),
         "disclaimer": banks.DEMO_DISCLAIMER,
     }
 
@@ -42,6 +44,8 @@ def catalog() -> dict:
         "banks": banks.catalog(),
         "account_types": [{"code": k, "label": v} for k, v in banks.ACCOUNT_TYPES.items()],
         "max_connected": banks.MAX_CONNECTED_BANKS,
+        "behaviors": [{"code": k, "label": v} for k, v in upi.BEHAVIORS.items()],
+        "behavior_note": upi.BEHAVIOR_NOTE,
         "disclaimer": banks.DEMO_DISCLAIMER,
     }
 
@@ -120,6 +124,19 @@ def set_default(db: Session, user: User, connection_id: str) -> dict:
     db.flush()  # the unique index allows one default: release the old one before taking the new one
     target.is_default = True
     sec.record_event(db, user, "BANK_DEFAULT_CHANGED", target.connection_id)
+    db.commit()
+    db.refresh(target)
+    return out(target)
+
+
+def set_behavior(db: Session, user: User, connection_id: str, behavior: str) -> dict:
+    """The owner's demo switch for how this simulated account answers a payment. Takes effect on the next payment."""
+    if behavior not in upi.BEHAVIORS:
+        raise _err(422, "INVALID_BEHAVIOR", "Choose how this demo account should behave.")
+    _lock_user(db, user)
+    target = _owned(db, user, connection_id, lock=True)
+    target.sim_behavior = behavior
+    sec.record_event(db, user, "BANK_BEHAVIOR_CHANGED", target.connection_id)
     db.commit()
     db.refresh(target)
     return out(target)

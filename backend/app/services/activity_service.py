@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, aliased
 from fastapi import HTTPException
 
 from app.core import facepay_id as fid
+from app.core import upi
 from app.models import AuthenticationLog, Merchant, PaymentRequest, PaymentSession, Transaction, User
 from app.services import request_service
 from app.services.payment_service import _authentication_label, _like
@@ -32,11 +33,13 @@ def _transactions(db: Session, user: User, flt: str, q: str | None, cap: int) ->
         .outerjoin(Merchant, Merchant.id == Transaction.merchant_id)
         .outerjoin(PaymentSession, PaymentSession.id == Transaction.payment_session_id)
     )
-    mine = or_(Transaction.payer_id == user.id, Transaction.recipient_id == user.id)
+    # A recipient only ever sees payments that went through; someone's failed attempt to pay them is the payer's business alone.
+    received = and_(Transaction.recipient_id == user.id, Transaction.status == "SUCCESS")
+    mine = or_(Transaction.payer_id == user.id, received)
     if flt == "sent":
         mine = Transaction.payer_id == user.id
     elif flt == "received":
-        mine = Transaction.recipient_id == user.id
+        mine = received
     query = query.where(mine)
     if flt == "successful":
         query = query.where(Transaction.status == "SUCCESS")
@@ -167,7 +170,7 @@ def counts(db: Session, user: User) -> dict:
 def detail(db: Session, user: User, ref: str) -> dict:
     request_service.expire_overdue(db)
     if ref.startswith("FP-"):
-        txn = db.scalar(select(Transaction).where(Transaction.transaction_id == ref, or_(Transaction.payer_id == user.id, Transaction.recipient_id == user.id)))
+        txn = db.scalar(select(Transaction).where(Transaction.transaction_id == ref, or_(Transaction.payer_id == user.id, and_(Transaction.recipient_id == user.id, Transaction.status == "SUCCESS"))))
         if txn is None:
             raise _err(404, "TRANSACTION_NOT_FOUND", "Transaction not found.")
         payer = db.get(User, txn.payer_id)
@@ -195,6 +198,15 @@ def detail(db: Session, user: User, ref: str) -> dict:
             "order_reference": ps.order_reference if ps else None,
             "request_id": req,
             "funding_source": f"{txn.funding_bank_name} · {txn.funding_account_ref}" if txn.payer_id == user.id and txn.funding_bank_name else None,
+            "utr": txn.utr,
+            "failure_message": upi.failure_message(txn.failure_code) if txn.status == "FAILED" else None,
+            "trail": upi.build_trail(
+                status=txn.status,
+                failure_code=txn.failure_code,
+                viewer_is_payer=txn.payer_id == user.id,
+                bank_label=f"{txn.funding_bank_name} {txn.funding_account_ref}" if txn.funding_bank_name else None,
+                payee_name=merchant.business_name if merchant else (recipient.name if recipient else None),
+            ),
         }
     if ref.startswith("pr_"):
         view = request_service.view(db, user, ref)

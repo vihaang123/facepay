@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { SIMULATION_NOTICE } from '../utils/demo'
 import { STATUS_LABELS, formatDateTime, formatFeedTime, formatMoney } from '../utils/format'
 import Icon from './Icon'
+import { Trail, ReferenceNumber } from './Trail'
 import { Avatar, Logo } from './ui'
 
 // One status vocabulary for the whole product: an icon AND a word, never colour alone.
@@ -167,6 +168,7 @@ export function Receipt({ receipt, children }) {
         {receipt.order_reference && <Row label="Order">{receipt.order_reference}</Row>}
         {receipt.description && <Row label="Details">{receipt.description}</Row>}
         <Row label="Transaction ID"><span className="font-mono text-[0.8rem]">{receipt.transaction_id}</span></Row>
+        {receipt.utr && <Row label="UTR (reference no.)"><ReferenceNumber value={receipt.utr} /></Row>}
         <Row label="Date and time">{formatDateTime(receipt.timestamp)}</Row>
         {receipt.funding_source && (
           <Row label="Paid from">
@@ -177,8 +179,15 @@ export function Receipt({ receipt, children }) {
         {Number(receipt.fee ?? 0) > 0 && <Row label="Fee">{formatMoney(receipt.fee, receipt.currency)}</Row>}
         <Row label="Payment method">{receipt.payment_method === 'FACE_PAY' ? 'FacePay' : receipt.payment_method}</Row>
         {verified && <Row label="Authenticated">{receipt.authentication ?? 'Face + basic liveness check'}</Row>}
-        <Row label="Payment status">{ok ? 'Successful' : receipt.status}</Row>
+        <Row label="Payment status">{ok ? 'Successful' : receipt.status === 'FAILED' ? 'Failed (no money moved)' : receipt.status}</Row>
       </dl>
+      {receipt.failure_message && <p role="alert" className="mx-6 mb-3 rounded-xl bg-danger-soft p-3 text-sm text-danger-ink ring-1 ring-danger-line">{receipt.failure_message}</p>}
+      {receipt.trail?.length > 0 && (
+        <section aria-label="What happened" className="px-6 pb-2">
+          <h2 className="mb-2 text-sm font-bold">What happened</h2>
+          <Trail steps={receipt.trail} />
+        </section>
+      )}
       <p className="px-6 pb-4 text-xs text-muted">{receipt.simulation_notice ?? SIMULATION_NOTICE}</p>
       {children && <div className="no-print flex flex-col gap-2 border-t border-line px-6 py-4 sm:flex-row sm:justify-center">{children}</div>}
     </article>

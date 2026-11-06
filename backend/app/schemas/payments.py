@@ -157,6 +157,12 @@ class ReceiptFunding(BaseModel):
     account_ref: str
 
 
+class TrailStep(BaseModel):
+    key: str
+    label: str
+    state: str  # done | failed | skipped
+
+
 class ReceiptOut(BaseModel):
     transaction_id: str
     kind: str = "MERCHANT_PAYMENT"  # MERCHANT_PAYMENT | TRANSFER
@@ -180,6 +186,11 @@ class ReceiptOut(BaseModel):
     total: Decimal | None = None
     # The payer's own demo bank account. None for the recipient and the merchant, who never see the payer's account.
     funding_source: "ReceiptFunding | None" = None
+    # UPI-style reference number and the step trail (see app/core/upi.py). failure_* are set only for a FAILED transaction.
+    utr: str | None = None
+    failure_code: str | None = None
+    failure_message: str | None = None
+    trail: list["TrailStep"] = []
     simulation_notice: str = "Simulated payment. No real bank account was accessed and no money was transferred."
 
 

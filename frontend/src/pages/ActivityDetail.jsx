@@ -1,5 +1,6 @@
 import { useParams } from 'react-router-dom'
 import { Amount, Row, SimulatedTag, StatusBadge } from '../components/payUi'
+import { ReferenceNumber, Trail } from '../components/Trail'
 import { Button, ButtonLink, ErrorState, Skeleton } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
 import { useLoad } from '../hooks/useLoad'
@@ -43,6 +44,7 @@ export default function ActivityDetail() {
           {d.note && <Row label="Note">{d.note}</Row>}
           {d.order_reference && <Row label="Order">{d.order_reference}</Row>}
           <Row label="Reference"><span className="font-mono text-[0.8rem]">{d.ref}</span></Row>
+          {d.utr && <Row label="UTR (reference no.)"><ReferenceNumber value={d.utr} /></Row>}
           <Row label="Date and time">{formatDateTime(d.timestamp)}</Row>
           <Row label="Currency">{d.currency}</Row>
           {d.funding_source && <Row label="Paid from">{d.funding_source}</Row>}
@@ -50,6 +52,13 @@ export default function ActivityDetail() {
           <Row label="Authentication">{d.authentication}</Row>
           <Row label="Status">{d.status === 'SUCCESS' ? 'Successful' : d.status.charAt(0) + d.status.slice(1).toLowerCase()}</Row>
         </dl>
+        {d.failure_message && <p role="alert" className="mx-6 mb-3 rounded-xl bg-danger-soft p-3 text-sm text-danger-ink ring-1 ring-danger-line">{d.failure_message}</p>}
+        {d.trail?.length > 0 && (
+          <section aria-label="What happened" className="px-6 pb-2">
+            <h2 className="mb-2 text-sm font-bold">What happened</h2>
+            <Trail steps={d.trail} />
+          </section>
+        )}
         <p className="px-6 pb-4 text-xs text-muted">{SIMULATION_NOTICE}</p>
         <div className="no-print flex flex-col gap-2 border-t border-line px-6 py-4 sm:flex-row sm:justify-center">
           <ButtonLink to={ACTIVITY_PATH} variant="secondary">Back to activity</ButtonLink>
