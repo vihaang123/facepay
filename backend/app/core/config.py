@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     # Per-IP limit on login/registration attempts (in-memory, single instance).
     rate_limit_enabled: bool = True
     auth_rate_limit_per_minute: int = 10
+    # Number sign-up shows its one-time code on screen (labelled DEMO) because FacePay sends no SMS. Turn off when a real SMS
+    # provider exists: with this off, the code is never returned and sign-up by number is refused until one is configured.
+    demo_otp_enabled: bool = True
+    otp_ttl_seconds: int = 300
+    otp_max_attempts: int = 5
+    signin_max_failures: int = 5
+    signin_lock_minutes: int = 15
     # AES-256 key (32 random bytes, base64) protecting stored face crops, models and profiles.
     # Generate: python -c "from app.core.crypto import generate_key; print(generate_key())"
     biometric_key: str = ""

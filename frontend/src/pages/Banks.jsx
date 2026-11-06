@@ -8,7 +8,7 @@ import { useToast } from '../hooks/useToast'
 import { connectBank, disconnectBank, getBankCatalog, getMyBanks, makeDefaultBank, setBankBehavior } from '../services/banks'
 
 /** Three small steps, none of which asks for anything secret: pick a bank, see that it is a simulation, pick a demo account. */
-function ConnectFlow({ catalog, onDone, onCancel }) {
+export function ConnectFlow({ catalog, onDone, onCancel, heading = 'Choose a bank', cancelLabel = 'Cancel' }) {
   const { token } = useAuth()
   const [bank, setBank] = useState(null)
   const [accountType, setAccountType] = useState(null)
@@ -29,7 +29,7 @@ function ConnectFlow({ catalog, onDone, onCancel }) {
 
   if (!bank) {
     return (
-      <Card title="Choose a bank" aria-label="Choose a bank">
+      <Card title={heading} aria-label={heading}>
         <DemoNotice className="mb-3" />
         <ul aria-label="Banks" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {catalog.banks.map((b) => (
@@ -46,7 +46,7 @@ function ConnectFlow({ catalog, onDone, onCancel }) {
             </li>
           ))}
         </ul>
-        <Button variant="ghost" onClick={onCancel} className="mt-3">Cancel</Button>
+        <Button variant="ghost" onClick={onCancel} className="mt-3">{cancelLabel}</Button>
       </Card>
     )
   }

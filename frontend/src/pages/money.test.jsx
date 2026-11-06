@@ -66,14 +66,14 @@ describe('role separation in the app', () => {
   it('signing in as an administrator lands on the ML Lab', async () => {
     const user = userEvent.setup()
     mockApi({
-      'POST /auth/login': { body: tokenResponse('admin') },
+      'POST /auth/number/signin': { body: tokenResponse('admin') },
       'GET /users/me': { body: { ...me, role: 'admin' } },
       'GET /admin/ml/overview': { body: { model: null, training_status: 'no_model', dataset: { enrolled_customers: 0, stored_samples: 0, customers: 1 }, history: [], methodology: {} } },
     })
     renderApp('/login')
-    await user.type(await screen.findByLabelText('Email'), 'admin@example.com')
-    await user.type(screen.getByLabelText('Password'), 'Str0ng!Passw0rd')
-    await user.click(screen.getByRole('button', { name: /sign in/i }))
+    await user.type(await screen.findByLabelText('Mobile number'), '9000000001')
+    await user.type(screen.getByLabelText('6-digit passcode'), '482915')
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
     expect(await screen.findByRole('heading', { name: 'ML Lab' })).toBeInTheDocument()
   })
 })

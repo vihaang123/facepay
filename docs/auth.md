@@ -1,4 +1,6 @@
-# Authentication (Phase 2)
+# Authentication
+
+> **Sign-in is now by mobile number and a 6-digit passcode** (see [number-login.md](number-login.md)). The email and password endpoints below are kept for accounts made before that change; the app reaches them from "Older account? Sign in with email", and the sign-up form for them is gone.
 
 ## Accounts
 
@@ -23,10 +25,15 @@ Customers live in `users`, merchants in `merchants`. They are separate tables, s
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| POST | `/auth/register` | none | Register a customer |
+| POST | `/auth/register` | none | Register a customer (older API; the app no longer uses it) |
 | POST | `/auth/login` | none | Customer login, returns token |
-| POST | `/auth/merchant/register` | none | Register a merchant |
+| POST | `/auth/merchant/register` | none | Register a merchant (older API; the app no longer uses it) |
 | POST | `/auth/merchant/login` | none | Merchant login, returns token |
+| POST | `/auth/number/otp` | none | Ask for a demo one-time code for a number |
+| POST | `/auth/number/verify` | none | Check the demo code |
+| POST | `/auth/number/signup` | none | Create a customer or shop account from a verified code; returns a token |
+| POST | `/auth/number/signin` | none | Number + passcode; returns a token with the account's role |
+| POST | `/auth/number/claim` | customer or shop | An older account adds its number |
 | GET | `/users/me` | customer | Read profile |
 | PATCH | `/users/me` | customer | Update `name`, `phone` only |
 | GET | `/merchants/me` | merchant | Read profile |

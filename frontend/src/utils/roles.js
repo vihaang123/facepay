@@ -12,7 +12,7 @@ export const DASHBOARD_PATH = {
 
 export const LOGIN_PATH = {
   customer: '/login',
-  merchant: '/merchant/login',
+  merchant: '/login', // one sign-in screen for everyone; the server says which role you are
   admin: '/login',
 }
 

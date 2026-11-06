@@ -8,24 +8,24 @@ import { runValidators, validateEmail, validateRequired } from '../utils/validat
 
 const COPY = {
   customer: {
-    title: 'Customer sign in',
-    subtitle: 'Welcome back. Sign in to pay with your face.',
+    title: 'Sign in with email',
+    subtitle: 'For accounts made before FacePay moved to mobile numbers. Sign in, then add your number from Profile.',
     footer: (
       <>
-        New here? <Link to="/register" className="font-semibold text-brand-700">Create an account</Link>
+        <Link to="/login" className="font-semibold text-brand-700">Sign in with your mobile number</Link>
         {' · '}
-        <Link to="/merchant/login" className="font-semibold text-brand-700">Merchant sign in</Link>
+        <Link to="/merchant/login" className="font-semibold text-brand-700">Shop email sign in</Link>
       </>
     ),
   },
   merchant: {
-    title: 'Merchant sign in',
-    subtitle: 'Sign in to your merchant account.',
+    title: 'Shop sign in with email',
+    subtitle: 'For shop accounts made before FacePay moved to mobile numbers. Sign in, then add your number from Profile.',
     footer: (
       <>
-        New merchant? <Link to="/merchant/register" className="font-semibold text-brand-700">Create a merchant account</Link>
+        <Link to="/login" className="font-semibold text-brand-700">Sign in with your mobile number</Link>
         {' · '}
-        <Link to="/login" className="font-semibold text-brand-700">Customer sign in</Link>
+        <Link to="/login/email" className="font-semibold text-brand-700">Customer email sign in</Link>
       </>
     ),
   },

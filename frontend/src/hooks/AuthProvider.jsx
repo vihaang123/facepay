@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { setUnauthorizedHandler } from '../services/api'
-import { fetchProfile, loginRequest, patchProfile, registerRequest } from '../services/auth'
+import { fetchProfile, loginRequest, patchProfile } from '../services/auth'
+import { numberSignIn, numberSignUp } from '../services/numberAuth'
 import { normalizeRole } from '../utils/roles'
 import { clearSession, loadSession, saveSession } from '../utils/session'
 import { AuthContext } from './authContext'
@@ -46,8 +47,8 @@ export function AuthProvider({ children }) {
     }
   }, [state.status, state.role, state.token, logout])
 
-  const login = useCallback(async (role, email, password) => {
-    const result = await loginRequest(role, { email, password })
+  // Turns a token response into a signed-in session (shared by email and mobile-number sign-in).
+  const establish = useCallback(async (result) => {
     const sessionRole = normalizeRole(result.role)
     saveSession({ token: result.access_token, role: sessionRole, expiresInSeconds: result.expires_in })
     try {
@@ -57,15 +58,19 @@ export function AuthProvider({ children }) {
       clearSession()
       throw error
     }
+    return sessionRole
   }, [])
 
-  const register = useCallback(
-    async (role, data) => {
-      await registerRequest(role, data)
-      await login(role, data.email, data.password)
+  const login = useCallback(
+    async (role, email, password) => {
+      await establish(await loginRequest(role, { email, password }))
     },
-    [login],
+    [establish],
   )
+
+  // The role comes back from the server: one sign-in screen serves customers, shops and the administrator.
+  const signInWithNumber = useCallback(async (mobile, passcode) => establish(await numberSignIn(mobile, passcode)), [establish])
+  const signUpWithNumber = useCallback(async (data) => establish(await numberSignUp(data)), [establish])
 
   const updateProfile = useCallback(
     async (changes) => {
@@ -84,8 +89,8 @@ export function AuthProvider({ children }) {
   }, [state.role, state.token])
 
   const value = useMemo(
-    () => ({ ...state, isAuthenticated: state.status === 'authenticated', login, register, logout, updateProfile, refreshProfile }),
-    [state, login, register, logout, updateProfile, refreshProfile],
+    () => ({ ...state, isAuthenticated: state.status === 'authenticated', login, signInWithNumber, signUpWithNumber, logout, updateProfile, refreshProfile }),
+    [state, login, signInWithNumber, signUpWithNumber, logout, updateProfile, refreshProfile],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

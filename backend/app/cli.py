@@ -15,14 +15,20 @@ from sqlalchemy import select
 
 from app.database.session import SessionLocal
 from app.models import User
-from app.services import ledger_service
+from app.core import mobile as mobile_rules
+from app.services import ledger_service, number_auth_service
 
 
-def _set_role(email: str, role: str) -> int:
+def _set_role(who: str, role: str) -> int:
+    """`who` is the account's email, or its 10-digit mobile number."""
     with SessionLocal() as db:
-        user = db.scalar(select(User).where(User.email == email.strip().lower()))
+        try:
+            owner = number_auth_service.owner_of(db, mobile_rules.normalize(who))
+            user = owner if isinstance(owner, User) else None
+        except mobile_rules.InvalidMobile:
+            user = db.scalar(select(User).where(User.email == who.strip().lower()))
         if user is None:
-            print("No customer account with that email. Register it first, then run this again.")
+            print("No customer account with that email or mobile number. Register it first, then run this again.")
             return 1
         user.role = role
         db.commit()

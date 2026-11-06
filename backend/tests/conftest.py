@@ -36,6 +36,11 @@ STRONG_PASSWORD = "Correct-horse-42"
 @pytest.fixture(scope="session", autouse=True)
 def migrated_db():
     cfg = Config(os.path.join(os.path.dirname(__file__), "..", "alembic.ini"))
+    # Leftover rows from an interrupted run would make a data-protecting downgrade refuse (migration 0012). Test database only.
+    with engine.begin() as conn:
+        tables = [r[0] for r in conn.execute(text("SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> 'alembic_version'"))]
+        if tables:
+            conn.execute(text("TRUNCATE TABLE " + ", ".join(f'"{t}"' for t in tables) + " RESTART IDENTITY CASCADE"))
     command.downgrade(cfg, "base")
     command.upgrade(cfg, "head")
     yield

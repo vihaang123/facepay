@@ -1,14 +1,64 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { IdChip } from '../components/money'
+import { NumberVerify, PasscodeField } from '../components/numberAuth'
 import { ThemeSegmented } from '../components/ThemeSwitch'
 import { Alert, Button, Card, FormField } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
 import { useLoad } from '../hooks/useLoad'
+import { claimNumber } from '../services/numberAuth'
 import { changeFacePayId, getMyFacePay } from '../services/transfers'
+import { formatMobile, validatePasscode } from '../utils/mobile'
 import { formatDateTime } from '../utils/format'
 import { FACE_PATH, LOGIN_PATH, MY_QR_PATH, SECURITY_PATH } from '../utils/roles'
 import { runValidators, validatePhone, validateRequired } from '../utils/validation'
+
+/** Older accounts (made with an email) add a mobile number so they can sign in the new way. The email keeps working. */
+function AddNumberCard() {
+  const { token, refreshProfile } = useAuth()
+  const [verified, setVerified] = useState(null)
+  const [values, setValues] = useState({ passcode: '', confirm: '' })
+  const [errors, setErrors] = useState({})
+  const [error, setError] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const digits = (name) => (e) => setValues((v) => ({ ...v, [name]: e.target.value.replace(/\D/g, '') }))
+
+  const save = async (e) => {
+    e.preventDefault()
+    setError(null)
+    const found = {}
+    const weak = validatePasscode(values.passcode)
+    if (weak) found.passcode = weak
+    else if (values.confirm !== values.passcode) found.confirm = 'The passcodes do not match.'
+    setErrors(found)
+    if (Object.keys(found).length) return
+    setBusy(true)
+    try {
+      await claimNumber(token, verified.challengeId, values.passcode)
+      await refreshProfile()
+    } catch (err) {
+      setError(err.message)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card title="Add your mobile number" className="mt-6" aria-label="Add your mobile number">
+      <p className="type-support mb-3">FacePay now signs people in with a mobile number and a 6-digit passcode. Add yours and keep this same account, with its history and face profile.</p>
+      {!verified ? (
+        <NumberVerify purpose="claim" onVerified={setVerified} />
+      ) : (
+        <form onSubmit={save} noValidate className="flex flex-col gap-4">
+          <Alert tone="success"><strong>{formatMobile(verified.mobile)}</strong> confirmed (demo code).</Alert>
+          {error && <Alert tone="error">{error}</Alert>}
+          <PasscodeField label="Choose a 6-digit passcode" autoComplete="new-password" value={values.passcode} onChange={digits('passcode')} error={errors.passcode} />
+          <PasscodeField id="confirm-passcode" label="Confirm passcode" autoComplete="new-password" value={values.confirm} onChange={digits('confirm')} error={errors.confirm} />
+          <Button type="submit" loading={busy} className="self-start">Save number</Button>
+        </form>
+      )}
+    </Card>
+  )
+}
 
 /** The FacePay ID: shown, shareable, and changeable now and then. The server checks it is free and well formed. */
 function FacePayIdCard() {
@@ -92,14 +142,16 @@ export default function Profile() {
     setSaved(false)
     const validators = { name: validateRequired('Name') }
     if (isMerchant) validators.business_name = validateRequired('Business name')
-    else validators.phone = validatePhone
+    else if (!profile.mobile) validators.phone = validatePhone
     const found = runValidators(values, validators)
     setErrors(found)
     if (Object.keys(found).length) return
 
     const changes = isMerchant
       ? { name: values.name.trim(), business_name: values.business_name.trim() }
-      : { name: values.name.trim(), phone: values.phone.trim() || null }
+      : profile.mobile
+        ? { name: values.name.trim() }
+        : { name: values.name.trim(), phone: values.phone.trim() || null }
 
     setSubmitting(true)
     try {
@@ -122,7 +174,8 @@ export default function Profile() {
       <form onSubmit={onSubmit} noValidate className="mt-6 flex flex-col gap-4 rounded-2xl border border-line/80 bg-surface p-6 shadow-card">
         {formError && <Alert tone="error">{formError}</Alert>}
         {saved && <Alert tone="success">Profile updated.</Alert>}
-        <FormField label="Email" id="email" value={profile.email} disabled hint="Email cannot be changed." readOnly />
+        {profile.mobile && <FormField label="Mobile number" id="mobile" value={formatMobile(profile.mobile)} disabled hint="Your sign-in number cannot be changed in this prototype." readOnly />}
+        {profile.email && <FormField label="Email" id="email" value={profile.email} disabled hint="Email cannot be changed." readOnly />}
         <FormField label="Full name" id="name" value={values.name} onChange={onChange} error={errors.name} />
         {isMerchant ? (
           <FormField
@@ -133,12 +186,13 @@ export default function Profile() {
             error={errors.business_name}
           />
         ) : (
-          <FormField label="Phone" id="phone" type="tel" value={values.phone} onChange={onChange} error={errors.phone} />
+          !profile.mobile && <FormField label="Phone" id="phone" type="tel" value={values.phone} onChange={onChange} error={errors.phone} />
         )}
         <Button type="submit" loading={submitting} className="self-start">
           Save changes
         </Button>
       </form>
+      {!profile.mobile && <AddNumberCard />}
       {!isMerchant && role === 'customer' && <FacePayIdCard />}
 
       <Card title="Appearance" className="mt-6" aria-label="Appearance">

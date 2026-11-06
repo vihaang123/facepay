@@ -32,7 +32,9 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(120))
-    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    email: Mapped[str | None] = mapped_column(String(255), unique=True, index=True)  # null for accounts made with a mobile number
+    mobile: Mapped[str | None] = mapped_column(String(10))  # display copy; the mobile_numbers registry is the authority
+    passcode_hash: Mapped[str | None] = mapped_column(String(255))  # the 6-digit app passcode (argon2), never the passcode itself
     # The customer's public payment handle (canonical `handle@facepay`, lowercase). Unique in the database.
     # The service generates a readable one at registration; the default only covers rows created without it.
     facepay_id: Mapped[str] = mapped_column(String(40), unique=True, index=True, default=fallback_id)
@@ -72,7 +74,9 @@ class Merchant(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(120))
-    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    email: Mapped[str | None] = mapped_column(String(255), unique=True, index=True)  # null for accounts made with a mobile number
+    mobile: Mapped[str | None] = mapped_column(String(10))  # display copy; the mobile_numbers registry is the authority
+    passcode_hash: Mapped[str | None] = mapped_column(String(255))  # the 6-digit app passcode (argon2), never the passcode itself
     business_name: Mapped[str] = mapped_column(String(160))
     password_hash: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -496,3 +500,56 @@ class LedgerEntry(Base):
     balance_after: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     kind: Mapped[str] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class MobileNumber(Base):
+    """Who owns a mobile number. The primary key makes "one number, one account" true across customers, merchants and
+    the admin even when two sign-ups race, and it is how number sign-in finds the account. Digits only, 10 of them."""
+
+    __tablename__ = "mobile_numbers"
+    __table_args__ = (
+        CheckConstraint("account_type IN ('user', 'merchant')", name="ck_mobile_numbers_type"),
+        CheckConstraint(
+            "(account_type = 'user' AND user_id IS NOT NULL AND merchant_id IS NULL)"
+            " OR (account_type = 'merchant' AND merchant_id IS NOT NULL AND user_id IS NULL)",
+            name="ck_mobile_numbers_one_owner",
+        ),
+        CheckConstraint("mobile ~ '^[6-9][0-9]{9}$'", name="ck_mobile_numbers_format"),
+        Index("uq_mobile_numbers_user", "user_id", unique=True, postgresql_where=text("user_id IS NOT NULL")),
+        Index("uq_mobile_numbers_merchant", "merchant_id", unique=True, postgresql_where=text("merchant_id IS NOT NULL")),
+    )
+
+    mobile: Mapped[str] = mapped_column(String(10), primary_key=True)
+    account_type: Mapped[str] = mapped_column(String(10))
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    merchant_id: Mapped[int | None] = mapped_column(ForeignKey("merchants.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class OtpChallenge(Base):
+    """A DEMO one-time code. FacePay cannot send SMS, so the code is shown on screen and labelled as a demo; it proves nothing
+    about who holds the SIM. Short-lived, limited tries, single use, and only a keyed hash of the code is stored."""
+
+    __tablename__ = "otp_challenges"
+    __table_args__ = (Index("ix_otp_challenges_mobile", "mobile", "created_at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    challenge_id: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    mobile: Mapped[str] = mapped_column(String(10))
+    code_hash: Mapped[str] = mapped_column(String(64))
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class SigninAttempt(Base):
+    """Failed passcode tries per mobile number (known or not, so a lock reveals nothing about which numbers exist)."""
+
+    __tablename__ = "signin_attempts"
+
+    mobile: Mapped[str] = mapped_column(String(10), primary_key=True)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

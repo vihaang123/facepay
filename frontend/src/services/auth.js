@@ -1,16 +1,13 @@
 import { apiFetch } from './api'
 
 const ENDPOINTS = {
-  customer: { login: '/auth/login', register: '/auth/register', me: '/users/me' },
-  admin: { login: '/auth/login', register: '/auth/register', me: '/users/me' }, // an administrator is a customer account with the admin role
-  merchant: { login: '/auth/merchant/login', register: '/auth/merchant/register', me: '/merchants/me' },
+  customer: { login: '/auth/login', me: '/users/me' },
+  admin: { login: '/auth/login', me: '/users/me' }, // an administrator is a customer account with the admin role
+  merchant: { login: '/auth/merchant/login', me: '/merchants/me' },
 }
 
 export const loginRequest = (role, { email, password }) =>
   apiFetch(ENDPOINTS[role].login, { method: 'POST', json: { email, password } })
-
-export const registerRequest = (role, data) =>
-  apiFetch(ENDPOINTS[role].register, { method: 'POST', json: data })
 
 export const fetchProfile = (role, token) => apiFetch(ENDPOINTS[role].me, { token })
 

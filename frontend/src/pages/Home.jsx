@@ -81,7 +81,7 @@ export default function Home() {
         <nav aria-label="Account" className="flex items-center gap-1 sm:gap-2">
           <ThemeIconButton />
           <Link to="/login" className="whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-sunken">Sign in</Link>
-          <span className="hidden sm:inline-flex"><ButtonLink to="/register">Create account</ButtonLink></span>
+          <span className="hidden sm:inline-flex"><ButtonLink to="/start">Get started</ButtonLink></span>
         </nav>
       </header>
 
@@ -96,7 +96,7 @@ export default function Home() {
               FacePay uses facial authentication to authorize simulated digital payments. You see who you are paying and how much, verify your face, then confirm. All payments are simulated: no real money moves.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <ButtonLink to="/register" size="lg" className="sm:w-auto sm:px-8">Create account</ButtonLink>
+              <ButtonLink to="/start" size="lg" className="sm:w-auto sm:px-8">Get started</ButtonLink>
               <ButtonLink to="/login" variant="secondary" size="lg" className="sm:w-auto sm:px-8">Sign in</ButtonLink>
             </div>
             <p className="mt-5 text-sm text-muted">

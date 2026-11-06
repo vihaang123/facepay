@@ -15,7 +15,7 @@ _BANKS = [
     ("axis", "Axis Bank", "AXIS", "#8a1f3d"),
     ("kotak", "Kotak Mahindra Bank", "KMB", "#b3261e"),
     ("pnb", "Punjab National Bank", "PNB", "#8c2a1c"),
-    ("bob", "Bank of Baroda", "BoB", "#c2571a"),
+    ("bob", "Bank of Baroda", "BoB", "#bd5418"),
     ("canara", "Canara Bank", "CB", "#1a6d8a"),
     ("union", "Union Bank of India", "UBI", "#1c5fa8"),
     ("idfc", "IDFC FIRST Bank", "IDFC", "#8a1538"),

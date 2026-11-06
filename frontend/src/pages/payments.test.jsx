@@ -104,7 +104,7 @@ describe('checkout', () => {
     window.localStorage.clear()
     mockApi({})
     renderApp(`/checkout/${SID}`)
-    expect(await screen.findByRole('heading', { name: 'Customer sign in' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
   })
 
   it('shows a loading state, then a clear message for an unknown session', async () => {

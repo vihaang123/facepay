@@ -22,13 +22,15 @@ import FaceAuthentication from './pages/FaceAuthentication'
 import FaceRegistration from './pages/FaceRegistration'
 import Home from './pages/Home'
 import Login from './pages/Login'
+import SignIn from './pages/SignIn'
+import Start from './pages/Start'
+import Welcome from './pages/Welcome'
 import MerchantPaymentSession from './pages/MerchantPaymentSession'
 import MerchantReconciliation from './pages/MerchantReconciliation'
 import MerchantRequests from './pages/MerchantRequests'
 import PayRequest from './pages/PayRequest'
 import Profile from './pages/Profile'
 import ReceiptPage from './pages/ReceiptPage'
-import Register from './pages/Register'
 import Security from './pages/Security'
 import Transactions from './pages/Transactions'
 
@@ -51,10 +53,17 @@ export default function AppRoutes() {
       <Route path="/" element={<Home />} />
 
       <Route element={<GuestRoute />}>
-        <Route path="/login" element={<Login role="customer" />} />
-        <Route path="/register" element={<Register role="customer" />} />
+        <Route path="/login" element={<SignIn />} />
+        <Route path="/start" element={<Start />} />
+        {/* Older accounts, made with an email, still sign in here and can add their number from Profile. */}
+        <Route path="/login/email" element={<Login role="customer" />} />
         <Route path="/merchant/login" element={<Login role="merchant" />} />
-        <Route path="/merchant/register" element={<Register role="merchant" />} />
+      </Route>
+      <Route path="/register" element={<Navigate to="/start" replace />} />
+      <Route path="/merchant/register" element={<Navigate to="/start?as=shop" replace />} />
+
+      <Route element={<ProtectedRoute role="customer" />}>
+        <Route path="/welcome" element={<Welcome />} />
       </Route>
 
       <Route element={<ProtectedRoute role="customer" />}>

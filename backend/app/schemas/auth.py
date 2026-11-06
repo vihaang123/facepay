@@ -105,7 +105,8 @@ class UserOut(BaseModel):
 
     id: int
     name: str
-    email: str
+    email: str | None
+    mobile: str | None = None
     facepay_id: str
     phone: str | None
     role: str
@@ -118,6 +119,7 @@ class MerchantOut(BaseModel):
 
     id: int
     name: str
-    email: str
+    email: str | None
+    mobile: str | None = None
     business_name: str
     created_at: datetime

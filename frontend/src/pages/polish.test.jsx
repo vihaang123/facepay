@@ -52,7 +52,7 @@ describe('landing page', () => {
     }
     // the only mentions of banks/UPI are denials
     expect(text).toMatch(/not connected to any bank/)
-    expect(screen.getAllByRole('link', { name: 'Create account' })[0]).toHaveAttribute('href', '/register')
+    expect(screen.getAllByRole('link', { name: 'Get started' })[0]).toHaveAttribute('href', '/start')
   })
 })
 
@@ -275,7 +275,7 @@ describe('error handling', () => {
     storeSession('customer')
     mockApi(homeRoutes({ 'GET /activity': { status: 401, body: { detail: 'Token expired' } } }))
     renderApp('/activity')
-    expect(await screen.findByRole('heading', { name: 'Customer sign in' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
     expect(screen.getByText('Your session has expired.')).toBeInTheDocument()
     expect(window.localStorage.getItem('facepay.session')).toBeNull()
   })
